@@ -2104,27 +2104,46 @@ const WelcomeView = ({
                 <div className="flex items-start gap-2 p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
                   <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                   <p className="text-xs text-slate-400">
-                    账户 ID 和授权令牌用于从 yunwu.ai 获取账号信息。令牌可在设置页面中选择和管理。
+                    点击
+                    <a
+                      href="https://newapi.asia/console/personal"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-400 hover:underline mx-1"
+                    >
+                      个人设置
+                    </a>
+                    获取ID和令牌，令牌在安全设置中获取。
                   </p>
                 </div>
 
-                <button
-                  onClick={handleVerifyKey}
-                  disabled={isValidating}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20 mt-4"
-                >
-                  {isValidating ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      登录中...
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 fill-current" />
-                      登录
-                    </>
-                  )}
-                </button>
+                <div className="flex gap-3">
+                  <a
+                    href="https://newapi.asia/register?channel=c_dlerkk4t"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-white/10 hover:bg-white/20 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+                  >
+                    注册账号
+                  </a>
+                  <button
+                    onClick={handleVerifyKey}
+                    disabled={isValidating}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
+                  >
+                    {isValidating ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        登录中...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 fill-current" />
+                        登录
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </>
           )}
