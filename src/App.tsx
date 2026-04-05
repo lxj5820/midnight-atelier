@@ -3011,9 +3011,10 @@ const AdminView = ({
 }) => {
   const [pendingItems, setPendingItems] = useState<GalleryItem[]>([]);
   const [approvedItems, setApprovedItems] = useState<GalleryItem[]>([]);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'cleanup'>('pending');
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCleaning, setIsCleaning] = useState(false);
 
   useEffect(() => {
     loadItems();
@@ -3092,6 +3093,31 @@ const AdminView = ({
     showToast('info', `已批量拒绝并删除 ${successCount} 个待审核作品`);
   };
 
+  const handleCleanup = async () => {
+    const apiKey = localStorage.getItem('atelier_api_key') || '';
+    setIsCleaning(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/gallery/cleanup`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('success', `已清理 ${data.data.deleted} 个无效图片`);
+        loadItems();
+      } else {
+        showToast('error', data.error || '清理失败');
+      }
+    } catch (error) {
+      showToast('error', '清理失败');
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
@@ -3112,7 +3138,7 @@ const AdminView = ({
     return url;
   };
 
-  const currentItems = activeTab === 'pending' ? pendingItems : approvedItems;
+  const currentItems = activeTab === 'cleanup' ? [] : (activeTab === 'pending' ? pendingItems : approvedItems);
 
   return (
     <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
@@ -3198,6 +3224,19 @@ const AdminView = ({
                 已发布 ({approvedItems.length})
               </span>
             </button>
+            <button
+              onClick={() => setActiveTab('cleanup')}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                activeTab === 'cleanup'
+                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                  : 'bg-[#1c1f26] text-slate-400 hover:text-white border border-transparent'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                清理维护
+              </span>
+            </button>
           </div>
           {activeTab === 'pending' && pendingItems.length > 0 && (
             <button
@@ -3216,20 +3255,56 @@ const AdminView = ({
             <RefreshCw className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
             <p className="text-slate-400">加载中...</p>
           </div>
+        ) : activeTab === 'cleanup' ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="bg-gradient-to-br from-rose-500/20 to-rose-600/10 rounded-2xl p-8 border border-rose-500/20 mb-8 max-w-md w-full">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-rose-500/20 rounded-xl flex items-center justify-center">
+                  <Shield className="w-7 h-7 text-rose-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">清理无效图片</h3>
+                  <p className="text-sm text-slate-400">删除 OSS 中已不存在的图片记录</p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-400 mb-6">
+                此功能将检查画廊中所有图片在 OSS 存储中的状态，自动删除已从 OSS 删除但数据库仍有记录的无效数据。
+              </p>
+              <button
+                onClick={handleCleanup}
+                disabled={isCleaning}
+                className="w-full py-3 bg-rose-500 hover:bg-rose-400 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+              >
+                {isCleaning ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    清理中...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    开始清理
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         ) : currentItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 bg-[#1c1f26]/30 rounded-2xl border border-dashed border-[#2a2e38]">
             <div className="w-16 h-16 bg-[#1c1f26] rounded-2xl flex items-center justify-center mb-4">
               {activeTab === 'pending' ? (
                 <CheckCircle className="w-8 h-8 text-slate-500" />
+              ) : activeTab === 'cleanup' ? (
+                <Shield className="w-8 h-8 text-slate-500" />
               ) : (
                 <ImageIcon className="w-8 h-8 text-slate-500" />
               )}
             </div>
             <p className="text-slate-400 text-lg mb-2">
-              {activeTab === 'pending' ? '暂无待审核作品' : '暂无已发布作品'}
+              {activeTab === 'pending' ? '暂无待审核作品' : activeTab === 'cleanup' ? '清理功能' : '暂无已发布作品'}
             </p>
             <p className="text-slate-600 text-sm">
-              {activeTab === 'pending' ? '所有作品都已审核完毕' : '用户发布后将显示在这里'}
+              {activeTab === 'pending' ? '所有作品都已审核完毕' : activeTab === 'cleanup' ? '清理OSS中已删除的图片记录' : '用户发布后将显示在这里'}
             </p>
           </div>
         ) : (
