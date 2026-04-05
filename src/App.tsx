@@ -620,6 +620,11 @@ const TopBar = ({
           </button>
         </nav>
       </div>
+      <div className="flex items-center">
+        <span className="text-xs font-bold text-slate-500">
+          V0.5
+        </span>
+      </div>
     </header>
   );
 };
@@ -2783,6 +2788,12 @@ export default function App() {
       return;
     }
 
+    const userId = localStorage.getItem('atelier_user_id');
+    if (!userId) {
+      showToast('error', '请先登录');
+      return;
+    }
+
     showToast('info', '正在上传图片...');
 
     try {
@@ -2790,7 +2801,7 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'Authorization': `Bearer ${userId}`
         },
         body: JSON.stringify({
           description: publishDescription || publishModalData.prompt || '',
@@ -2816,7 +2827,7 @@ export default function App() {
     setIsPublishModalOpen(false);
     setPublishModalData(null);
     setPublishDescription('');
-  }, [publishModalData, publishDescription, apiKey, showToast]);
+  }, [publishModalData, publishDescription, showToast]);
 
   const handleClosePublishModal = useCallback(() => {
     setIsPublishModalOpen(false);
