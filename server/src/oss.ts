@@ -30,6 +30,11 @@ function extractObjectNameFromUrl(url: string): string | null {
 
 // 检查OSS图片是否存在
 export async function checkOSSImageExists(url: string): Promise<boolean> {
+  // 如果是相对路径（本地文件），不检查
+  if (!url.startsWith('http')) {
+    return true;
+  }
+
   const objectName = extractObjectNameFromUrl(url);
   if (!objectName) return false;
 

@@ -254,12 +254,30 @@ router.get('/tokens', async (req: Request, res: Response) => {
 });
 
 // 获取画廊列表（公开）
-router.get('/gallery', (req: Request, res: Response) => {
+router.get('/gallery', async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 50;
   const offset = parseInt(req.query.offset as string) || 0;
 
   const items = getGalleryItems(limit, offset);
-  res.json(successResponse(items));
+
+  // 检查并清理不存在的OSS图片
+  const validItems: typeof items = [];
+  for (const item of items) {
+    try {
+      const exists = await checkOSSImageExists(item.imageUrl);
+      if (exists) {
+        validItems.push(item);
+      } else {
+        deleteGalleryItem(item.id);
+        console.log(`Cleaned up invalid gallery item: ${item.id}`);
+      }
+    } catch {
+      // 检查失败时保留图片
+      validItems.push(item);
+    }
+  }
+
+  res.json(successResponse(validItems));
 });
 
 // 清理不存在的OSS图片（管理员）
