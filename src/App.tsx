@@ -44,6 +44,7 @@ import {
   Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import BillingView from './BillingView';
 
 // --- Types ---
 type View = 'workspace' | 'gallery' | 'settings' | 'billing' | 'admin';
@@ -188,15 +189,6 @@ async function rejectGalleryItemAPI(id: string, apiKey: string): Promise<boolean
   } catch (e) {
     return false;
   }
-}
-
-function isAdmin(): boolean {
-  // TODO: Switch to proper backend role check. Currently using local flag for UI testing.
-  return localStorage.getItem('atelier_is_admin') === 'true';
-}
-
-function setAdminStatus(status: boolean): void {
-  localStorage.setItem('atelier_is_admin', status ? 'true' : 'false');
 }
 
 function getGenerationHistory(): GenerationRecord[] {
@@ -514,9 +506,7 @@ const Sidebar = ({
   setModel,
   userAvatar,
   userNickname,
-  userQuota,
-  isAdmin,
-  pendingCount
+  userQuota
 }: {
   currentView: View,
   setView: (v: View) => void,
@@ -525,9 +515,7 @@ const Sidebar = ({
   setModel: (m: string) => void,
   userAvatar: string,
   userNickname: string,
-  userQuota: number,
-  isAdmin?: boolean,
-  pendingCount?: number
+  userQuota: number
 }) => {
   const menuItems = menuItemsConfig;
   const groups = Array.from(new Set(menuItems.map(item => item.group)));
@@ -575,20 +563,6 @@ const Sidebar = ({
       </nav>
 
       <div className="mt-auto p-2 border-t border-[#2a2e38]">
-        {isAdmin && (
-          <button
-            onClick={() => { setView('admin'); setActiveMenuItem('workspace' as MenuItemId); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all mb-1 ${currentView === 'admin' ? 'bg-rose-600/10 text-rose-400' : 'text-slate-400 hover:bg-[#2a2e38] hover:text-white'}`}
-          >
-            <Shield className="w-4 h-4" />
-            <span className="text-sm font-medium">审核后台</span>
-            {pendingCount && pendingCount > 0 && (
-              <span className="ml-auto px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-        )}
         <button
           onClick={() => { setView('billing'); setActiveMenuItem('workspace' as MenuItemId); }}
           className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all mb-1 ${currentView === 'billing' ? 'bg-indigo-600/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2a2e38] hover:text-white'}`}
@@ -2331,17 +2305,39 @@ const SettingsView = ({
   setUserQuota: (quota: number) => void,
   onLogout: () => void
 }) => {
-  const [localKey, setLocalKey] = useState(apiKey);
-  const [localNickname, setLocalNickname] = useState(userNickname);
   const [avatarPreview, setAvatarPreview] = useState(userAvatar);
   const [tokenList, setTokenList] = useState<any[]>([]);
   const [isLoadingTokens, setIsLoadingTokens] = useState(false);
   const [tokenError, setTokenError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const userId = localStorage.getItem('atelier_user_id') || '';
 
   // 自动加载令牌列表
   useEffect(() => {
     handleRefreshTokens();
+  }, []);
+
+  // 加载时从服务器获取最新用户信息（含头像）
+  useEffect(() => {
+    const uid = localStorage.getItem('atelier_user_id');
+    const authToken = localStorage.getItem('atelier_auth_token');
+    if (uid && authToken) {
+      fetch(`${API_BASE_URL}/user/info`, {
+        headers: {
+          'new-api-user': uid,
+          'Authorization': authToken
+        }
+      }).then(res => res.json()).then(result => {
+        if (result.success && result.data) {
+          if (result.data.avatar) {
+            setUserAvatar(result.data.avatar);
+          }
+          if (result.data.nickname) {
+            setUserNickname(result.data.nickname);
+          }
+        }
+      }).catch(console.error);
+    }
   }, []);
 
   const handleLogout = () => {
@@ -2351,7 +2347,6 @@ const SettingsView = ({
     localStorage.removeItem('atelier_initialized');
     localStorage.removeItem('atelier_user_id');
     localStorage.removeItem('atelier_auth_token');
-    localStorage.removeItem('atelier_is_admin');
     setApiKey('');
     setUserNickname('');
     setUserAvatar('');
@@ -2360,10 +2355,10 @@ const SettingsView = ({
   };
 
   const handleRefreshTokens = async () => {
-    const userId = localStorage.getItem('atelier_user_id');
+    const uid = localStorage.getItem('atelier_user_id');
     const authToken = localStorage.getItem('atelier_auth_token');
 
-    if (!userId || !authToken) {
+    if (!uid || !authToken) {
       setTokenError('请先登录');
       showToast('error', '请先登录');
       return;
@@ -2373,38 +2368,24 @@ const SettingsView = ({
     setTokenError('');
 
     try {
-      const url = `${API_BASE_URL}/tokens?p=0&size=50`;
-      console.log('请求令牌列表:', url);
-      console.log('userId:', userId);
-      console.log('authToken:', authToken);
-
-      const response = await fetch(url, {
+      const response = await fetch(`${API_BASE_URL}/tokens?p=0&size=50`, {
         method: 'GET',
         headers: {
-          'new-api-user': userId,
+          'new-api-user': uid,
           'Authorization': authToken
         }
       });
 
-      console.log('响应状态:', response.status);
       const result = await response.json();
-      console.log('响应数据:', result);
 
-      // 外部 API 返回格式：{ success: true, data: { page, page_size, total, list: [...] } }
       if (result.success === false) {
         const errMsg = result.message || '获取令牌列表失败';
         setTokenError(errMsg);
         showToast('error', errMsg);
         setTokenList([]);
       } else {
-        // 提取令牌数组 - 实际在 result.data.list
         const data = result.data || {};
-        console.log('data 对象所有属性:', Object.keys(data));
-        console.log('完整 data:', JSON.stringify(data, null, 2));
-        console.log('data.list:', data.list);
-        console.log('data.data:', data.data);
         const tokens = data.list || data.data || data.tokens || data.items || data;
-        console.log('提取的 tokens:', tokens, '长度:', Array.isArray(tokens) ? tokens.length : '不是数组');
         if (Array.isArray(tokens)) {
           setTokenList(tokens);
           if (tokens.length === 0) {
@@ -2426,79 +2407,38 @@ const SettingsView = ({
     }
   };
 
-  const handleSelectToken = (token: any) => {
+  const handleSelectToken = async (token: any) => {
     const tokenValue = token.key || token.token || token.api_key || '';
-    setLocalKey(tokenValue);
+    if (!tokenValue) {
+      showToast('error', '令牌格式无效');
+      return;
+    }
+
     setApiKey(tokenValue);
     localStorage.setItem('atelier_api_key', tokenValue);
-    showToast('success', '令牌已选择');
+    showToast('success', '令牌已选用');
 
     // 刷新额度
-    const userId = localStorage.getItem('atelier_user_id');
+    const uid = localStorage.getItem('atelier_user_id');
     const authToken = localStorage.getItem('atelier_auth_token');
-    if (userId && authToken) {
-      fetch(`${API_BASE_URL}/user/info`, {
-        headers: {
-          'new-api-user': userId,
-          'Authorization': authToken
-        }
-      }).then(res => res.json()).then(result => {
+    if (uid && authToken) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/user/info`, {
+          headers: {
+            'new-api-user': uid,
+            'Authorization': authToken
+          }
+        });
+        const result = await res.json();
         if (result.success && result.data) {
           const newQuota = result.data.quota || 0;
           setUserQuota(newQuota);
           localStorage.setItem('atelier_quota', newQuota);
         }
-      }).catch(console.error);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!localKey.trim()) {
-      showToast('error', 'API 密钥不能为空');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/user/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localKey.trim()}`
-        },
-        body: JSON.stringify({
-          nickname: localNickname,
-          avatar: avatarPreview
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || '保存失败');
+      } catch (e) {
+        console.error('刷新额度失败', e);
       }
-
-      localStorage.setItem('atelier_api_key', localKey);
-      localStorage.setItem('atelier_nickname', localNickname);
-      localStorage.setItem('atelier_avatar', avatarPreview);
-      setApiKey(localKey);
-      setUserNickname(localNickname);
-      setUserAvatar(avatarPreview);
-      showToast('success', '个人资料已保存');
-    } catch (error) {
-      showToast('error', error instanceof Error ? error.message : '保存失败');
     }
-  };
-
-  const handleClearKey = () => {
-    setLocalKey('');
-    showToast('info', 'API 密钥已清除');
-  };
-
-  const handleCancel = () => {
-    setLocalKey(apiKey);
-    setLocalNickname(userNickname);
-    setAvatarPreview(userAvatar);
-    showToast('info', '已取消更改');
   };
 
   const handleAvatarClick = () => {
@@ -2513,10 +2453,36 @@ const SettingsView = ({
         return;
       }
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const result = event.target?.result as string;
         setAvatarPreview(result);
-        showToast('success', '头像已更新');
+
+        // 自动保存头像 - 使用 userId 作为 API key（与登录流程一致）
+        const uid = localStorage.getItem('atelier_user_id');
+        const authToken = localStorage.getItem('atelier_auth_token');
+        if (uid && authToken) {
+          try {
+            const response = await fetch(`${API_BASE_URL}/user/profile`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${uid}`
+              },
+              body: JSON.stringify({ avatar: result })
+            });
+            const data = await response.json();
+            if (data.success) {
+              setUserAvatar(result);
+              showToast('success', '头像已保存');
+            } else {
+              showToast('error', data.error || '保存头像失败');
+            }
+          } catch (err) {
+            showToast('error', '保存头像失败');
+          }
+        } else {
+          showToast('error', '请先登录');
+        }
       };
       reader.onerror = () => {
         showToast('error', '头像上传失败');
@@ -2527,7 +2493,6 @@ const SettingsView = ({
 
   const handleRemoveAvatar = () => {
     setAvatarPreview('');
-    showToast('info', '已移除头像');
   };
 
   return (
@@ -2538,22 +2503,22 @@ const SettingsView = ({
           <p className="text-slate-400">管理您的个人资料、API 访问权限及偏好设置。</p>
         </div>
 
-        <section className="space-y-8">
+        <section className="space-y-6">
           <div className="flex items-center gap-4">
             <User className="w-5 h-5 text-indigo-400" />
             <h2 className="text-xl font-bold font-headline text-white">个人资料</h2>
           </div>
-          <div className="bg-[#1c1f26] rounded-2xl p-8 space-y-8 border border-white/5">
-            <div className="flex flex-col md:flex-row md:items-center gap-8">
-              <div className="relative group w-24 h-24">
+          <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-6 border border-white/5">
+            <div className="flex items-center gap-6">
+              <div className="relative group shrink-0">
                 <img
                   src={avatarPreview || userAvatar || "https://picsum.photos/seed/artist/100/100"}
                   alt="Avatar"
-                  className="w-24 h-24 rounded-full object-cover border-2 border-white/10"
+                  className="w-20 h-20 rounded-full object-cover border-2 border-white/10"
                   referrerPolicy="no-referrer"
                 />
-                <div 
-                  className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                <div
+                  className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
                   onClick={handleAvatarClick}
                 >
                   <Camera className="w-6 h-6 text-white" />
@@ -2567,51 +2532,57 @@ const SettingsView = ({
                   </button>
                 )}
               </div>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-              />
-              <div className="space-y-4">
-                <button 
+              <div className="space-y-2">
+                <button
                   onClick={handleAvatarClick}
-                  className="px-6 py-2.5 bg-[#2a2e38] hover:bg-[#333742] text-white rounded-lg transition-all font-medium flex items-center gap-2 border border-white/5"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all font-medium flex items-center gap-2"
                 >
                   <Upload className="w-4 h-4" />
                   {avatarPreview ? '更换头像' : '上传头像'}
                 </button>
-                <p className="text-xs text-slate-500">建议尺寸 400x400px。支持 JPG, PNG 或 WebP，最大 5MB。</p>
+                <p className="text-xs text-slate-500">建议 400x400px，JPG/PNG/WebP，最大 5MB</p>
+              </div>
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">用户ID</label>
+                <div className="bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-slate-500 text-sm truncate">
+                  {userId || '未登录'}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">昵称</label>
+                <div className="bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white text-sm truncate">
+                  {userNickname}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <label className="block text-sm font-bold text-white/80">昵称</label>
-              <div className="w-full bg-[#1c1f26] border border-white/5 rounded-lg py-3 px-4 text-white/70">
-                {localNickname}
-              </div>
-              <p className="text-xs text-slate-500">昵称不可修改。</p>
-            </div>
-
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="block text-sm font-bold text-white/80">额度</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">AI 额度</label>
                 <button
                   onClick={() => {
-                    const userId = localStorage.getItem('atelier_user_id');
+                    const uid = localStorage.getItem('atelier_user_id');
                     const authToken = localStorage.getItem('atelier_auth_token');
-                    if (userId && authToken) {
+                    if (uid && authToken) {
                       setIsLoadingTokens(true);
                       fetch(`${API_BASE_URL}/user/info`, {
                         headers: {
-                          'new-api-user': userId,
+                          'new-api-user': uid,
                           'Authorization': authToken
                         }
                       }).then(res => res.json()).then(result => {
                         if (result.success && result.data) {
                           setUserQuota(result.data.quota || 0);
-                          localStorage.setItem('atelier_quota', result.data.quota || 0);
                         }
                       }).catch(console.error).finally(() => setIsLoadingTokens(false));
                     }
@@ -2622,65 +2593,64 @@ const SettingsView = ({
                   刷新
                 </button>
               </div>
-              <div className="flex items-center gap-3 p-4 bg-[#111317] border border-white/5 rounded-lg">
-                <Zap className="w-5 h-5 text-amber-400" />
-                <span className="text-white font-medium">
+              <div className="bg-[#111317] border border-white/5 rounded-lg py-3 px-4 flex items-center gap-3">
+                <Zap className="w-4 h-4 text-amber-400" />
+                <span className="text-white text-sm font-medium">
                   {displayQuota(userQuota).toLocaleString()}
                 </span>
               </div>
-              <p className="text-xs text-slate-500">您的 API 调用额度。</p>
             </div>
           </div>
         </section>
 
-        <section className="space-y-8">
+        <section className="space-y-6">
           <div className="flex items-center gap-4">
-            <Zap className="w-5 h-5 text-indigo-400" />
+            <Key className="w-5 h-5 text-indigo-400" />
             <h2 className="text-xl font-bold font-headline text-white">令牌管理</h2>
           </div>
-          <div className="bg-[#1c1f26] rounded-2xl p-8 space-y-6 border border-white/5">
-            <div className="flex justify-between items-center mb-4">
-              <label className="block text-sm font-bold text-white/80">令牌列表</label>
+          <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-4 border border-white/5">
+            <div className="flex justify-between items-center">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">令牌列表</label>
               <button
                 onClick={handleRefreshTokens}
                 disabled={isLoadingTokens}
-                className="text-indigo-400 hover:text-indigo-300 text-sm font-bold flex items-center gap-1 transition-colors disabled:opacity-50"
+                className="text-indigo-400 hover:text-indigo-300 text-xs font-bold flex items-center gap-1 transition-colors disabled:opacity-50"
               >
-                <RefreshCw className={`w-4 h-4 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
                 刷新
               </button>
             </div>
 
             {tokenError && (
-              <div className="mb-4 p-3 bg-rose-500/10 rounded-lg border border-rose-500/20">
+              <div className="p-3 bg-rose-500/10 rounded-lg border border-rose-500/20">
                 <p className="text-rose-400 text-sm">{tokenError}</p>
               </div>
             )}
 
             {tokenList.length > 0 ? (
-              <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+              <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
                 {tokenList.map((token: any) => (
                   <div
                     key={token.id}
                     className={`w-full flex items-center p-3 rounded-lg border transition-all gap-3 ${
-                      localKey === token.token
+                      apiKey === (token.key || token.token || token.api_key)
                         ? 'bg-indigo-500/20 border-indigo-500/50'
                         : 'bg-[#111317] border-white/5 hover:border-white/20'
                     }`}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-white font-medium truncate">
+                        <span className="text-white text-sm font-medium truncate">
                           {token.name || token.key?.substring(0, 20) + '...'}
                         </span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                          localKey === token.key
+                          apiKey === (token.key || token.token || token.api_key)
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : token.status === 1
                               ? 'bg-emerald-500/10 text-emerald-400'
                               : 'bg-slate-500/10 text-slate-400'
                         }`}>
-                          {localKey === token.key ? '启用' : (token.status === 1 ? '可用' : '禁用')}
+                          {apiKey === (token.key || token.token || token.api_key) ? '使用中' : (token.status === 1 ? '可用' : '禁用')}
                         </span>
                       </div>
                       <p className="text-slate-500 text-xs mt-1 font-mono truncate">
@@ -2689,791 +2659,43 @@ const SettingsView = ({
                     </div>
                     <button
                       onClick={() => handleSelectToken(token)}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all shrink-0 ${
-                        localKey === token.key
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
+                        apiKey === (token.key || token.token || token.api_key)
                           ? 'bg-indigo-600 text-white'
                           : 'bg-[#2a2e38] text-slate-300 hover:bg-[#333742]'
                       }`}
                     >
-                      {localKey === token.key ? '已选用' : '选用'}
+                      {apiKey === (token.key || token.token || token.api_key) ? '已选用' : '选用'}
                     </button>
                   </div>
                 ))}
               </div>
             ) : (
               !isLoadingTokens && !tokenError && (
-                <div className="text-center py-8 text-slate-500">
-                  <Key className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">暂无令牌，请点击刷新获取</p>
+                <div className="text-center py-6 text-slate-500">
+                  <Key className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">暂无令牌</p>
                 </div>
               )
             )}
           </div>
         </section>
 
-        <div className="pt-8 flex items-center justify-end gap-4">
+        <div className="pt-4 flex justify-end">
           <button
             onClick={handleLogout}
-            className="px-6 py-3 text-rose-400 hover:text-rose-300 transition-colors font-bold flex items-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            退出登录
-          </button>
-          <button
-            onClick={handleCancel}
-            className="px-8 py-3 text-slate-400 hover:text-white transition-colors font-bold"
-          >
-            取消
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-10 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/20"
-          >
-            保存设置
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const BillingView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'info', message: string) => void }) => {
-  const billingHistory = [
-    { date: '2024-03-01', amount: '¥199.00', status: '已支付', desc: '专业版月度订阅' },
-    { date: '2024-02-01', amount: '¥199.00', status: '已支付', desc: '专业版月度订阅' },
-    { date: '2024-01-01', amount: '¥199.00', status: '已支付', desc: '专业版月度订阅' },
-  ];
-
-  const handleRenew = () => {
-    showToast('success', '正在跳转到续费页面...');
-  };
-
-  const handleChangePlan = () => {
-    showToast('info', '正在打开计划选择页面...');
-  };
-
-  const handleBuyCredits = () => {
-    showToast('info', '正在打开购买页面...');
-  };
-
-  const handleEditPayment = () => {
-    showToast('info', '正在编辑支付方式...');
-  };
-
-  const handleDownloadInvoice = (date: string) => {
-    showToast('success', `正在下载 ${date} 的发票...`);
-  };
-
-  return (
-    <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-black font-headline text-white tracking-tight">账单管理</h1>
-          <p className="text-slate-400">查看您的订阅计划、支付方式及历史账单。</p>
-        </div>
-
-        {/* Current Plan */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-8 text-white shadow-2xl shadow-indigo-600/20 relative overflow-hidden">
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-8">
-                <div>
-                  <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-1">当前计划</p>
-                  <h2 className="text-3xl font-black font-headline">专业版 (Pro)</h2>
-                </div>
-                <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">按月计费</span>
-              </div>
-              <div className="flex items-end gap-2 mb-8">
-                <span className="text-4xl font-black font-headline">¥199</span>
-                <span className="text-indigo-200 text-sm mb-1">/ 月</span>
-              </div>
-              <div className="flex gap-4">
-                <button 
-                  onClick={handleRenew}
-                  className="bg-white text-indigo-600 px-6 py-2.5 rounded-lg font-bold text-sm hover:bg-indigo-50 transition-colors"
-                >
-                  续费订阅
-                </button>
-                <button 
-                  onClick={handleChangePlan}
-                  className="bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors"
-                >
-                  更改计划
-                </button>
-              </div>
-            </div>
-            <Zap className="absolute -right-8 -bottom-8 w-48 h-48 text-white/5 rotate-12" />
-          </div>
-
-          <div className="bg-[#1c1f26] rounded-2xl p-8 border border-white/5 flex flex-col justify-between">
-            <div>
-              <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-4">AI 额度使用</p>
-              <div className="space-y-4">
-                <div className="flex justify-between items-end">
-                  <span className="text-2xl font-black font-headline text-white">842</span>
-                  <span className="text-slate-500 text-xs">/ 1000 额度</span>
-                </div>
-                <div className="w-full bg-[#111317] h-2 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: '84.2%' }}
-                    className="h-full bg-indigo-500"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-500">额度将于 2024-04-01 重置</p>
-              </div>
-            </div>
-            <button 
-              onClick={handleBuyCredits}
-              className="w-full mt-6 text-indigo-400 text-xs font-bold hover:text-indigo-300 transition-colors flex items-center justify-center gap-2"
-            >
-              购买额外额度 <Plus className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-
-        {/* Payment Method */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-4">
-            <CreditCard className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold font-headline text-white">支付方式</h2>
-          </div>
-          <div className="bg-[#1c1f26] rounded-2xl p-6 border border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-8 bg-[#111317] rounded flex items-center justify-center border border-white/5">
-                <span className="text-[10px] font-bold text-slate-400">VISA</span>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-white">Visa 尾号 4242</p>
-                <p className="text-xs text-slate-500">有效期至 12/2026</p>
-              </div>
-            </div>
-            <button 
-              onClick={handleEditPayment}
-              className="text-slate-400 hover:text-white text-xs font-bold transition-colors"
-            >
-              编辑
-            </button>
-          </div>
-        </section>
-
-        {/* Billing History */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-4">
-            <BarChart3 className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold font-headline text-white">历史账单</h2>
-          </div>
-          <div className="bg-[#1c1f26] rounded-2xl overflow-hidden border border-white/5">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-[#111317] text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="px-6 py-4">日期</th>
-                  <th className="px-6 py-4">描述</th>
-                  <th className="px-6 py-4">金额</th>
-                  <th className="px-6 py-4">状态</th>
-                  <th className="px-6 py-4"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {billingHistory.map((item, i) => (
-                  <tr key={i} className="text-white hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 font-medium">{item.date}</td>
-                    <td className="px-6 py-4 text-slate-400">{item.desc}</td>
-                    <td className="px-6 py-4 font-bold">{item.amount}</td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-bold">{item.status}</span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => handleDownloadInvoice(item.date)}
-                        className="text-indigo-400 hover:text-indigo-300 font-bold text-xs"
-                      >
-                        下载发票
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-    </div>
-  );
-};
-
-const AdminLoginView = ({
-  onLogin,
-  showToast
-}: {
-  onLogin: () => void;
-  showToast: (type: 'success' | 'error' | 'info', message: string) => void;
-}) => {
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleLogin = async () => {
-    if (!password.trim()) {
-      showToast('error', '请输入管理员密码');
-      return;
-    }
-
-    const apiKey = localStorage.getItem('atelier_api_key');
-    if (!apiKey) {
-      showToast('error', '请先登录');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/admin/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({ password })
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setAdminStatus(true);
-        showToast('success', '管理员登录成功');
-        onLogin();
-      } else {
-        throw new Error(data.error || '密码错误');
-      }
-    } catch (error) {
-      showToast('error', error instanceof Error ? error.message : '登录失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#111317] flex items-center justify-center p-8">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
-        <div className="text-center mb-10">
-          <div className="w-16 h-16 bg-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-rose-600/30">
-            <Shield className="text-white w-8 h-8" />
-          </div>
-          <h1 className="text-3xl font-black font-headline text-white tracking-tight mb-3">管理员后台</h1>
-          <p className="text-slate-400">画廊内容审核中心</p>
-        </div>
-
-        <div className="bg-[#1c1f26] rounded-2xl p-8 border border-white/5 shadow-2xl">
-          <div className="space-y-2 mb-6">
-            <label className="block text-sm font-bold text-white/80">管理员密码</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-              placeholder="输入管理员密码"
-              className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-rose-500/50 transition-all"
-            />
-          </div>
-
-          <button
-            onClick={handleLogin}
-            disabled={isLoading}
-            className="w-full bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-rose-600/20"
-          >
-            {isLoading ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                验证中...
-              </>
-            ) : (
-              <>
-                <Shield className="w-4 h-4" />
-                进入后台
-              </>
-            )}
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
-
-const AdminView = ({
-  showToast,
-  onLogout
-}: {
-  showToast: (type: 'success' | 'error' | 'info', message: string) => void;
-  onLogout: () => void;
-}) => {
-  const [pendingItems, setPendingItems] = useState<GalleryItem[]>([]);
-  const [approvedItems, setApprovedItems] = useState<GalleryItem[]>([]);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'cleanup'>('pending');
-  const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCleaning, setIsCleaning] = useState(false);
-
-  useEffect(() => {
-    loadItems();
-  }, []);
-
-  const loadItems = async () => {
-    setIsLoading(true);
-    try {
-      const apiKey = localStorage.getItem('atelier_api_key');
-      
-      const pendingRes = await fetch(`${API_BASE_URL}/gallery/pending`, {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      if (pendingRes.ok) {
-        const pendingData = await pendingRes.json();
-        if (pendingData.success) setPendingItems(pendingData.data);
-      }
-      
-      const approvedRes = await fetch(`${API_BASE_URL}/gallery`);
-      if (approvedRes.ok) {
-        const approvedData = await approvedRes.json();
-        if (approvedData.success) setApprovedItems(approvedData.data);
-      }
-    } catch (e) {
-      showToast('error', '获取数据失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleApprove = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    const apiKey = localStorage.getItem('atelier_api_key') || '';
-    const success = await approveGalleryItemAPI(id, apiKey);
-    if (success) {
-      showToast('success', '已通过审核');
-      loadItems();
-    } else {
-      showToast('error', '审核失败');
-    }
-  };
-
-  const handleReject = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    const apiKey = localStorage.getItem('atelier_api_key') || '';
-    const success = await rejectGalleryItemAPI(id, apiKey);
-    if (success) {
-      showToast('info', '已拒绝并删除');
-      loadItems();
-    } else {
-      showToast('error', '拒绝失败');
-    }
-  };
-
-  const handleApproveAll = async () => {
-    const apiKey = localStorage.getItem('atelier_api_key') || '';
-    let successCount = 0;
-    for (const item of pendingItems) {
-      if (await approveGalleryItemAPI(item.id, apiKey)) {
-        successCount++;
-      }
-    }
-    loadItems();
-    showToast('success', `已批量通过 ${successCount} 个作品`);
-  };
-
-  const handleRejectAll = async () => {
-    const apiKey = localStorage.getItem('atelier_api_key') || '';
-    let successCount = 0;
-    for (const item of pendingItems) {
-      if (await rejectGalleryItemAPI(item.id, apiKey)) {
-        successCount++;
-      }
-    }
-    loadItems();
-    showToast('info', `已批量拒绝并删除 ${successCount} 个待审核作品`);
-  };
-
-  const handleCleanup = async () => {
-    const apiKey = localStorage.getItem('atelier_api_key') || '';
-    setIsCleaning(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/gallery/cleanup`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast('success', `已清理 ${data.data.deleted} 个无效图片`);
-        loadItems();
-      } else {
-        showToast('error', data.error || '清理失败');
-      }
-    } catch (error) {
-      showToast('error', '清理失败');
-    } finally {
-      setIsCleaning(false);
-    }
-  };
-
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffHours < 1) return '刚刚';
-    if (diffHours < 24) return `${diffHours}小时前`;
-    if (diffDays < 7) return `${diffDays}天前`;
-    return date.toLocaleDateString('zh-CN');
-  };
-
-  const getImageUrl = (url: string) => {
-    if (url.startsWith('/uploads')) {
-      return `${API_BASE_URL.replace('/api', '')}${url}`;
-    }
-    return url;
-  };
-
-  const currentItems = activeTab === 'cleanup' ? [] : (activeTab === 'pending' ? pendingItems : approvedItems);
-
-  return (
-    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-black font-headline text-white tracking-tight">画廊审核后台</h1>
-            <p className="text-slate-400 mt-1">管理用户提交的画廊作品</p>
-          </div>
-          <button
-            onClick={onLogout}
-            className="px-4 py-2 bg-[#1c1f26] hover:bg-[#2a2e38] text-slate-400 hover:text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+            className="px-5 py-2.5 text-rose-400 hover:text-rose-300 transition-colors font-medium flex items-center gap-2"
           >
             <LogOut className="w-4 h-4" />
             退出登录
           </button>
         </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/10 rounded-2xl p-6 border border-amber-500/20">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-black font-headline text-white">{pendingItems.length}</p>
-                <p className="text-sm text-slate-400">待审核</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 rounded-2xl p-6 border border-emerald-500/20">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-black font-headline text-white">{approvedItems.length}</p>
-                <p className="text-sm text-slate-400">已发布</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-indigo-500/20 to-indigo-600/10 rounded-2xl p-6 border border-indigo-500/20">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center">
-                <ImageIcon className="w-6 h-6 text-indigo-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-black font-headline text-white">{pendingItems.length + approvedItems.length}</p>
-                <p className="text-sm text-slate-400">总计作品</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex gap-4">
-            <button
-              onClick={() => setActiveTab('pending')}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                activeTab === 'pending'
-                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                  : 'bg-[#1c1f26] text-slate-400 hover:text-white border border-transparent'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                待审核 ({pendingItems.length})
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('approved')}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                activeTab === 'approved'
-                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-[#1c1f26] text-slate-400 hover:text-white border border-transparent'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" />
-                已发布 ({approvedItems.length})
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('cleanup')}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                activeTab === 'cleanup'
-                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                  : 'bg-[#1c1f26] text-slate-400 hover:text-white border border-transparent'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <Shield className="w-4 h-4" />
-                清理维护
-              </span>
-            </button>
-          </div>
-          {activeTab === 'pending' && pendingItems.length > 0 && (
-            <button
-              onClick={handleRejectAll}
-              className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
-            >
-              <Trash2 className="w-4 h-4" />
-              全部拒绝
-            </button>
-          )}
-        </div>
-
-        {/* Content */}
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <RefreshCw className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-            <p className="text-slate-400">加载中...</p>
-          </div>
-        ) : activeTab === 'cleanup' ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="bg-gradient-to-br from-rose-500/20 to-rose-600/10 rounded-2xl p-8 border border-rose-500/20 mb-8 max-w-md w-full">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 bg-rose-500/20 rounded-xl flex items-center justify-center">
-                  <Shield className="w-7 h-7 text-rose-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">清理无效图片</h3>
-                  <p className="text-sm text-slate-400">删除 OSS 中已不存在的图片记录</p>
-                </div>
-              </div>
-              <p className="text-sm text-slate-400 mb-6">
-                此功能将检查画廊中所有图片在 OSS 存储中的状态，自动删除已从 OSS 删除但数据库仍有记录的无效数据。
-              </p>
-              <button
-                onClick={handleCleanup}
-                disabled={isCleaning}
-                className="w-full py-3 bg-rose-500 hover:bg-rose-400 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
-              >
-                {isCleaning ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    清理中...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    开始清理
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        ) : currentItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 bg-[#1c1f26]/30 rounded-2xl border border-dashed border-[#2a2e38]">
-            <div className="w-16 h-16 bg-[#1c1f26] rounded-2xl flex items-center justify-center mb-4">
-              {activeTab === 'pending' ? (
-                <CheckCircle className="w-8 h-8 text-slate-500" />
-              ) : activeTab === 'cleanup' ? (
-                <Shield className="w-8 h-8 text-slate-500" />
-              ) : (
-                <ImageIcon className="w-8 h-8 text-slate-500" />
-              )}
-            </div>
-            <p className="text-slate-400 text-lg mb-2">
-              {activeTab === 'pending' ? '暂无待审核作品' : activeTab === 'cleanup' ? '清理功能' : '暂无已发布作品'}
-            </p>
-            <p className="text-slate-600 text-sm">
-              {activeTab === 'pending' ? '所有作品都已审核完毕' : activeTab === 'cleanup' ? '清理OSS中已删除的图片记录' : '用户发布后将显示在这里'}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {currentItems.map(item => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#1c1f26] rounded-2xl overflow-hidden border border-white/5 group"
-              >
-                <div className="relative aspect-[4/5] overflow-hidden">
-                  <img
-                    src={getImageUrl(item.imageUrl)}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  {activeTab === 'pending' && (
-                    <div className="absolute top-3 left-3">
-                      <span className="px-2 py-1 rounded bg-amber-500/80 backdrop-blur text-[10px] font-bold text-white uppercase tracking-wider">
-                        待审核
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="p-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center overflow-hidden">
-                      {item.authorAvatar ? (
-                        <img src={item.authorAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <User className="w-4 h-4 text-indigo-400" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-white truncate">{item.author || '匿名用户'}</p>
-                      <p className="text-[10px] text-slate-500">{formatTime(item.createdAt)}</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-400 line-clamp-2 mb-4">"{item.description || '无描述'}"</p>
-
-                  {activeTab === 'pending' ? (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={(e) => handleApprove(e, item.id)}
-                        className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1"
-                      >
-                        <Check className="w-3 h-3" />
-                        批准
-                      </button>
-                      <button
-                        onClick={(e) => handleReject(e, item.id)}
-                        className="flex-1 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1"
-                      >
-                        <X className="w-3 h-3" />
-                        拒绝
-                      </button>
-                      <button
-                        onClick={() => setSelectedItem(item)}
-                        className="px-3 py-2 bg-[#2a2e38] hover:bg-[#333742] text-white rounded-lg text-xs font-bold transition-all"
-                      >
-                        <Eye className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={(e) => handleReject(e, item.id)}
-                        className="flex-1 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1"
-                      >
-                        <X className="w-3 h-3" />
-                        下架
-                      </button>
-                      <button
-                        onClick={() => setSelectedItem(item)}
-                        className="px-3 py-2 bg-[#2a2e38] hover:bg-[#333742] text-white rounded-lg text-xs font-bold transition-all"
-                      >
-                        <Eye className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
       </div>
-
-      {/* Detail Modal */}
-      <AnimatePresence>
-        {selectedItem && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-8"
-            onClick={() => setSelectedItem(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-[#1c1f26] rounded-2xl overflow-hidden max-w-4xl max-h-[90vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="relative">
-                <img
-                  src={getImageUrl(selectedItem.imageUrl)}
-                  alt=""
-                  className="w-full max-h-[60vh] object-contain bg-black"
-                  referrerPolicy="no-referrer"
-                />
-                <button
-                  onClick={() => setSelectedItem(null)}
-                  className="absolute top-4 right-4 w-10 h-10 bg-black/50 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors"
-                >
-                  <X className="w-5 h-5 text-white" />
-                </button>
-              </div>
-              <div className="p-6 flex-1 overflow-y-auto">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center overflow-hidden">
-                    {selectedItem.authorAvatar ? (
-                      <img src={selectedItem.authorAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <User className="w-6 h-6 text-indigo-400" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-white">{selectedItem.author || '匿名用户'}</p>
-                    <p className="text-sm text-slate-500">{formatTime(selectedItem.createdAt)}</p>
-                  </div>
-                  <span className={`ml-auto px-3 py-1 rounded-full text-xs font-bold ${
-                    selectedItem.type === 'pending'
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : 'bg-emerald-500/20 text-emerald-400'
-                  }`}>
-                    {selectedItem.type === 'pending' ? '待审核' : '已发布'}
-                  </span>
-                </div>
-                <p className="text-slate-300 mb-6">"{selectedItem.description || '无描述'}"</p>
-
-                {activeTab === 'pending' && (
-                  <div className="flex gap-4">
-                    <button
-                      onClick={(e) => { handleApprove(e, selectedItem.id); setSelectedItem(null); }}
-                      className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
-                    >
-                      <Check className="w-4 h-4" />
-                      批准发布
-                    </button>
-                    <button
-                      onClick={(e) => { handleReject(e, selectedItem.id); setSelectedItem(null); }}
-                      className="flex-1 py-3 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
-                    >
-                      <X className="w-4 h-4" />
-                      拒绝删除
-                    </button>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
+
+
 
 // --- Main App ---
 export default function App() {
@@ -3482,24 +2704,7 @@ export default function App() {
   const [activeMenuItem, setActiveMenuItem] = useState<MenuItemId>('workspace');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isFirstVisit, setIsFirstVisit] = useState(!localStorage.getItem('atelier_initialized'));
-  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('atelier_is_admin') === 'true');
-  const [pendingCount, setPendingCount] = useState(0);
 
-  // Initial pending count load
-  useEffect(() => {
-    if (isAdmin) {
-      const apiKey = localStorage.getItem('atelier_api_key');
-      fetch(`${API_BASE_URL}/gallery/pending?apiKey=${apiKey}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.data) {
-            setPendingCount(data.data.length);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isAdmin]);
-  
   // Workspace settings state
   const [model, setModel] = useState('🍌全能图片V2');
   const [selectedPreset, setSelectedPreset] = useState(visualPresetsConfig[0].label);
@@ -3557,25 +2762,12 @@ export default function App() {
     setIsFirstVisit(false);
   }, [setUserAvatar, setUserNickname, setUserQuota]);
 
-  const handleAdminLogin = useCallback(() => {
-    setIsAdmin(true);
-    setView('admin');
-  }, []);
-
-  const handleAdminLogout = useCallback(() => {
-    setAdminStatus(false);
-    setIsAdmin(false);
-    setView('workspace');
-    setPendingCount(0);
-  }, []);
-
   const handleLogout = useCallback(() => {
     setApiKey('');
     setUserNickname('');
     setUserAvatar('');
     setIsFirstVisit(true);
     setView('workspace');
-    setIsAdmin(false);
   }, [setUserAvatar, setUserNickname]);
 
   // Publish modal handlers
@@ -3631,40 +2823,6 @@ export default function App() {
     setPublishModalData(null);
     setPublishDescription('');
   }, []);
-
-  // 检查管理员状态
-  useEffect(() => {
-    const apiKey = localStorage.getItem('atelier_api_key');
-    if (!apiKey) return;
-
-    fetch(`${API_BASE_URL}/admin/check`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.data?.isAdmin) {
-          setAdminStatus(true);
-        }
-      })
-      .catch(() => {});
-  }, [apiKey]);
-
-  // 更新待审核数量
-  useEffect(() => {
-    if ((view === 'gallery' || view === 'admin') && isAdmin) {
-      const apiKey = localStorage.getItem('atelier_api_key');
-      fetch(`${API_BASE_URL}/gallery/pending`, {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.data) {
-            setPendingCount(data.data.length);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [view, isAdmin]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -3739,8 +2897,6 @@ export default function App() {
         userAvatar={userAvatar}
         userNickname={userNickname}
         userQuota={userQuota}
-        isAdmin={isAdmin}
-        pendingCount={pendingCount}
       />
 
       <div className="flex-1 flex flex-col ml-64 overflow-hidden">
@@ -3804,13 +2960,6 @@ export default function App() {
                 />
               )}
               {view === 'billing' && <BillingView showToast={showToast} />}
-              {view === 'admin' && (
-                isAdmin ? (
-                  <AdminView showToast={showToast} onLogout={handleAdminLogout} />
-                ) : (
-                  <AdminLoginView onLogin={handleAdminLogin} showToast={showToast} />
-                )
-              )}
             </motion.div>
           </AnimatePresence>
         </main>
