@@ -49,7 +49,7 @@ import BillingView from './BillingView';
 // --- Types ---
 type View = 'workspace' | 'gallery' | 'settings' | 'billing' | 'admin';
 import type { MenuItemId } from './menuConfig';
-import { visualPresetsConfig, type VisualPresetConfig } from './visualPresetConfig';
+import { getPresetsForMenu, type VisualPreset } from './visualPresetConfig';
 type GalleryCategory = 'hot' | 'latest' | 'style';
 
 interface GenerationResult {
@@ -361,7 +361,7 @@ const RightPanel = ({
   model: string,
   setModel: (m: string) => void,
   models: string[],
-  presets: VisualPresetConfig[],
+  presets: VisualPreset[],
   selectedPreset: string,
   setSelectedPreset: (p: string) => void,
   aspectRatio: string,
@@ -622,7 +622,7 @@ const TopBar = ({
       </div>
       <div className="flex items-center">
         <span className="text-xs font-bold text-slate-500">
-          V0.5
+          V0.6
         </span>
       </div>
     </header>
@@ -689,8 +689,17 @@ const WorkspaceView = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  const presets = visualPresetsConfig;
   const models = ['🍌全能图片V2', '🍌全能图片PRO'];
+
+  // 获取当前菜单对应的预设
+  const filteredPresets = getPresetsForMenu(activeMenuItem);
+
+  // 当 activeMenuItem 变化时，自动切换到该菜单第一个预设（如果当前预设不适用）
+  useEffect(() => {
+    if (!filteredPresets.find(p => p.label === selectedPreset)) {
+      setSelectedPreset(filteredPresets[0]?.label || '');
+    }
+  }, [activeMenuItem, filteredPresets, selectedPreset, setSelectedPreset]);
 
   // 将 Blob 转换为 base64
   const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -734,7 +743,7 @@ const WorkspaceView = ({
     const builtInPrompt = menuItem?.prompt || '';
 
     // 获取视觉预设提示词
-    const presetItem = visualPresetsConfig.find(p => p.label === selectedPreset);
+    const presetItem = filteredPresets.find(p => p.label === selectedPreset);
     const presetPrompt = presetItem?.prompt || '';
 
     // 拼接提示词：内置提示词 + 视觉预设提示词 + 用户输入的自定义提示词
@@ -1286,7 +1295,7 @@ const WorkspaceView = ({
           <div className="mb-6">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">视觉预设</p>
             <div className="grid grid-cols-2 gap-3">
-              {presets.map(preset => (
+              {filteredPresets.map(preset => (
                 <button
                   key={preset.id}
                   onClick={() => setSelectedPreset(preset.label)}
@@ -2712,7 +2721,7 @@ export default function App() {
 
   // Workspace settings state
   const [model, setModel] = useState('🍌全能图片V2');
-  const [selectedPreset, setSelectedPreset] = useState(visualPresetsConfig[0].label);
+  const [selectedPreset, setSelectedPreset] = useState(getPresetsForMenu('workspace')[0]?.label || '');
   const [creativity, setCreativity] = useState(45);
   const [structure, setStructure] = useState(82);
   const [aspectRatio, setAspectRatio] = useState('auto');

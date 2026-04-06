@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -24,11 +25,14 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: [
     'http://localhost:3000',
+    'http://127.0.0.1:3000',
     'https://midnightatelier.netlify.app',
     process.env.CLIENT_URL
-  ].filter(Boolean),
+  ].filter((url): url is string => !!url),
   credentials: true
 }));
+
+app.use(cookieParser());
 
 app.use(express.json({ limit: '10mb' }));
 

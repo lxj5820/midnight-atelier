@@ -15,9 +15,15 @@ declare module 'ali-oss' {
     name: string;
   }
 
+  interface HeadResult {
+    status: number;
+    meta?: Record<string, string>;
+  }
+
   class OSS {
     constructor(options: OSSOptions);
     put(name: string, file: Buffer | string, options?: PutOptions): Promise<PutResult>;
+    head(name: string): Promise<HeadResult>;
   }
 
   export default OSS;
