@@ -18,36 +18,31 @@ import {
   Heart,
   Maximize2,
   Settings,
-  Bell,
   Upload,
   MoreVertical,
   Zap,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   EyeOff,
-  CreditCard,
   User,
-  Camera,
   Info,
   Trash2,
   Plus,
   Download,
   Share2,
-  Copy,
+  RotateCcw,
   X,
   Check,
   Sparkles,
-  Shield,
   LogOut,
-  Clock,
-  CheckCircle,
   Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import BillingView from './BillingView';
 
 // --- Types ---
-type View = 'workspace' | 'gallery' | 'settings' | 'billing' | 'admin';
+type View = 'workspace' | 'gallery' | 'settings';
 import type { MenuItemId } from './menuConfig';
 import { getPresetsForMenu, type VisualPreset } from './visualPresetConfig';
 type GalleryCategory = 'hot' | 'latest' | 'style';
@@ -64,6 +59,7 @@ interface GenerationRecord {
   type: MenuItemId;
   prompt: string;
   imageUrl: string;
+  referenceImageUrl?: string;
   createdAt: string;
 }
 
@@ -114,8 +110,6 @@ interface GenerateContentRequest {
   generationConfig?: GenerationConfig;
 }
 
-const MAX_HISTORY_PER_TYPE = 3;
-
 // 分辨率映射表 (Banana 2)
 const RESOLUTION_MAP: Record<string, Record<string, { width: number; height: number; tokens: number }>> = {
   '1:1': { '1K': { width: 1024, height: 1024, tokens: 1120 }, '2K': { width: 2048, height: 2048, tokens: 1680 }, '4K': { width: 4096, height: 4096, tokens: 2520 } },
@@ -138,58 +132,41 @@ function getResolution(aspectRatio: string, quality: string): { width: number; h
   return RESOLUTION_MAP[aspectRatio]?.[quality] || RESOLUTION_MAP['1:1']['2K'];
 }
 
+// 根据图片尺寸找到最接近的比例
+function getClosestAspectRatio(width: number, height: number): string {
+  const imageRatio = width / height;
+  const aspectRatios = Object.keys(RESOLUTION_MAP);
+  let closest = '1:1';
+  let minDiff = Infinity;
+
+  for (const ratio of aspectRatios) {
+    const [w, h] = ratio.split(':').map(Number);
+    const mapRatio = w / h;
+    const diff = Math.abs(imageRatio - mapRatio);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = ratio;
+    }
+  }
+  return closest;
+}
+
+// 获取图片尺寸
+function getImageDimensions(src: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
 // 根据公式 y = 500000x + 278 转换实际额度到展示额度
 function displayQuota(actualQuota: number): string {
   return ((actualQuota - 278) / 500000).toFixed(2);
 }
 
 const MAX_GALLERY_ITEMS = 10;
-
-// Local storage fallback for gallery is being phased out in favor of backend DB.
-// Some functions below are kept temporarily to avoid breaking other components that might still depend on them.
-function getGalleryItems(): GalleryItem[] {
-  const items = localStorage.getItem('atelier_gallery_items');
-  return items ? JSON.parse(items) : [];
-}
-
-function saveGalleryItem(item: GalleryItem): void {
-  // Now actually handled by the backend. We'll leave this empty or minimal.
-}
-
-function deleteGalleryItem(id: string): void {
-  // Handled by backend.
-}
-
-// 管理员相关函数 - 调用后端 API (使用 Bearer Token)
-async function approveGalleryItemAPI(id: string, apiKey: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/gallery/${id}/approve`, {
-      method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      }
-    });
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
-}
-
-async function rejectGalleryItemAPI(id: string, apiKey: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/gallery/${id}/reject`, {
-      method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      }
-    });
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
-}
 
 function getGenerationHistory(): GenerationRecord[] {
   const history = localStorage.getItem('atelier_generation_history');
@@ -252,13 +229,7 @@ async function saveGenerationRecordToDB(record: GenerationRecord): Promise<void>
     // 获取同类型记录，清理超出限制的旧记录
     const getAllRequest = store.getAll();
     getAllRequest.onsuccess = () => {
-      const all = getAllRequest.result as GenerationRecord[];
-      const sameType = all.filter(r => r.type === record.type).sort((a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      // 删除超出限制的旧记录
-      sameType.slice(MAX_HISTORY_PER_TYPE - 1).forEach(r => store.delete(r.id));
-      // 保存新记录
+      // 直接保存新记录，不限制数量
       store.put(record);
     };
     tx.oncomplete = () => resolve();
@@ -504,18 +475,12 @@ const Sidebar = ({
   activeMenuItem,
   setActiveMenuItem,
   setModel,
-  userAvatar,
-  userNickname,
-  userQuota
 }: {
   currentView: View,
   setView: (v: View) => void,
   activeMenuItem: MenuItemId,
   setActiveMenuItem: (id: MenuItemId) => void,
   setModel: (m: string) => void,
-  userAvatar: string,
-  userNickname: string,
-  userQuota: number
 }) => {
   const menuItems = menuItemsConfig;
   const groups = Array.from(new Set(menuItems.map(item => item.group)));
@@ -563,28 +528,16 @@ const Sidebar = ({
       </nav>
 
       <div className="mt-auto p-2 border-t border-[#2a2e38]">
-        <button
-          onClick={() => { setView('billing'); setActiveMenuItem('workspace' as MenuItemId); }}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all mb-1 ${currentView === 'billing' ? 'bg-indigo-600/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2a2e38] hover:text-white'}`}
-        >
-          <CreditCard className="w-4 h-4" />
-          <span className="text-sm font-medium">账单管理</span>
-        </button>
         <div
           onClick={() => { setView('settings'); setActiveMenuItem('workspace' as MenuItemId); }}
           className="mt-2 p-3 bg-[#111317] rounded-xl flex items-center gap-3 group cursor-pointer hover:bg-[#2a2e38] transition-colors"
         >
-          <img
-            src={userAvatar || "https://picsum.photos/seed/artist/100/100"}
-            alt="User"
-            className="w-8 h-8 rounded-full border border-white/10"
-            referrerPolicy="no-referrer"
-          />
+          <div className="w-8 h-8 bg-indigo-600/20 rounded-full flex items-center justify-center">
+            <Key className="w-4 h-4 text-indigo-400" />
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-white truncate">{userNickname}</p>
-            <p className="text-[10px] text-slate-500 truncate">
-              额度: {displayQuota(userQuota).toLocaleString()}
-            </p>
+            <p className="text-xs font-bold text-white truncate">API 配置</p>
+            <p className="text-[10px] text-slate-500 truncate">点击设置</p>
           </div>
           <MoreVertical className="w-3 h-3 text-slate-500" />
         </div>
@@ -622,7 +575,7 @@ const TopBar = ({
       </div>
       <div className="flex items-center">
         <span className="text-xs font-bold text-slate-500">
-          V0.6
+          V1.0
         </span>
       </div>
     </header>
@@ -645,8 +598,7 @@ const WorkspaceView = ({
   quality,
   setQuality,
   showToast,
-  openPublishModal,
-  onGenerationComplete
+  setPreviewImage
 }: {
   apiKey: string,
   activeMenuItem: MenuItemId,
@@ -663,14 +615,15 @@ const WorkspaceView = ({
   quality: string,
   setQuality: (q: string) => void,
   showToast: (type: 'success' | 'error' | 'info', message: string) => void,
-  openPublishModal: (imageUrl: string, prompt: string) => void,
-  onGenerationComplete?: () => void
+  setPreviewImage: (img: string | null) => void
 }) => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [generationHistory, setGenerationHistory] = useState<GenerationRecord[]>([]);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [sliderPosition, setSliderPosition] = useState(50);
+  const [thumbnailSize, setThumbnailSize] = useState(150);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 当模型变化时，检查比例是否支持，不支持则重置
@@ -684,6 +637,50 @@ const WorkspaceView = ({
   useEffect(() => {
     getGenerationHistoryByTypeAsync(activeMenuItem).then(setGenerationHistory);
   }, [activeMenuItem, historyRefreshKey]);
+
+  // Ctrl+V paste to upload image
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            setIsUploading(true);
+            try {
+              const base64 = await blobToBase64(file);
+              const base64Url = `data:${file.type};base64,${base64}`;
+              setImageUrls([base64Url]);
+
+              // Auto-detect aspect ratio from image dimensions
+              if (aspectRatio === 'auto') {
+                const dims = await getImageDimensions(base64Url);
+                if (dims) {
+                  const closest = getClosestAspectRatio(dims.width, dims.height);
+                  setAspectRatio(closest);
+                  showToast('success', `已自动选择比例 ${closest}`);
+                }
+              } else {
+                showToast('success', '图片已粘贴');
+              }
+            } catch (error) {
+              showToast('error', `粘贴失败: ${error instanceof Error ? error.message : '未知错误'}`);
+            } finally {
+              setIsUploading(false);
+            }
+          }
+          break;
+        }
+      }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [showToast, aspectRatio]);
+
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -706,10 +703,18 @@ const WorkspaceView = ({
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result.split(',')[1]);
+        try {
+          const result = reader.result as string;
+          if (!result || !result.includes(',')) {
+            reject(new Error('图片格式转换失败'));
+            return;
+          }
+          resolve(result.split(',')[1]);
+        } catch (e) {
+          reject(new Error('图片数据处理失败'));
+        }
       };
-      reader.onerror = reject;
+      reader.onerror = () => reject(new Error('图片读取失败，请尝试重新上传'));
       reader.readAsDataURL(blob);
     });
   };
@@ -893,14 +898,13 @@ const WorkspaceView = ({
         type: activeMenuItem,
         prompt: prompt,
         imageUrl: imageUrl,
+        referenceImageUrl: imageUrls[0] || undefined,
         createdAt: new Date().toISOString()
       };
       await saveGenerationRecord(record);
       setHistoryRefreshKey(k => k + 1);
 
       showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
-      // 生图成功后刷新额度
-      onGenerationComplete?.();
     } catch (error) {
       console.error('Generation error:', error);
       showToast('error', `生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -911,6 +915,7 @@ const WorkspaceView = ({
 
   const handleClearResult = () => {
     setResult(null);
+    setImageUrls([]);
     showToast('info', '已清除生成结果');
   };
 
@@ -967,13 +972,13 @@ const WorkspaceView = ({
     showToast('info', '已删除');
   };
 
-  const handlePublishHistoryItem = (record: GenerationRecord) => {
-    openPublishModal(record.imageUrl, record.prompt);
-  };
-
   const handleItemClick = (record: GenerationRecord) => {
+    setPrompt(record.prompt);
+    if (record.referenceImageUrl) {
+      setImageUrls([record.referenceImageUrl]);
+    }
     setResult(record.imageUrl);
-    showToast('info', '已加载历史图片');
+    showToast('info', '已加载历史图片和参考图');
   };
 
   const handleAddToPrompt = () => {
@@ -1047,30 +1052,30 @@ const WorkspaceView = ({
       const base64 = await blobToBase64(file);
       const base64Url = `data:${file.type};base64,${base64}`;
       setImageUrls([base64Url]);
-      showToast('success', '参考图片已添加');
+
+      // Auto-detect aspect ratio from image dimensions
+      if (aspectRatio === 'auto') {
+        const dims = await getImageDimensions(base64Url);
+        if (dims) {
+          const closest = getClosestAspectRatio(dims.width, dims.height);
+          setAspectRatio(closest);
+          showToast('success', `已自动选择比例 ${closest}`);
+        }
+      } else {
+        showToast('success', '参考图片已添加');
+      }
     } catch (error) {
       console.error('Upload error:', error);
-      showToast('error', `上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      const msg = error instanceof Error ? error.message : '未知错误';
+      showToast('error', `上传失败: ${msg}`);
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handlePublishToGallery = async () => {
-    if (!result) {
-      showToast('error', '请先生成图片');
-      return;
-    }
-    if (!apiKey) {
-      showToast('error', '请先登录后再发布');
-      return;
-    }
-    openPublishModal(result, prompt);
-  };
-
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full" style={{ display: 'flex', flexDirection: 'row' }}>
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 mr-64 custom-scrollbar h-full" style={{ flex: 1, maxWidth: 'calc(100vw - 256px)' }}>
+      <div className="flex-1 overflow-y-auto p-4 lg:p-6 mr-80 custom-scrollbar h-full" style={{ flex: 1, maxWidth: 'calc(100vw - 320px)' }}>
         <div className="max-w-5xl mx-auto">
           {/* Current Action Indicator */}
           <div className="mb-4 flex items-center gap-4">
@@ -1087,43 +1092,75 @@ const WorkspaceView = ({
           </div>
 
           {/* Result Area */}
-          {result ? (
+          {result && imageUrls.length > 0 ? (
+            /* Comparison Mode: Slider Overlay */
+            <div className="mb-6">
+              <div
+                className="aspect-video rounded-xl overflow-hidden bg-[#1c1f26] relative group shadow-xl shadow-black/20 select-none"
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = ((e.clientX - rect.left) / rect.width) * 100;
+                  setSliderPosition(Math.max(0, Math.min(100, x)));
+                }}
+              >
+                {/* Reference Image (Bottom) */}
+                <img
+                  src={imageUrls[0]}
+                  alt="Reference"
+                  className="absolute inset-0 w-full h-full object-contain"
+                  referrerPolicy="no-referrer"
+                />
+                {/* Result Image (Top, clipped) */}
+                <div
+                  className="absolute inset-0 w-full h-full overflow-hidden"
+                  style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+                >
+                  <img
+                    src={result}
+                    alt="Generated Result"
+                    className="absolute inset-0 w-full h-full object-contain"
+                    referrerPolicy="no-referrer"
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                </div>
+                {/* Slider Handle */}
+                <div
+                  className="absolute top-0 bottom-0 w-1 bg-white cursor-ew-resize z-10 shadow-lg"
+                  style={{ left: `${sliderPosition}%` }}
+                >
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center">
+                    <ChevronLeft className="w-4 h-4 text-slate-700" />
+                    <ChevronRight className="w-4 h-4 text-slate-700" />
+                  </div>
+                </div>
+                {/* Labels */}
+                <div className="absolute top-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded-full">原图</div>
+                <div className="absolute top-2 right-2 px-2 py-1 bg-indigo-500/80 text-white text-xs rounded-full">生成图</div>
+              </div>
+            </div>
+          ) : result ? (
+            /* Single Result Display */
             <div className="mb-6">
               <div className="aspect-video rounded-xl overflow-hidden bg-[#1c1f26] relative group shadow-xl shadow-black/20">
                 <img
-                  src={result.startsWith('/uploads') ? `${API_BASE_URL.replace('/api', '')}${result}` : result}
+                  src={result}
                   alt="Generated Result"
                   className="w-full h-full object-contain"
                   referrerPolicy="no-referrer"
                 />
-                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={handleShare}
-                    className="p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors"
-                    title="分享"
-                  >
-                    <Share2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleClearResult}
-                    className="p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors"
-                    title="删除"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
               </div>
             </div>
           ) : imageUrls.length > 0 ? (
-            /* Reference Images Area */
-            <div className="mb-6">
+            /* Reference Image Display */
+            <>
               <div
-                className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all relative overflow-hidden ${
+                className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 ${
                   isDragging ? 'border-indigo-500 bg-[#1c1f26]' : 'border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]'
                 }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
+                onClick={handleUpload}
               >
                 <input
                   type="file"
@@ -1154,9 +1191,9 @@ const WorkspaceView = ({
                   </>
                 )}
               </div>
-            </div>
+            </>
           ) : (
-            /* Upload Area */
+            /* Upload Prompt */
             <div
               className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 ${
                 isDragging ? 'border-indigo-500 bg-[#1c1f26]' : 'border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]'
@@ -1173,20 +1210,35 @@ const WorkspaceView = ({
                 accept="image/jpeg,image/png,image/webp"
                 className="hidden"
               />
-              {isUploading ? (
-                <>
-                  <RefreshCw className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-                  <p className="text-slate-500 text-sm">上传中...</p>
-                </>
-              ) : (
-                <>
-                  <div className="w-12 h-12 bg-[#111317] rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-105 transition-transform">
-                    <Upload className="w-6 h-6 text-indigo-500" />
-                  </div>
-                  <h3 className="text-base font-bold text-white mb-1">点击或拖拽图片上传</h3>
-                  <p className="text-slate-500 text-xs">支持 JPG, PNG, WEBP</p>
-                </>
+              <div className="w-12 h-12 bg-[#111317] rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-105 transition-transform">
+                <Upload className="w-6 h-6 text-indigo-500" />
+              </div>
+              <h3 className="text-base font-bold text-white mb-1">点击或拖拽图片上传</h3>
+              <p className="text-slate-500 text-xs">支持 JPG, PNG, WEBP</p>
+            </div>
+          )}
+
+          {/* Result Actions */}
+          {(result || imageUrls.length > 0) && (
+            <div className="flex justify-end gap-2 mb-4">
+              {result && (
+                <button
+                  onClick={handleShare}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-[#2a2e38] text-white text-sm rounded-lg transition-colors"
+                  title="分享"
+                >
+                  <Share2 className="w-4 h-4" />
+                  分享
+                </button>
               )}
+              <button
+                onClick={handleClearResult}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-rose-500/20 text-rose-400 text-sm rounded-lg transition-colors"
+                title="清除"
+              >
+                <Trash2 className="w-4 h-4" />
+                {result ? '清除结果' : '清除参考图'}
+              </button>
             </div>
           )}
 
@@ -1200,6 +1252,28 @@ const WorkspaceView = ({
                 )}
               </div>
               <div className="flex items-center gap-3">
+                {generationHistory.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 text-xs">缩略图</span>
+                    <input
+                      type="range"
+                      min="60"
+                      max="300"
+                      value={thumbnailSize}
+                      onChange={(e) => setThumbnailSize(Number(e.target.value))}
+                      className="w-20 h-1 bg-[#2a2e38] rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                    />
+                    <span className="text-slate-500 text-xs">{thumbnailSize}px</span>
+                  </div>
+                )}
+                {generationHistory.length > 0 && (
+                  <button
+                    onClick={handleClearHistory}
+                    className="text-rose-400 text-xs font-medium hover:text-rose-300 transition-colors"
+                  >
+                    清除记录
+                  </button>
+                )}
                 {generationHistory.length > 0 && (
                   <button
                     onClick={handleClearHistory}
@@ -1217,15 +1291,15 @@ const WorkspaceView = ({
               </div>
             </div>
             {generationHistory.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-h-48 overflow-y-auto custom-scrollbar">
+              <div className="flex flex-wrap gap-3">
                 {generationHistory.slice(0, 6).map((record, index) => (
                   <motion.div
                     key={record.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className="aspect-square rounded-lg overflow-hidden bg-[#1c1f26] relative group cursor-pointer"
-                    style={{ minHeight: '80px' }}
+                    className="rounded-lg overflow-hidden bg-[#1c1f26] relative group cursor-pointer shrink-0"
+                    style={{ width: thumbnailSize, height: thumbnailSize }}
                     onClick={() => handleItemClick(record)}
                   >
                     <img 
@@ -1240,19 +1314,26 @@ const WorkspaceView = ({
                         {new Date(record.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
                       <div className="flex gap-1 mt-1">
-                        <button 
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrl) { setImageUrls([record.referenceImageUrl]); showToast('success', '已复用提示词和参考图'); } else { showToast('success', '已复用提示词'); } }}
+                          className="p-1.5 bg-white/10 rounded hover:bg-indigo-500/50 transition-colors"
+                          title="复用"
+                        >
+                          <RotateCcw className="w-3 h-3 text-white" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPreviewImage(record.imageUrl); }}
+                          className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors"
+                          title="放大"
+                        >
+                          <Maximize2 className="w-3 h-3 text-white" />
+                        </button>
+                        <button
                           onClick={(e) => { e.stopPropagation(); handleDownloadHistory(record); }}
                           className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors"
                           title="下载"
                         >
                           <Download className="w-3 h-3 text-white" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handlePublishHistoryItem(record); }}
-                          className="p-1.5 bg-indigo-500/20 rounded hover:bg-indigo-500/40 transition-colors"
-                          title="发布到画廊"
-                        >
-                          <Globe className="w-3 h-3 text-indigo-400" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }}
@@ -1267,7 +1348,7 @@ const WorkspaceView = ({
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-6 bg-[#1c1f26]/30 rounded-xl border border-dashed border-[#2a2e38]">
+              <div className="flex flex-col items-center justify-center py-6 rounded-xl">
                 <p className="text-slate-500 text-xs">暂无历史记录</p>
               </div>
             )}
@@ -1275,7 +1356,7 @@ const WorkspaceView = ({
         </div>
 
         {/* Right Panel - Fixed position on right edge */}
-        <aside className="w-64 bg-[#1c1f26] border-l border-[#2a2e38] flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0 fixed right-0 top-16 h-[calc(100vh-4rem)] z-30">
+        <aside className="w-80 bg-[#1c1f26] border-l border-[#2a2e38] flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0 fixed right-0 top-16 h-[calc(100vh-4rem)] z-30">
           <div className="mb-6">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">引擎与模型</p>
             <div className="relative group">
@@ -1400,645 +1481,49 @@ const WorkspaceView = ({
   );
 };
 
-const GalleryView = ({
-  category,
-  setCategory,
-  showToast,
-  apiKey
-}: {
-  category: GalleryCategory,
-  setCategory: (c: GalleryCategory) => void,
-  showToast: (type: 'success' | 'error' | 'info', message: string) => void,
-  apiKey: string
-}) => {
-  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
-  const [likedItems, setLikedItems] = useState<Set<string>>(() => {
-    const saved = localStorage.getItem('atelier_liked_items');
-    return saved ? new Set(JSON.parse(saved)) : new Set();
-  });
-  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
-
-  const categories: { id: GalleryCategory; label: string }[] = [
-    { id: 'hot', label: '热门推荐' },
-    { id: 'latest', label: '最新发布' },
-    { id: 'style', label: '风格流派' }
-  ];
-
-  useEffect(() => {
-    fetchGalleryItems(true);
-  }, [category]);
-
-  // 保存点赞状态到 localStorage
-  useEffect(() => {
-    localStorage.setItem('atelier_liked_items', JSON.stringify([...likedItems]));
-  }, [likedItems]);
-
-  const handleImageError = (imageUrl: string) => {
-    setFailedImages(prev => new Set(prev).add(imageUrl));
-  };
-
-  const fetchGalleryItems = async (reset: boolean = false, currentOffset?: number) => {
-    const newOffset = reset ? 0 : (currentOffset ?? offset);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/gallery?limit=20&offset=${newOffset}`);
-      if (!response.ok) throw new Error('获取画廊数据失败');
-
-      const data = await response.json();
-      let items: GalleryItem[] = [];
-
-      if (data.data && Array.isArray(data.data)) {
-        items = data.data.map((item: Record<string, unknown>) => ({
-          id: String(item.id || ''),
-          author: String(item.author || '匿名用户'),
-          authorAvatar: String(item.author_avatar || ''),
-          imageUrl: String(item.image_url || ''),
-          description: String(item.description || ''),
-          type: (item.type as 'published' | 'pending') || 'pending',
-          createdAt: String(item.created_at || new Date().toISOString())
-        }));
-      }
-
-      // 根据分类排序
-      if (category === 'latest') {
-        items = items.reverse(); // 最新：反转顺序
-      }
-
-      if (reset) {
-        setGalleryItems(items);
-        setOffset(items.length);
-      } else {
-        setGalleryItems(prev => [...prev, ...items]);
-        setOffset(newOffset + items.length);
-      }
-
-      setHasMore(items.length === 20);
-    } catch (error) {
-      console.error('Failed to fetch gallery items:', error);
-      showToast('error', '加载画廊数据失败');
-      if (reset) {
-        setGalleryItems([]);
-      }
-    } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
-    }
-  };
-
-  const handleRefresh = () => {
-    setIsLoading(true);
-    setOffset(0);
-    fetchGalleryItems(true, 0);
-  };
-
-  const handleLoadMore = () => {
-    if (hasMore && !isLoadingMore) {
-      setIsLoadingMore(true);
-      fetchGalleryItems(false);
-    }
-  };
-
-  const handleItemClick = (item: GalleryItem) => {
-    if (item.type !== 'pending') {
-      setSelectedItem(item);
-    }
-  };
-
-  const handleDownload = async (e: React.MouseEvent, imageUrl: string) => {
-    e.stopPropagation();
-    try {
-      const fullUrl = imageUrl.startsWith('/uploads') ? `${API_BASE_URL.replace('/api', '')}${imageUrl}` : imageUrl;
-      const response = await fetch(fullUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `atelier-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      showToast('success', '图片开始下载');
-    } catch {
-      showToast('error', '下载失败');
-    }
-  };
-
-  const handleShare = async (e: React.MouseEvent, item: GalleryItem) => {
-    e.stopPropagation();
-    const shareUrl = `${window.location.origin}/gallery/${item.id}`;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      showToast('success', '链接已复制到剪贴板');
-    } catch {
-      showToast('info', '分享链接：' + shareUrl);
-    }
-  };
-
-  const handleLike = (e: React.MouseEvent, item: GalleryItem) => {
-    e.stopPropagation();
-    const isCurrentlyLiked = likedItems.has(item.id);
-    setLikedItems(prev => {
-      const newSet = new Set(prev);
-      if (isCurrentlyLiked) {
-        newSet.delete(item.id);
-      } else {
-        newSet.add(item.id);
-      }
-      return newSet;
-    });
-    showToast(isCurrentlyLiked ? 'info' : 'success', isCurrentlyLiked ? '已取消点赞' : '已点赞');
-  };
-
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffHours < 1) return '刚刚';
-    if (diffHours < 24) return `${diffHours}小时前`;
-    if (diffDays < 7) return `${diffDays}天前`;
-    return date.toLocaleDateString('zh-CN');
-  };
-
-  const getImageUrl = (url: string) => {
-    if (url.startsWith('/uploads')) {
-      return `${API_BASE_URL.replace('/api', '')}${url}`;
-    }
-    return url;
-  };
-
+const GalleryView = () => {
   return (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
       <div className="max-w-7xl mx-auto">
         <header className="text-center mb-6 space-y-2">
           <h1 className="text-5xl font-black font-headline text-white tracking-tight">公共画廊</h1>
           <p className="text-slate-400 max-w-2xl mx-auto">探索来自 Atelier 社区的最新创作。由 AI 策划，由艺术家精炼。</p>
-
-          <div className="flex justify-center items-center gap-4 pt-4">
-            <div className="flex justify-center gap-3">
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => { setCategory(cat.id); handleRefresh(); }}
-                  className={`px-5 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all ${
-                    category === cat.id ? 'bg-indigo-600/10 text-indigo-400' : 'bg-[#1c1f26] text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={handleRefresh}
-              className="p-2 bg-[#1c1f26] text-slate-500 hover:text-white rounded-full transition-colors"
-              title="刷新"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
         </header>
 
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <RefreshCw className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-            <p className="text-slate-400">加载中...</p>
+        <div className="flex flex-col items-center justify-center py-32">
+          <div className="w-24 h-24 bg-indigo-600/10 rounded-2xl flex items-center justify-center mb-6">
+            <Globe className="w-12 h-12 text-indigo-500" />
           </div>
-        ) : galleryItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <ImageIcon className="w-16 h-16 text-slate-600 mb-4" />
-            <p className="text-slate-400 text-lg mb-2">暂无作品</p>
-            <p className="text-slate-600 text-sm">成为第一个发布作品的人！</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {galleryItems.map(item => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                onClick={() => handleItemClick(item)}
-                className="aspect-[4/5] rounded-2xl overflow-hidden bg-[#1c1f26] relative group cursor-pointer shadow-2xl"
-              >
-                {failedImages.has(item.imageUrl) ? (
-                  <div className="w-full h-full flex items-center justify-center bg-[#1c1f26]">
-                    <ImageIcon className="w-12 h-12 text-slate-600" />
-                  </div>
-                ) : (
-                  <img
-                    src={getImageUrl(item.imageUrl)}
-                    alt="Gallery"
-                    onError={() => handleImageError(item.imageUrl)}
-                    className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${item.type === 'pending' ? 'opacity-40 grayscale blur-sm' : ''}`}
-                    referrerPolicy="no-referrer"
-                  />
-                )}
-
-                {item.type === 'pending' ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                    <RefreshCw className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-                    <p className="font-bold text-white text-lg">审核中...</p>
-                    <p className="text-slate-500 text-xs mt-2">预计 2 分钟内完成</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* 点赞数 */}
-                    <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/60 backdrop-blur">
-                      <Heart className={`w-3 h-3 ${likedItems.has(item.id) ? 'fill-rose-500 text-rose-500' : 'text-white'}`} />
-                      <span className="text-[10px] font-bold text-white">{likedItems.has(item.id) ? '已赞' : '点赞'}</span>
-                    </div>
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center overflow-hidden">
-                          {item.authorAvatar ? (
-                            <img src={item.authorAvatar} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <User className="w-4 h-4 text-indigo-400" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-white">{item.author}</p>
-                          <p className="text-[10px] text-slate-500">{formatTime(item.createdAt)}</p>
-                        </div>
-                      </div>
-                      <p className="text-xs text-slate-300 italic line-clamp-2 leading-relaxed">"{item.description}"</p>
-                      <div className="flex gap-2 mt-4">
-                        <button
-                          onClick={(e) => handleLike(e, item)}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 ${
-                            likedItems.has(item.id)
-                              ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
-                              : 'bg-white/10 hover:bg-white/20 text-white'
-                          }`}
-                        >
-                          <Heart className={`w-3 h-3 ${likedItems.has(item.id) ? 'fill-current' : ''}`} />
-                          {likedItems.has(item.id) ? '已赞' : '点赞'}
-                        </button>
-                        <button
-                          onClick={(e) => handleDownload(e, item.imageUrl)}
-                          className="flex-1 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors flex items-center justify-center gap-1"
-                        >
-                          <Download className="w-3 h-3" />
-                          下载
-                        </button>
-                        <button
-                          onClick={(e) => handleShare(e, item)}
-                          className="flex-1 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors flex items-center justify-center gap-1"
-                        >
-                          <Share2 className="w-3 h-3" />
-                          分享
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </motion.div>
-            ))}
-          </div>
-        )}
-
-        {!isLoading && galleryItems.length > 0 && (
-          <div className="mt-16 text-center">
-            <button
-              onClick={handleLoadMore}
-              disabled={!hasMore || isLoadingMore}
-              className={`bg-[#1c1f26] hover:bg-[#2a2e38] text-white px-10 py-3 rounded-full font-bold transition-all flex items-center gap-3 mx-auto border border-white/5 ${(!hasMore || isLoadingMore) ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {isLoadingMore ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  加载中...
-                </>
-              ) : hasMore ? (
-                <>
-                  加载更多作品
-                  <ChevronDown className="w-4 h-4" />
-                </>
-              ) : (
-                '没有更多作品了'
-              )}
-            </button>
-          </div>
-        )}
+          <h2 className="text-2xl font-bold text-white mb-2">画廊功能待开放</h2>
+          <p className="text-slate-400 max-w-md text-center">
+            社区画廊功能正在积极开发中，敬请期待。<br />
+            开放后将展示更多精彩作品和创意灵感。
+          </p>
+        </div>
       </div>
-
-      {/* 详情弹窗 */}
-      {selectedItem && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-8"
-          onClick={() => setSelectedItem(null)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-[#1c1f26] rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 头部 */}
-            <div className="flex items-center justify-between p-5 border-b border-white/5">
-              <h3 className="text-lg font-bold text-white">作品详情</h3>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="p-2 text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-white/5"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* 内容 */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <div className="flex flex-col md:flex-row">
-                {/* 左侧图片 */}
-                <div className="md:w-1/2 bg-black/20 flex items-center justify-center p-4">
-                  <img
-                    src={getImageUrl(selectedItem.imageUrl)}
-                    alt="Gallery"
-                    className="max-w-full max-h-[60vh] object-contain rounded-xl"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-
-                {/* 右侧信息 */}
-                <div className="md:w-1/2 p-6 space-y-5">
-                  {/* 作者信息 */}
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center overflow-hidden">
-                      {selectedItem.authorAvatar ? (
-                        <img src={selectedItem.authorAvatar} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="w-6 h-6 text-indigo-400" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-bold text-white">{selectedItem.author || '匿名用户'}</p>
-                      <p className="text-xs text-slate-500">{formatTime(selectedItem.createdAt)}</p>
-                    </div>
-                  </div>
-
-                  {/* 描述 */}
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">描述</p>
-                    <p className="text-sm text-slate-300 leading-relaxed">{selectedItem.description || '无描述'}</p>
-                  </div>
-
-                  {/* 提示词 */}
-                  {'prompt' in selectedItem && selectedItem.prompt && (
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">使用的提示词</p>
-                      <p className="text-sm text-slate-400 leading-relaxed bg-[#111317] rounded-lg p-3 italic">"{selectedItem.prompt}"</p>
-                    </div>
-                  )}
-
-                  {/* 操作按钮 */}
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleLike(e, selectedItem); }}
-                      className={`flex-1 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 ${
-                        likedItems.has(selectedItem.id)
-                          ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
-                          : 'bg-white/10 hover:bg-white/20 text-white'
-                      }`}
-                    >
-                      <Heart className={`w-4 h-4 ${likedItems.has(selectedItem.id) ? 'fill-current' : ''}`} />
-                      {likedItems.has(selectedItem.id) ? '已点赞' : '点赞'}
-                    </button>
-                    <button
-                      onClick={(e) => handleDownload(e, selectedItem.imageUrl)}
-                      className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      下载图片
-                    </button>
-                    <button
-                      onClick={(e) => handleShare(e, selectedItem)}
-                      className="flex-1 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-bold text-white transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      分享链接
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
     </div>
   );
 };
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 const WelcomeView = ({
   onComplete,
   showToast
 }: {
-  onComplete: (userData?: { id: string; nickname: string; avatar: string }) => void,
+  onComplete: () => void,
   showToast: (type: 'success' | 'error' | 'info', message: string) => void
 }) => {
-  const [step, setStep] = useState<'input-key' | 'register' | 'login'>('input-key');
   const [apiKey, setApiKey] = useState('');
-  const [userId, setUserId] = useState('');
-  const [authToken, setAuthToken] = useState('');
-  const [existingUser, setExistingUser] = useState<{ id: string; nickname: string; avatar: string } | null>(null);
-  const [nickname, setNickname] = useState('');
-  const [avatarPreview, setAvatarPreview] = useState('');
-  const [isValidating, setIsValidating] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showKey, setShowKey] = useState(false);
 
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        showToast('error', '图片大小不能超过 5MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        setAvatarPreview(result);
-      };
-      reader.onerror = () => {
-        showToast('error', '头像上传失败');
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // 验证 API Key 并获取账号信息
-  const handleVerifyKey = async () => {
-    if (!userId.trim() || !authToken.trim()) {
-      showToast('error', '请输入账户 ID 和授权令牌');
+  const handleSaveApiKey = () => {
+    if (!apiKey.trim()) {
+      showToast('error', '请输入 API 密钥');
       return;
     }
-
-    setIsValidating(true);
-    try {
-      // 调用登录接口
-      const loginResponse = await fetch(`${API_BASE_URL}/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          userId: userId.trim(),
-          authToken: authToken.trim()
-        })
-      });
-      const loginResult = await loginResponse.json();
-
-      if (loginResult.success && loginResult.data) {
-        const user = loginResult.data;
-        // 保存登录信息
-        localStorage.setItem('atelier_user_id', user.userId || userId.trim());
-        localStorage.setItem('atelier_auth_token', authToken.trim());
-        localStorage.setItem('atelier_api_key', '');
-        localStorage.setItem('atelier_nickname', user.nickname);
-        localStorage.setItem('atelier_avatar', user.avatar || '');
-        localStorage.setItem('atelier_quota', user.quota || 0);
-        localStorage.setItem('atelier_initialized', 'true');
-
-        showToast('success', '登录成功，请在设置中选择令牌');
-        setTimeout(() => onComplete(user), 500);
-      } else {
-        throw new Error(loginResult.error || '登录失败');
-      }
-    } catch (error) {
-      showToast('error', error instanceof Error ? error.message : '登录失败');
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  // 注册新用户
-  const handleRegister = async () => {
-    if (!nickname.trim()) {
-      showToast('error', '请输入昵称');
-      return;
-    }
-
-    setIsValidating(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          apiKey: apiKey.trim(),
-          nickname: nickname.trim(),
-          avatar: avatarPreview
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || '注册失败');
-      }
-
-      const user = result.data;
-      localStorage.setItem('atelier_api_key', apiKey.trim());
-      localStorage.setItem('atelier_nickname', user.nickname);
-      localStorage.setItem('atelier_avatar', user.avatar || '');
-      localStorage.setItem('atelier_initialized', 'true');
-      localStorage.setItem('atelier_user_id', user.id);
-
-      showToast('success', '注册成功，正在进入...');
-      setTimeout(() => onComplete(user), 500);
-    } catch (error) {
-      showToast('error', error instanceof Error ? error.message : '注册失败，请检查 API 密钥后重试');
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  // 登录已有账号
-  const handleLogin = () => {
-    if (!existingUser) return;
-
     localStorage.setItem('atelier_api_key', apiKey.trim());
-    localStorage.setItem('atelier_nickname', existingUser.nickname);
-    localStorage.setItem('atelier_avatar', existingUser.avatar || '');
     localStorage.setItem('atelier_initialized', 'true');
-    localStorage.setItem('atelier_user_id', existingUser.id);
-
-    showToast('success', '欢迎回来，正在进入...');
-    setTimeout(() => onComplete(existingUser), 500);
-  };
-
-  // 修改昵称后更新
-  const handleUpdateProfile = async () => {
-    if (!nickname.trim()) {
-      showToast('error', '请输入昵称');
-      return;
-    }
-
-    setIsValidating(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/user/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey.trim()}`
-        },
-        body: JSON.stringify({
-          nickname: nickname.trim(),
-          avatar: avatarPreview
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || '更新失败');
-      }
-
-      const user = result.data || { id: existingUser?.id, nickname: nickname.trim(), avatar: avatarPreview };
-      localStorage.setItem('atelier_api_key', apiKey.trim());
-      localStorage.setItem('atelier_nickname', nickname.trim());
-      localStorage.setItem('atelier_avatar', avatarPreview);
-      localStorage.setItem('atelier_initialized', 'true');
-      localStorage.setItem('atelier_user_id', existingUser?.id || '');
-
-      showToast('success', '资料已更新，正在进入...');
-      setTimeout(() => onComplete(user), 500);
-    } catch (error) {
-      // 如果API更新失败，直接保存本地
-      const user = { id: existingUser?.id || '', nickname: nickname.trim(), avatar: avatarPreview };
-      localStorage.setItem('atelier_api_key', apiKey.trim());
-      localStorage.setItem('atelier_nickname', nickname.trim());
-      localStorage.setItem('atelier_avatar', avatarPreview);
-      localStorage.setItem('atelier_initialized', 'true');
-      localStorage.setItem('atelier_user_id', existingUser?.id || '');
-
-      showToast('success', '资料已更新，正在进入...');
-      setTimeout(() => onComplete(user), 500);
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  const handleBack = () => {
-    setStep('input-key');
-    setExistingUser(null);
-    setNickname('');
-    setAvatarPreview('');
+    showToast('success', '配置完成');
+    onComplete();
   };
 
   return (
@@ -2057,235 +1542,56 @@ const WelcomeView = ({
         </div>
 
         <div className="bg-[#1c1f26] rounded-2xl p-8 border border-white/5 shadow-2xl">
-          {/* 步骤1: 输入账户信息 */}
-          {step === 'input-key' && (
-            <>
-              <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                <Key className="w-5 h-5 text-indigo-400" />
-                登录 / 注册
-              </h2>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-white/80">账户 ID</label>
-                  <input
-                    type="text"
-                    value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleVerifyKey()}
-                    placeholder="输入您的账户 ID"
-                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-white/80">授权令牌</label>
-                  <input
-                    type="password"
-                    value={authToken}
-                    onChange={(e) => setAuthToken(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleVerifyKey()}
-                    placeholder="输入您的授权令牌"
-                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono text-sm"
-                  />
-                </div>
-
-                <div className="flex items-start gap-2 p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
-                  <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                  <p className="text-xs text-slate-400">
-                    点击
-                    <a
-                      href="https://newapi.asia/console/personal"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-indigo-400 hover:underline mx-1"
-                    >
-                      个人设置
-                    </a>
-                    获取ID和令牌，令牌在安全设置中获取。
-                  </p>
-                </div>
-
-                <div className="flex gap-3">
-                  <a
-                    href="https://newapi.asia/register?channel=c_dlerkk4t"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 bg-white/10 hover:bg-white/20 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
-                  >
-                    注册账号
-                  </a>
-                  <button
-                    onClick={handleVerifyKey}
-                    disabled={isValidating}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
-                  >
-                    {isValidating ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        登录中...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4 fill-current" />
-                        登录
-                      </>
-                    )}
-                  </button>
-                </div>
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <Key className="w-5 h-5 text-indigo-400" />
+            配置 API 密钥
+          </h2>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-white/80">API 密钥</label>
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
+                  placeholder="输入您的 API 密钥"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 pr-12 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                >
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-            </>
-          )}
+            </div>
 
-          {/* 步骤2: 注册新用户 */}
-          {step === 'register' && (
-            <>
-              <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-400" />
-                创建新账号
-              </h2>
-              <div className="space-y-6">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="relative group w-20 h-20">
-                    <img
-                      src={avatarPreview || "https://picsum.photos/seed/artist/100/100"}
-                      alt="Avatar"
-                      className="w-20 h-20 rounded-full object-cover border-2 border-white/10"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div
-                      className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-full"
-                      onClick={handleAvatarClick}
-                    >
-                      <Camera className="w-6 h-6 text-white" />
-                    </div>
-                  </div>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                  />
-                  <p className="text-xs text-slate-500">点击上传头像（可选）</p>
-                </div>
+            <div className="flex items-start gap-2 p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
+              <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-400">
+                点击
+                <a
+                  href="https://newapi.asia/console/personal"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-400 hover:underline mx-1"
+                >
+                  个人设置
+                </a>
+                获取 API 密钥。
+              </p>
+            </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-white/80">昵称</label>
-                  <input
-                    type="text"
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    placeholder="您希望被如何称呼？"
-                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleBack}
-                    className="flex-1 bg-[#2a2e38] hover:bg-[#333742] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
-                  >
-                    <X className="w-4 h-4" />
-                    返回
-                  </button>
-                  <button
-                    onClick={handleRegister}
-                    disabled={isValidating}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
-                  >
-                    {isValidating ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        注册中...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        创建账号
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* 步骤3: 已有用户登录 */}
-          {step === 'login' && existingUser && (
-            <>
-              <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                <User className="w-5 h-5 text-emerald-400" />
-                欢迎回来
-              </h2>
-              <div className="space-y-6">
-                <div className="flex flex-col items-center gap-4 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/20">
-                  <div className="relative group w-20 h-20">
-                    <img
-                      src={avatarPreview || "https://picsum.photos/seed/artist/100/100"}
-                      alt="Avatar"
-                      className="w-20 h-20 rounded-full object-cover border-2 border-emerald-500/30"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div
-                      className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-full"
-                      onClick={handleAvatarClick}
-                    >
-                      <Camera className="w-6 h-6 text-white" />
-                    </div>
-                  </div>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                  />
-                  <div className="text-center">
-                    <p className="text-white font-bold text-lg">{existingUser.nickname || '用户'}</p>
-                    <p className="text-emerald-400 text-xs">已有账号</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-bold text-white/80">更新昵称（可选）</label>
-                  <input
-                    type="text"
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    placeholder="修改昵称..."
-                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleBack}
-                    className="flex-1 bg-[#2a2e38] hover:bg-[#333742] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
-                  >
-                    <X className="w-4 h-4" />
-                    返回
-                  </button>
-                  <button
-                    onClick={handleUpdateProfile}
-                    disabled={isValidating}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
-                  >
-                    {isValidating ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        更新中...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4 fill-current" />
-                        进入工作台
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+            <button
+              onClick={handleSaveApiKey}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
+            >
+              <Zap className="w-4 h-4 fill-current" />
+              开始使用
+            </button>
+          </div>
         </div>
 
         <p className="text-center text-slate-500 text-xs mt-6">
@@ -2300,408 +1606,87 @@ const SettingsView = ({
   apiKey,
   setApiKey,
   showToast,
-  userAvatar,
-  setUserAvatar,
-  userNickname,
-  setUserNickname,
-  userQuota,
-  setUserQuota,
-  onLogout
+  onClearConfig
 }: {
   apiKey: string,
   setApiKey: (key: string) => void,
   showToast: (type: 'success' | 'error' | 'info', message: string) => void,
-  userAvatar: string,
-  setUserAvatar: (avatar: string) => void,
-  userNickname: string,
-  setUserNickname: (nickname: string) => void,
-  userQuota: number,
-  setUserQuota: (quota: number) => void,
-  onLogout: () => void
+  onClearConfig: () => void
 }) => {
-  const [avatarPreview, setAvatarPreview] = useState(userAvatar);
-  const [tokenList, setTokenList] = useState<any[]>([]);
-  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
-  const [tokenError, setTokenError] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const userId = localStorage.getItem('atelier_user_id') || '';
+  const [localApiKey, setLocalApiKey] = useState(apiKey);
+  const [showKey, setShowKey] = useState(false);
 
-  // 自动加载令牌列表
-  useEffect(() => {
-    handleRefreshTokens();
-  }, []);
-
-  // 加载时从服务器获取最新用户信息（含头像）
-  useEffect(() => {
-    const uid = localStorage.getItem('atelier_user_id');
-    const authToken = localStorage.getItem('atelier_auth_token');
-    if (uid && authToken) {
-      fetch(`${API_BASE_URL}/user/info`, {
-        headers: {
-          'new-api-user': uid,
-          'Authorization': authToken
-        }
-      }).then(res => res.json()).then(result => {
-        if (result.success && result.data) {
-          if (result.data.avatar) {
-            setUserAvatar(result.data.avatar);
-          }
-          if (result.data.nickname) {
-            setUserNickname(result.data.nickname);
-          }
-        }
-      }).catch(console.error);
+  const handleSaveApiKey = () => {
+    if (!localApiKey.trim()) {
+      showToast('error', '请输入 API 密钥');
+      return;
     }
-  }, []);
+    setApiKey(localApiKey.trim());
+    localStorage.setItem('atelier_api_key', localApiKey.trim());
+    showToast('success', 'API 密钥已保存');
+  };
 
-  const handleLogout = () => {
+  const handleClearConfig = () => {
     localStorage.removeItem('atelier_api_key');
-    localStorage.removeItem('atelier_nickname');
-    localStorage.removeItem('atelier_avatar');
     localStorage.removeItem('atelier_initialized');
-    localStorage.removeItem('atelier_user_id');
-    localStorage.removeItem('atelier_auth_token');
     setApiKey('');
-    setUserNickname('');
-    setUserAvatar('');
-    onLogout();
-    showToast('info', '已退出登录');
-  };
-
-  const handleRefreshTokens = async () => {
-    const uid = localStorage.getItem('atelier_user_id');
-    const authToken = localStorage.getItem('atelier_auth_token');
-
-    if (!uid || !authToken) {
-      setTokenError('请先登录');
-      showToast('error', '请先登录');
-      return;
-    }
-
-    setIsLoadingTokens(true);
-    setTokenError('');
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/tokens?p=0&size=50`, {
-        method: 'GET',
-        headers: {
-          'new-api-user': uid,
-          'Authorization': authToken
-        }
-      });
-
-      const result = await response.json();
-
-      if (result.success === false) {
-        const errMsg = result.message || '获取令牌列表失败';
-        setTokenError(errMsg);
-        showToast('error', errMsg);
-        setTokenList([]);
-      } else {
-        const data = result.data || {};
-        const tokens = data.list || data.data || data.tokens || data.items || data;
-        if (Array.isArray(tokens)) {
-          setTokenList(tokens);
-          if (tokens.length === 0) {
-            setTokenError('暂无可用令牌');
-          }
-        } else {
-          const errMsg = '获取令牌列表失败';
-          setTokenError(errMsg);
-          showToast('error', errMsg);
-          setTokenList([]);
-        }
-      }
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : '获取令牌列表失败';
-      setTokenError(errMsg);
-      showToast('error', errMsg);
-    } finally {
-      setIsLoadingTokens(false);
-    }
-  };
-
-  const handleSelectToken = async (token: any) => {
-    const tokenValue = token.key || token.token || token.api_key || '';
-    if (!tokenValue) {
-      showToast('error', '令牌格式无效');
-      return;
-    }
-
-    setApiKey(tokenValue);
-    localStorage.setItem('atelier_api_key', tokenValue);
-    showToast('success', '令牌已选用');
-
-    // 刷新额度
-    const uid = localStorage.getItem('atelier_user_id');
-    const authToken = localStorage.getItem('atelier_auth_token');
-    if (uid && authToken) {
-      try {
-        const res = await fetch(`${API_BASE_URL}/user/info`, {
-          headers: {
-            'new-api-user': uid,
-            'Authorization': authToken
-          }
-        });
-        const result = await res.json();
-        if (result.success && result.data) {
-          const newQuota = result.data.quota || 0;
-          setUserQuota(newQuota);
-          localStorage.setItem('atelier_quota', newQuota);
-        }
-      } catch (e) {
-        console.error('刷新额度失败', e);
-      }
-    }
-  };
-
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        showToast('error', '图片大小不能超过 5MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const result = event.target?.result as string;
-        setAvatarPreview(result);
-
-        // 自动保存头像 - 使用 userId 作为 API key（与登录流程一致）
-        const uid = localStorage.getItem('atelier_user_id');
-        const authToken = localStorage.getItem('atelier_auth_token');
-        if (uid && authToken) {
-          try {
-            const response = await fetch(`${API_BASE_URL}/user/profile`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${uid}`
-              },
-              body: JSON.stringify({ avatar: result })
-            });
-            const data = await response.json();
-            if (data.success) {
-              setUserAvatar(result);
-              showToast('success', '头像已保存');
-            } else {
-              showToast('error', data.error || '保存头像失败');
-            }
-          } catch (err) {
-            showToast('error', '保存头像失败');
-          }
-        } else {
-          showToast('error', '请先登录');
-        }
-      };
-      reader.onerror = () => {
-        showToast('error', '头像上传失败');
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleRemoveAvatar = () => {
-    setAvatarPreview('');
+    setLocalApiKey('');
+    onClearConfig();
+    showToast('info', '配置已清除');
   };
 
   return (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="space-y-2">
-          <h1 className="text-4xl font-black font-headline text-white tracking-tight">账户设置</h1>
-          <p className="text-slate-400">管理您的个人资料、API 访问权限及偏好设置。</p>
+          <h1 className="text-4xl font-black font-headline text-white tracking-tight">API 配置</h1>
+          <p className="text-slate-400">管理您的 API 访问密钥。</p>
         </div>
 
         <section className="space-y-6">
           <div className="flex items-center gap-4">
-            <User className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold font-headline text-white">个人资料</h2>
+            <Key className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-bold font-headline text-white">API 密钥</h2>
           </div>
           <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-6 border border-white/5">
-            <div className="flex items-center gap-6">
-              <div className="relative group shrink-0">
-                <img
-                  src={avatarPreview || userAvatar || "https://picsum.photos/seed/artist/100/100"}
-                  alt="Avatar"
-                  className="w-20 h-20 rounded-full object-cover border-2 border-white/10"
-                  referrerPolicy="no-referrer"
-                />
-                <div
-                  className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-                  onClick={handleAvatarClick}
-                >
-                  <Camera className="w-6 h-6 text-white" />
-                </div>
-                {avatarPreview && (
-                  <button
-                    onClick={handleRemoveAvatar}
-                    className="absolute -top-1 -right-1 w-6 h-6 bg-rose-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-3 h-3 text-white" />
-                  </button>
-                )}
-              </div>
-              <div className="space-y-2">
-                <button
-                  onClick={handleAvatarClick}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all font-medium flex items-center gap-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  {avatarPreview ? '更换头像' : '上传头像'}
-                </button>
-                <p className="text-xs text-slate-500">建议 400x400px，JPG/PNG/WebP，最大 5MB</p>
-              </div>
-            </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">用户ID</label>
-                <div className="bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-slate-500 text-sm truncate">
-                  {userId || '未登录'}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">昵称</label>
-                <div className="bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white text-sm truncate">
-                  {userNickname}
-                </div>
-              </div>
-            </div>
-
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">AI 额度</label>
+              <label className="block text-sm font-bold text-white/80">当前 API 密钥</label>
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={localApiKey}
+                  onChange={(e) => setLocalApiKey(e.target.value)}
+                  placeholder="输入新的 API 密钥"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 pr-12 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono text-sm"
+                />
                 <button
-                  onClick={() => {
-                    const uid = localStorage.getItem('atelier_user_id');
-                    const authToken = localStorage.getItem('atelier_auth_token');
-                    if (uid && authToken) {
-                      setIsLoadingTokens(true);
-                      fetch(`${API_BASE_URL}/user/info`, {
-                        headers: {
-                          'new-api-user': uid,
-                          'Authorization': authToken
-                        }
-                      }).then(res => res.json()).then(result => {
-                        if (result.success && result.data) {
-                          setUserQuota(result.data.quota || 0);
-                        }
-                      }).catch(console.error).finally(() => setIsLoadingTokens(false));
-                    }
-                  }}
-                  className="text-indigo-400 hover:text-indigo-300 text-xs font-bold flex items-center gap-1 transition-colors"
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
                 >
-                  <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
-                  刷新
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <div className="bg-[#111317] border border-white/5 rounded-lg py-3 px-4 flex items-center gap-3">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span className="text-white text-sm font-medium">
-                  {displayQuota(userQuota).toLocaleString()}
-                </span>
-              </div>
             </div>
-          </div>
-        </section>
 
-        <section className="space-y-6">
-          <div className="flex items-center gap-4">
-            <Key className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold font-headline text-white">令牌管理</h2>
-          </div>
-          <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-4 border border-white/5">
-            <div className="flex justify-between items-center">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">令牌列表</label>
+            <div className="flex gap-3">
               <button
-                onClick={handleRefreshTokens}
-                disabled={isLoadingTokens}
-                className="text-indigo-400 hover:text-indigo-300 text-xs font-bold flex items-center gap-1 transition-colors disabled:opacity-50"
+                onClick={handleSaveApiKey}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-lg font-bold transition-all"
               >
-                <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
-                刷新
+                保存密钥
               </button>
             </div>
-
-            {tokenError && (
-              <div className="p-3 bg-rose-500/10 rounded-lg border border-rose-500/20">
-                <p className="text-rose-400 text-sm">{tokenError}</p>
-              </div>
-            )}
-
-            {tokenList.length > 0 ? (
-              <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-                {tokenList.map((token: any) => (
-                  <div
-                    key={token.id}
-                    className={`w-full flex items-center p-3 rounded-lg border transition-all gap-3 ${
-                      apiKey === (token.key || token.token || token.api_key)
-                        ? 'bg-indigo-500/20 border-indigo-500/50'
-                        : 'bg-[#111317] border-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-white text-sm font-medium truncate">
-                          {token.name || token.key?.substring(0, 20) + '...'}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                          apiKey === (token.key || token.token || token.api_key)
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : token.status === 1
-                              ? 'bg-emerald-500/10 text-emerald-400'
-                              : 'bg-slate-500/10 text-slate-400'
-                        }`}>
-                          {apiKey === (token.key || token.token || token.api_key) ? '使用中' : (token.status === 1 ? '可用' : '禁用')}
-                        </span>
-                      </div>
-                      <p className="text-slate-500 text-xs mt-1 font-mono truncate">
-                        {token.key?.substring(0, 40)}...
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleSelectToken(token)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
-                        apiKey === (token.key || token.token || token.api_key)
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-[#2a2e38] text-slate-300 hover:bg-[#333742]'
-                      }`}
-                    >
-                      {apiKey === (token.key || token.token || token.api_key) ? '已选用' : '选用'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              !isLoadingTokens && !tokenError && (
-                <div className="text-center py-6 text-slate-500">
-                  <Key className="w-6 h-6 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">暂无令牌</p>
-                </div>
-              )
-            )}
           </div>
         </section>
 
         <div className="pt-4 flex justify-end">
           <button
-            onClick={handleLogout}
+            onClick={handleClearConfig}
             className="px-5 py-2.5 text-rose-400 hover:text-rose-300 transition-colors font-medium flex items-center gap-2"
           >
             <LogOut className="w-4 h-4" />
-            退出登录
+            清除配置
           </button>
         </div>
       </div>
@@ -2729,16 +1714,7 @@ export default function App() {
   
   // Gallery state
   const [galleryCategory, setGalleryCategory] = useState<GalleryCategory>('hot');
-
-  // User profile state
-  const [userAvatar, setUserAvatar] = useState(localStorage.getItem('atelier_avatar') || '');
-  const [userNickname, setUserNickname] = useState(localStorage.getItem('atelier_nickname') || 'NightShade_Artist');
-  const [userQuota, setUserQuota] = useState<number>(parseFloat(localStorage.getItem('atelier_quota') || '0'));
-
-  // Publish modal state
-  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [publishModalData, setPublishModalData] = useState<{ imageUrl: string; prompt: string } | null>(null);
-  const [publishDescription, setPublishDescription] = useState('');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString();
@@ -2749,99 +1725,15 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // 刷新用户额度
-  const refreshUserQuota = useCallback(() => {
-    const userId = localStorage.getItem('atelier_user_id');
-    const authToken = localStorage.getItem('atelier_auth_token');
-    if (userId && authToken) {
-      fetch(`${API_BASE_URL}/user/info`, {
-        headers: {
-          'new-api-user': userId,
-          'Authorization': authToken
-        }
-      }).then(res => res.json()).then(result => {
-        if (result.success && result.data) {
-          setUserQuota(result.data.quota || 0);
-          localStorage.setItem('atelier_quota', result.data.quota || 0);
-        }
-      }).catch(console.error);
-    }
-  }, [setUserQuota]);
-
-  const handleWelcomeComplete = useCallback((userData?: { id: string; nickname: string; avatar: string; quota?: number }) => {
+  const handleWelcomeComplete = useCallback(() => {
     setApiKey(localStorage.getItem('atelier_api_key') || '');
-    setUserNickname(userData?.nickname || localStorage.getItem('atelier_nickname') || 'NightShade_Artist');
-    setUserAvatar(userData?.avatar || localStorage.getItem('atelier_avatar') || '');
-    setUserQuota(userData?.quota || parseFloat(localStorage.getItem('atelier_quota') || '0'));
     setIsFirstVisit(false);
-  }, [setUserAvatar, setUserNickname, setUserQuota]);
-
-  const handleLogout = useCallback(() => {
-    setApiKey('');
-    setUserNickname('');
-    setUserAvatar('');
-    setIsFirstVisit(true);
-    setView('workspace');
-  }, [setUserAvatar, setUserNickname]);
-
-  // Publish modal handlers
-  const handleOpenPublishModal = useCallback((imageUrl: string, prompt: string) => {
-    setPublishModalData({ imageUrl, prompt });
-    setPublishDescription(prompt || '');
-    setIsPublishModalOpen(true);
   }, []);
 
-  const handleConfirmPublish = useCallback(async () => {
-    if (!publishModalData || !publishModalData.imageUrl) {
-      showToast('error', '发布数据异常');
-      return;
-    }
-
-    const userId = localStorage.getItem('atelier_user_id');
-    if (!userId) {
-      showToast('error', '请先登录');
-      return;
-    }
-
-    showToast('info', '正在上传图片...');
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/gallery/upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`
-        },
-        body: JSON.stringify({
-          description: publishDescription || publishModalData.prompt || '',
-          imageBase64: publishModalData.imageUrl
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('上传失败');
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        showToast('success', '图片已发布到画廊！');
-      } else {
-        throw new Error(data.error || '上传失败');
-      }
-    } catch (error) {
-      console.error('Publish error:', error);
-      showToast('error', `发布失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    }
-
-    setIsPublishModalOpen(false);
-    setPublishModalData(null);
-    setPublishDescription('');
-  }, [publishModalData, publishDescription, showToast]);
-
-  const handleClosePublishModal = useCallback(() => {
-    setIsPublishModalOpen(false);
-    setPublishModalData(null);
-    setPublishDescription('');
+  const handleClearConfig = useCallback(() => {
+    setApiKey('');
+    setIsFirstVisit(true);
+    setView('workspace');
   }, []);
 
   // Keyboard shortcuts
@@ -2883,13 +1775,7 @@ export default function App() {
         e.preventDefault();
         setView('settings');
       }
-      
-      // Cmd/Ctrl + 4: Billing
-      if ((e.metaKey || e.ctrlKey) && e.key === '4') {
-        e.preventDefault();
-        setView('billing');
-      }
-      
+
       // G then H: Gallery Hot
       // G then L: Gallery Latest
       // G then S: Gallery Style
@@ -2914,9 +1800,6 @@ export default function App() {
         activeMenuItem={activeMenuItem}
         setActiveMenuItem={setActiveMenuItem}
         setModel={setModel}
-        userAvatar={userAvatar}
-        userNickname={userNickname}
-        userQuota={userQuota}
       />
 
       <div className="flex-1 flex flex-col ml-64 overflow-hidden">
@@ -2953,16 +1836,14 @@ export default function App() {
                   quality={quality}
                   setQuality={setQuality}
                   showToast={showToast}
-                  openPublishModal={handleOpenPublishModal}
-                  onGenerationComplete={refreshUserQuota}
+                  setPreviewImage={setPreviewImage}
                 />
               )}
               {view === 'gallery' && (
-                <GalleryView 
+                <GalleryView
                   category={galleryCategory}
                   setCategory={setGalleryCategory}
                   showToast={showToast}
-                  apiKey={apiKey}
                 />
               )}
               {view === 'settings' && (
@@ -2970,99 +1851,17 @@ export default function App() {
                   apiKey={apiKey}
                   setApiKey={setApiKey}
                   showToast={showToast}
-                  userAvatar={userAvatar}
-                  setUserAvatar={setUserAvatar}
-                  userNickname={userNickname}
-                  setUserNickname={setUserNickname}
-                  userQuota={userQuota}
-                  setUserQuota={setUserQuota}
-                  onLogout={handleLogout}
+                  onClearConfig={handleClearConfig}
                 />
               )}
-              {view === 'billing' && <BillingView showToast={showToast} />}
             </motion.div>
           </AnimatePresence>
         </main>
 
-        <footer className="py-8 px-8 mr-64 border-t border-[#2a2e38] text-center text-slate-500 text-xs" style={{ maxWidth: 'calc(100vw - 256px)' }}>
+        <footer className="py-8 px-8 mr-80 border-t border-[#2a2e38] text-center text-slate-500 text-xs" style={{ maxWidth: 'calc(100vw - 320px)' }}>
           <p>© 2026 Atelier AI. 致力于用 AI 赋能每一位设计师。</p>
         </footer>
       </div>
-
-      {/* Floating Action Button for Gallery */}
-      {view === 'gallery' && (
-        <button 
-          onClick={() => setView('workspace')}
-          className="fixed bottom-8 right-8 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center group hover:scale-110 transition-transform z-40"
-        >
-          <Plus className="w-8 h-8" />
-          <span className="absolute right-full mr-4 bg-[#1c1f26] text-white px-4 py-2 rounded-lg text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl border border-white/5">
-            开始创作
-          </span>
-        </button>
-      )}
-
-      {/* Publish Modal */}
-      {isPublishModalOpen && publishModalData && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-8"
-          onClick={handleClosePublishModal}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-[#1c1f26] rounded-2xl overflow-hidden max-w-lg w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6 border-b border-white/5">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Globe className="w-5 h-5 text-indigo-400" />
-                发布到画廊
-              </h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="relative aspect-video rounded-xl overflow-hidden bg-[#111317]">
-                <img
-                  src={publishModalData.imageUrl}
-                  alt="Preview"
-                  className="w-full h-full object-contain"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-white/80">描述（选填）</label>
-                <textarea
-                  value={publishDescription}
-                  onChange={(e) => setPublishDescription(e.target.value)}
-                  placeholder="为你的作品添加描述..."
-                  className="w-full bg-[#111317] border border-white/5 rounded-xl py-3 px-4 text-white text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                  rows={3}
-                />
-                <p className="text-xs text-slate-500">发布后将进入审核队列，待管理员批准后公开展示</p>
-              </div>
-            </div>
-            <div className="p-6 border-t border-white/5 flex gap-3">
-              <button
-                onClick={handleClosePublishModal}
-                className="flex-1 py-2.5 bg-[#2a2e38] hover:bg-[#333742] text-white rounded-xl text-sm font-bold transition-all"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleConfirmPublish}
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
-              >
-                <Sparkles className="w-4 h-4" />
-                确认发布
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
 
       {/* Toast Notifications */}
       <AnimatePresence>
@@ -3071,6 +1870,35 @@ export default function App() {
             <Toast toast={toast} onDismiss={dismissToast} />
           </React.Fragment>
         ))}
+      </AnimatePresence>
+
+      {/* Image Preview Modal */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-8"
+            onClick={() => setPreviewImage(null)}
+          >
+            <motion.img
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              src={previewImage}
+              alt="Preview"
+              className="max-w-full max-h-full object-contain"
+              referrerPolicy="no-referrer"
+            />
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

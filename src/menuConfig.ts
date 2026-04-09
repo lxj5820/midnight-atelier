@@ -1,4 +1,5 @@
 // 菜单配置 - 包含内置提示词
+import React from 'react';
 import { LayoutGrid, Palette, Box, ImageIcon, RefreshCw, Sun, Film, Globe, BarChart3, Layers, Heart, Maximize2 } from 'lucide-react';
 
 export type MenuItemId = 'workspace' | 'colors' | '3d' | 'effects' | 'style' | 'lighting' | 'storyboard' | 'panorama' | 'analysis' | 'board' | 'mood' | 'explode';
