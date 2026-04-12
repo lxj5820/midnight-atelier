@@ -45,6 +45,7 @@ import { motion, AnimatePresence } from 'motion/react';
 type View = 'workspace' | 'gallery' | 'settings';
 import type { MenuItemId } from './menuConfig';
 import { getPresetsForMenu, type VisualPreset } from './visualPresetConfig';
+import { getPromptPlaceholder } from './menuConfig';
 type GalleryCategory = 'hot' | 'latest' | 'style';
 
 interface GenerationResult {
@@ -364,7 +365,7 @@ const RightPanel = ({
       </div>
 
       <div className="mb-6">
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">视觉预设</p>
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">效果预设</p>
         <div className="grid grid-cols-2 gap-3">
           {presets.map(preset => (
             <button
@@ -499,8 +500,8 @@ const Sidebar = ({
             <Zap className="text-white w-5 h-5 fill-current" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-white tracking-tight font-headline">MIDNIGHT ATELIER</h1>
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest">AI WORKSPACE</p>
+            <h1 className="text-sm font-bold text-white tracking-tight font-headline">午夜工坊</h1>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest">AI 工作空间</p>
           </div>
         </div>
       </div>
@@ -575,7 +576,7 @@ const TopBar = ({
       </div>
       <div className="flex items-center">
         <span className="text-xs font-bold text-slate-500">
-          V1.0
+          V1.1
         </span>
       </div>
     </header>
@@ -638,12 +639,13 @@ const WorkspaceView = ({
     getGenerationHistoryByTypeAsync(activeMenuItem).then(setGenerationHistory);
   }, [activeMenuItem, historyRefreshKey]);
 
-  // Ctrl+V paste to upload image
+  // Ctrl+V paste to add image or text to canvas
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
 
+      // First check for image
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           e.preventDefault();
@@ -672,8 +674,16 @@ const WorkspaceView = ({
               setIsUploading(false);
             }
           }
-          break;
+          return;
         }
+      }
+
+      // Then check for text - add to prompt
+      const text = e.clipboardData?.getData('text');
+      if (text) {
+        e.preventDefault();
+        setPrompt(prev => prev ? `${prev}\n${text}` : text);
+        showToast('info', '文本已添加到提示词');
       }
     };
 
@@ -690,6 +700,9 @@ const WorkspaceView = ({
 
   // 获取当前菜单对应的预设
   const filteredPresets = getPresetsForMenu(activeMenuItem);
+
+  // 获取当前菜单的提示词 placeholder
+  const promptPlaceholder = getPromptPlaceholder(activeMenuItem);
 
   // 当 activeMenuItem 变化时，自动切换到该菜单第一个预设（如果当前预设不适用）
   useEffect(() => {
@@ -1374,7 +1387,7 @@ const WorkspaceView = ({
           </div>
 
           <div className="mb-6">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">视觉预设</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">效果预设</p>
             <div className="grid grid-cols-2 gap-3">
               {filteredPresets.map(preset => (
                 <button
@@ -1440,7 +1453,7 @@ const WorkspaceView = ({
 
             <div className="bg-[#111317] rounded-xl p-4 mb-4">
               <textarea
-                placeholder="输入您的建筑构想..."
+                placeholder={promptPlaceholder}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 className="w-full bg-transparent border-none text-sm text-white resize-none outline-none min-h-[80px]"
