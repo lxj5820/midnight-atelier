@@ -25,10 +25,16 @@ const PORT = process.env.PORT || 3001;
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      callback(null, origin || true);
-    },
+    origin: [
+      'https://midnightatelier.netlify.app',
+      'https://*.netlify.app',
+      'https://midnight-atelier-production.up.railway.app',
+      'http://localhost:3000',
+      'http://localhost:8080',
+    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 
