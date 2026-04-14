@@ -10,14 +10,14 @@ export interface SmtpConfig {
   from: string;
 }
 
-export async function getSmtpConfig(): Promise<SmtpConfig | null> {
+export function getSmtpConfig(): SmtpConfig | null {
   try {
-    const host = await getSystemSetting('smtp_host');
-    const port = await getSystemSetting('smtp_port');
-    const secure = await getSystemSetting('smtp_secure');
-    const user = await getSystemSetting('smtp_user');
-    const pass = await getSystemSetting('smtp_pass');
-    const from = await getSystemSetting('smtp_from');
+    const host = getSystemSetting('smtp_host');
+    const port = getSystemSetting('smtp_port');
+    const secure = getSystemSetting('smtp_secure');
+    const user = getSystemSetting('smtp_user');
+    const pass = getSystemSetting('smtp_pass');
+    const from = getSystemSetting('smtp_from');
 
     if (!host || !port || !user || !pass || !from) {
       return null;
@@ -38,7 +38,7 @@ export async function getSmtpConfig(): Promise<SmtpConfig | null> {
 }
 
 export async function sendVerificationEmail(email: string, code: string): Promise<boolean> {
-  const config = await getSmtpConfig();
+  const config = getSmtpConfig();
   if (!config) {
     console.error('SMTP not configured');
     return false;

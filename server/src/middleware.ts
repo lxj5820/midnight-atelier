@@ -13,7 +13,7 @@ export interface AuthRequest extends Request {
   user?: SafeUser;
 }
 
-export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const token = req.cookies?.auth_token;
 
   if (!token) {
@@ -22,7 +22,7 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    const user = await findUserById(decoded.userId);
+    const user = findUserById(decoded.userId);
     if (!user) {
       return res.status(401).json({ success: false, error: '用户不存在' });
     }
