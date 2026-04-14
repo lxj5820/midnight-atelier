@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { apiFetch } from './api.js';
+import { apiFetch, setStoredToken, clearStoredToken } from './api.js';
 
 export interface User {
   id: string;
@@ -11,6 +11,7 @@ export interface User {
   compute_points: number;
   created_at: string;
   updated_at: string;
+  token?: string;
 }
 
 interface AuthContextValue {
@@ -51,12 +52,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const result = await apiFetch<User>('/auth/login', {
+    const result = await apiFetch<User & { token?: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
     if (result.success && result.data) {
-      setUser(result.data);
+      // Save token for future requests
+      if (result.data.token) {
+        setStoredToken(result.data.token);
+      }
+      // Remove token from user data before storing
+      const { token: _, ...userData } = result.data;
+      setUser(userData);
       return { success: true };
     }
     return { success: false, error: result.error || '登录失败' };
@@ -87,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await apiFetch('/auth/logout', { method: 'POST' });
+    clearStoredToken();
     setUser(null);
   }, []);
 

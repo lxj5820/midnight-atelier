@@ -1,5 +1,19 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
+const TOKEN_KEY = 'auth_token';
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setStoredToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearStoredToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -11,13 +25,16 @@ export async function apiFetch<T = unknown>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   try {
+    // Get token from localStorage and add to Authorization header
+    const token = getStoredToken();
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options.headers,
       },
-      credentials: 'include',
     });
 
     const data = (await response.json().catch(() => ({}))) as ApiResponse<T>;

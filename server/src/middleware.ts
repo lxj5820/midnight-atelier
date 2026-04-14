@@ -14,7 +14,14 @@ export interface AuthRequest extends Request {
 }
 
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
-  const token = req.cookies?.auth_token;
+  // Check both cookie and Authorization header
+  let token = req.cookies?.auth_token;
+
+  // Also check Authorization header: "Bearer <token>"
+  const authHeader = req.headers.authorization;
+  if (!token && authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  }
 
   if (!token) {
     return res.status(401).json({ success: false, error: '未登录' });

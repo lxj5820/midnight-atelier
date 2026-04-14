@@ -181,8 +181,12 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json(errorResponse('邮箱或密码错误'));
     }
 
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     setAuthCookie(res, user.id);
-    return res.json(successResponse(toSafeUser(user)));
+    return res.json(successResponse({
+      ...toSafeUser(user),
+      token // Also return token in body for Authorization header
+    }));
   } catch (error) {
     console.error('Login error:', error);
     return res.status(500).json(errorResponse('登录失败，请稍后重试'));
