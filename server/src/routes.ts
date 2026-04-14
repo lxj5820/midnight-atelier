@@ -54,6 +54,7 @@ if (!process.env.JWT_SECRET) {
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+const isRailway = process.env.RAILWAY_ENVIRONMENT !== undefined;
 
 interface ApiResponse<T = unknown> {
   success: boolean;
@@ -73,7 +74,7 @@ function setAuthCookie(res: Response, userId: string) {
   const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
   res.cookie('auth_token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: !isRailway && process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: JWT_MAX_AGE,
   });
@@ -82,7 +83,7 @@ function setAuthCookie(res: Response, userId: string) {
 function clearAuthCookie(res: Response) {
   res.clearCookie('auth_token', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: !isRailway && process.env.NODE_ENV === 'production',
     sameSite: 'lax',
   });
 }
