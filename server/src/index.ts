@@ -23,12 +23,21 @@ if (!fs.existsSync(dataDir)) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://midnightatelier.netlify.app',
+  process.env.CLIENT_URL,
+].filter(Boolean) as string[];
+
 app.use(
   cors({
-    origin: [
-      'http://localhost:3000',
-      process.env.CLIENT_URL,
-    ].filter(Boolean) as string[],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
