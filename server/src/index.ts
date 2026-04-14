@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import routes from './routes.js';
+import { initializeAdminUser } from './db.js';
 
 // Validate required environment variables
 if (!process.env.JWT_SECRET) {
@@ -85,4 +86,5 @@ app.get('/health', (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  initializeAdminUser();
 });

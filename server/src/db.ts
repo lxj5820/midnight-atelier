@@ -2,6 +2,8 @@ import Database, { Database as DatabaseType } from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
@@ -570,4 +572,38 @@ export function deleteUserSubscription(subscriptionId: string): boolean {
 
 export function addComputePointsToUser(userId: string, points: number): SafeUser | undefined {
   return addUserComputePoints(userId, points);
+}
+
+// ========== Admin User Initialization ==========
+
+export function initializeAdminUser(): SafeUser | undefined {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    console.log('ADMIN_EMAIL or ADMIN_PASSWORD not set, skipping admin initialization');
+    return undefined;
+  }
+
+  const existingAdmin = findUserByEmail(adminEmail);
+  if (existingAdmin) {
+    console.log(`Admin user ${adminEmail} already exists`);
+    return toSafeUser(existingAdmin);
+  }
+
+  try {
+    const id = uuidv4();
+    const passwordHash = bcrypt.hashSync(adminPassword, 10);
+
+    const stmt = db.prepare(
+      'INSERT INTO users (id, email, password_hash, nickname, is_admin, compute_points) VALUES (?, ?, ?, ?, 1, 0)'
+    );
+    stmt.run(id, adminEmail, passwordHash, '管理员');
+
+    console.log(`Admin user ${adminEmail} created successfully`);
+    return toSafeUser(findUserByEmail(adminEmail)!);
+  } catch (error) {
+    console.error('Failed to create admin user:', error);
+    return undefined;
+  }
 }
