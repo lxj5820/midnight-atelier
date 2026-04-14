@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import routes from './routes.js';
-import { initializeAdminUser } from './db.js';
+import { initializeAdminUser, initializeSubscriptionPlans, prisma } from './db.js';
 
 // Validate required environment variables
 if (!process.env.JWT_SECRET) {
@@ -84,7 +84,18 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  initializeAdminUser();
+  await initializeAdminUser();
+  await initializeSubscriptionPlans();
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});
+process.on('SIGTERM', async () => {
+  await prisma.$disconnect();
+  process.exit(0);
 });
