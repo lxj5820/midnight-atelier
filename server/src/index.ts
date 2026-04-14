@@ -23,6 +23,33 @@ if (!fs.existsSync(dataDir)) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// CORS headers - must be before any other handlers to catch preflight
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://midnightatelier.netlify.app',
+    'https://midnight-atelier-production.up.railway.app',
+    'http://localhost:3000',
+    'http://localhost:8080',
+  ];
+
+  // Allow Netlify preview deployments
+  if (origin && (allowedOrigins.includes(origin) || origin.endsWith('.netlify.app'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(
   cors({
     origin: [
@@ -33,8 +60,6 @@ app.use(
       'http://localhost:8080',
     ],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 
