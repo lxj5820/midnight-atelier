@@ -165,7 +165,7 @@ export async function setSystemSetting(key: string, value: string) {
 
 export async function getAllSystemSettings(): Promise<Record<string, string>> {
   const settings = await prisma.system_settings.findMany();
-  return settings.reduce((acc, row) => {
+  return settings.reduce((acc: Record<string, string>, row: { key: string; value: string }) => {
     acc[row.key] = row.value;
     return acc;
   }, {} as Record<string, string>);
@@ -175,7 +175,7 @@ export async function getAllSystemSettings(): Promise<Record<string, string>> {
 
 export async function getAllUsers(): Promise<SafeUser[]> {
   const users = await prisma.users.findMany({ orderBy: { created_at: 'desc' } });
-  return users.map(u => toSafeUser(u as User));
+  return users.map((u: User) => toSafeUser(u));
 }
 
 export async function deleteUserById(id: string): Promise<boolean> {
@@ -390,7 +390,7 @@ export async function getUserSubscriptions(userId: string): Promise<(UserSubscri
     include: { subscription_plans: true },
   });
 
-  return subscriptions.map(sub => ({
+  return subscriptions.map((sub: any) => ({
     id: sub.id,
     user_id: sub.user_id,
     plan_id: sub.plan_id,
@@ -400,9 +400,9 @@ export async function getUserSubscriptions(userId: string): Promise<(UserSubscri
     auto_renew: sub.auto_renew,
     created_at: sub.created_at,
     updated_at: sub.updated_at,
-    plan_name: (sub as any).subscription_plans?.name ?? '',
-    plan_price: (sub as any).subscription_plans?.price ?? 0,
-    plan_period: (sub as any).subscription_plans?.period ?? '',
+    plan_name: sub.subscription_plans?.name ?? '',
+    plan_price: sub.subscription_plans?.price ?? 0,
+    plan_period: sub.subscription_plans?.period ?? '',
   }));
 }
 
