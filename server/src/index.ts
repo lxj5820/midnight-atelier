@@ -29,10 +29,14 @@ const allowedOrigins = [
   process.env.CLIENT_URL,
 ].filter(Boolean) as string[];
 
+// 允许所有 Netlify preview deploy 子域名
+const isNetlifyPreview = (origin: string) =>
+  /^https:\/\/[^/]+--midnightatelier\.netlify\.app$/.test(origin);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || isNetlifyPreview(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
