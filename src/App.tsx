@@ -37,14 +37,20 @@ import {
   Check,
   Sparkles,
   LogOut,
-  Key
+  Key,
+  ChevronUp,
+  History,
+  Star
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getComputePointLogs, type ComputePointLog, deductComputePoints, compensateComputePoints, getUserSubscription, type UserSubscription } from './api';
 
 // --- Types ---
-type View = 'workspace' | 'gallery' | 'settings';
+type View = 'workspace' | 'gallery' | 'settings' | 'admin';
 import type { MenuItemId } from './menuConfig';
 import { getPresetsForMenu, type VisualPreset } from './visualPresetConfig';
+import { useAuth } from './AuthContext.tsx';
+import AdminPanel from './AdminPanel.tsx';
 import { getPromptPlaceholder } from './menuConfig';
 type GalleryCategory = 'hot' | 'latest' | 'style';
 
@@ -103,6 +109,8 @@ interface GenerationConfig {
   imageConfig?: {
     aspectRatio?: string;
     imageSize?: string;
+    width?: number;
+    height?: number;
   };
 }
 
@@ -165,6 +173,14 @@ function getImageDimensions(src: string): Promise<{ width: number; height: numbe
 // 根据公式 y = 500000x + 278 转换实际额度到展示额度
 function displayQuota(actualQuota: number): string {
   return ((actualQuota - 278) / 500000).toFixed(2);
+}
+
+// 计算算力消耗
+function getComputePointsCost(model: string, quality: string): number {
+  if (model === '🍌全能图片PRO') {
+    return quality === '4K' ? 36 : 30;
+  }
+  return quality === '4K' ? 25 : 15;
 }
 
 const MAX_GALLERY_ITEMS = 10;
@@ -463,7 +479,7 @@ const RightPanel = ({
           ) : (
             <Zap className="w-4 h-4 fill-current" />
           )}
-          {isGenerating ? '生成中...' : '立即生成'}
+          {isGenerating ? '生成中...' : `立即生成 (-${getComputePointsCost(model, quality)} 算力)`}
         </button>
       </div>
     </aside>
@@ -483,6 +499,7 @@ const Sidebar = ({
   setActiveMenuItem: (id: MenuItemId) => void,
   setModel: (m: string) => void,
 }) => {
+  const { user, logout } = useAuth();
   const menuItems = menuItemsConfig;
   const groups = Array.from(new Set(menuItems.map(item => item.group)));
 
@@ -528,20 +545,53 @@ const Sidebar = ({
         ))}
       </nav>
 
-      <div className="mt-auto p-2 border-t border-[#2a2e38]">
+      <div className="mt-auto p-2 border-t border-[#2a2e38] space-y-2">
+        {user && user.is_admin === 1 && (
+          <div
+            onClick={() => { setView('admin'); setActiveMenuItem('workspace' as MenuItemId); }}
+            className="p-3 bg-[#111317] rounded-xl flex items-center gap-3 group cursor-pointer hover:bg-[#2a2e38] transition-colors"
+          >
+            <div className="w-8 h-8 bg-rose-600/20 rounded-full flex items-center justify-center">
+              <Settings className="w-4 h-4 text-rose-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white truncate">管理员后台</p>
+              <p className="text-[10px] text-slate-500 truncate">用户与系统管理</p>
+            </div>
+            <MoreVertical className="w-3 h-3 text-slate-500" />
+          </div>
+        )}
+
         <div
           onClick={() => { setView('settings'); setActiveMenuItem('workspace' as MenuItemId); }}
-          className="mt-2 p-3 bg-[#111317] rounded-xl flex items-center gap-3 group cursor-pointer hover:bg-[#2a2e38] transition-colors"
+          className="p-3 bg-[#111317] rounded-xl flex items-center gap-3 group cursor-pointer hover:bg-[#2a2e38] transition-colors"
         >
           <div className="w-8 h-8 bg-indigo-600/20 rounded-full flex items-center justify-center">
             <Key className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-white truncate">API 配置</p>
-            <p className="text-[10px] text-slate-500 truncate">点击设置</p>
+            <p className="text-xs font-bold text-white truncate">个人中心</p>
+            <p className="text-[10px] text-slate-500 truncate">API 配置与资料</p>
           </div>
           <MoreVertical className="w-3 h-3 text-slate-500" />
         </div>
+
+        {user && (
+          <button
+            onClick={async () => {
+              await logout();
+            }}
+            className="w-full p-3 bg-[#111317] hover:bg-rose-500/10 rounded-xl flex items-center gap-3 group transition-colors text-left"
+          >
+            <div className="w-8 h-8 bg-rose-500/10 rounded-full flex items-center justify-center">
+              <LogOut className="w-4 h-4 text-rose-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white truncate">退出登录</p>
+              <p className="text-[10px] text-slate-500 truncate">{user.nickname || user.email}</p>
+            </div>
+          </button>
+        )}
       </div>
     </aside>
   );
@@ -550,10 +600,28 @@ const Sidebar = ({
 const TopBar = ({
   currentView,
   setView,
+  onShowComputeModal,
 }: {
   currentView: View,
   setView: (v: View) => void,
+  onShowComputeModal: () => void,
 }) => {
+  const { user } = useAuth();
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    getUserSubscription().then(res => {
+      if (res.success && res.data) {
+        setSubscription(res.data);
+      } else {
+        setSubscription(null);
+      }
+    });
+  }, [user]);
+
+  const planName = subscription?.plan_name || 'free版';
+
   return (
     <header className="h-16 border-b border-[#2a2e38] bg-[#111317] flex items-center justify-between px-8 sticky top-0 z-40">
       <div className="flex items-center gap-8">
@@ -572,9 +640,51 @@ const TopBar = ({
             公共画廊
             {currentView === 'gallery' && <motion.div layoutId="nav-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500" />}
           </button>
+          {user && user.is_admin === 1 && (
+            <button
+              onClick={() => setView('admin')}
+              className={`text-sm font-bold transition-all relative py-1 ${currentView === 'admin' ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              管理后台
+              {currentView === 'admin' && <motion.div layoutId="nav-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500" />}
+            </button>
+          )}
         </nav>
       </div>
-      <div className="flex items-center">
+      <div className="flex items-center gap-4">
+        {user && (
+          <>
+            <div
+              onClick={onShowComputeModal}
+              className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 rounded-full border border-indigo-500/20 cursor-pointer hover:bg-indigo-600/20 transition-colors"
+            >
+              <Zap className="w-4 h-4 text-indigo-400" />
+              <motion.span
+                key={user.compute_points}
+                initial={{ scale: 1.3 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                className="text-xs font-bold text-indigo-400"
+              >
+                {user.compute_points}
+              </motion.span>
+              <span className="text-[10px] text-slate-500">算力</span>
+            </div>
+            <div className="flex items-center gap-3 px-3 py-1.5 bg-[#1c1f26] rounded-full border border-[#2a2e38]">
+              {user.avatar ? (
+                <img src={user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-indigo-600/20 flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-indigo-400" />
+                </div>
+              )}
+              <span className="text-xs font-bold text-white">{user.nickname || user.email}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-600/20 text-indigo-400 font-medium">
+                {planName}
+              </span>
+            </div>
+          </>
+        )}
         <span className="text-xs font-bold text-slate-500">
           V1.1
         </span>
@@ -618,6 +728,7 @@ const WorkspaceView = ({
   showToast: (type: 'success' | 'error' | 'info', message: string) => void,
   setPreviewImage: (img: string | null) => void
 }) => {
+  const { user, refreshUser } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -756,6 +867,20 @@ const WorkspaceView = ({
       return;
     }
 
+    // 检查算力值
+    const selectedModel = model;
+    const requiredPoints = getComputePointsCost(selectedModel, quality);
+
+    if (!user) {
+      showToast('error', '请先登录');
+      return;
+    }
+
+    if (user.compute_points < requiredPoints) {
+      showToast('error', `算力值不足，需要 ${requiredPoints} 点，当前仅有 ${user.compute_points} 点`);
+      return;
+    }
+
     // 获取内置提示词
     const menuItem = menuItemsConfig.find(item => item.id === activeMenuItem);
     const builtInPrompt = menuItem?.prompt || '';
@@ -777,6 +902,15 @@ const WorkspaceView = ({
       return;
     }
 
+    // 先扣除算力值，再开始生成
+    const deductResult = await deductComputePoints(requiredPoints, '生成图片消耗');
+    if (!deductResult.success) {
+      showToast('error', deductResult.error || '算力值不足，扣除失败');
+      return;
+    }
+    await refreshUser();
+
+    let deducted = true;
     setIsGenerating(true);
     try {
       const selectedModel = model;
@@ -823,7 +957,9 @@ const WorkspaceView = ({
               responseModalities: ["TEXT", "IMAGE"],
               ...(resolution && {
                 imageConfig: {
-                  aspectRatio: aspectRatio
+                  aspectRatio: aspectRatio,
+                  width: resolution.width,
+                  height: resolution.height
                 }
               })
             }
@@ -840,7 +976,9 @@ const WorkspaceView = ({
             responseModalities: ["TEXT", "IMAGE"],
             ...(resolution && {
               imageConfig: {
-                aspectRatio: aspectRatio
+                aspectRatio: aspectRatio,
+                width: resolution.width,
+                height: resolution.height
               }
             })
           }
@@ -906,6 +1044,9 @@ const WorkspaceView = ({
 
       setResult(imageUrl);
 
+      // 生成成功后清除上传的参考图，防止下次生成时被误用
+      setImageUrls([]);
+
       const record: GenerationRecord = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         type: activeMenuItem,
@@ -917,10 +1058,15 @@ const WorkspaceView = ({
       await saveGenerationRecord(record);
       setHistoryRefreshKey(k => k + 1);
 
-      showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+      showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！已消耗 ${requiredPoints} 点算力`);
     } catch (error) {
       console.error('Generation error:', error);
       showToast('error', `生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      // 生成失败，补偿已扣除的算力
+      if (deducted) {
+        await compensateComputePoints(requiredPoints, '生成失败补偿');
+        await refreshUser();
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -1397,12 +1543,18 @@ const WorkspaceView = ({
                     selectedPreset === preset.label ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-transparent hover:border-slate-600'
                   }`}
                 >
-                  <img
-                    src={preset.bgImage}
-                    alt={preset.label}
-                    className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
-                    referrerPolicy="no-referrer"
-                  />
+                  {preset.bgImage ? (
+                    <img
+                      src={preset.bgImage}
+                      alt={preset.label}
+                      className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-[#111317] flex items-center justify-center">
+                      <Sparkles className="w-6 h-6 text-slate-600" />
+                    </div>
+                  )}
                   <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white uppercase tracking-wider">{preset.label}</span>
                   {selectedPreset === preset.label && (
                     <div className="absolute top-1 right-1 w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
@@ -1485,7 +1637,7 @@ const WorkspaceView = ({
               ) : (
                 <Zap className="w-4 h-4 fill-current" />
               )}
-              {isGenerating ? '生成中...' : '立即生成'}
+              {isGenerating ? '生成中...' : `立即生成 (-${getComputePointsCost(model, quality)} 算力)`}
             </button>
           </div>
         </aside>
@@ -1494,7 +1646,15 @@ const WorkspaceView = ({
   );
 };
 
-const GalleryView = () => {
+const GalleryView = ({
+  category,
+  setCategory,
+  showToast,
+}: {
+  category: GalleryCategory;
+  setCategory: (c: GalleryCategory) => void;
+  showToast: (type: 'success' | 'error' | 'info', message: string) => void;
+}) => {
   return (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
       <div className="max-w-7xl mx-auto">
@@ -1518,25 +1678,92 @@ const GalleryView = () => {
   );
 };
 
-const WelcomeView = ({
-  onComplete,
-  showToast
-}: {
-  onComplete: () => void,
-  showToast: (type: 'success' | 'error' | 'info', message: string) => void
-}) => {
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
+const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'info', message: string) => void }) => {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const { login, register, sendVerificationCode } = useAuth();
 
-  const handleSaveApiKey = () => {
-    if (!apiKey.trim()) {
-      showToast('error', '请输入 API 密钥');
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  const handleSendCode = async () => {
+    if (!email.trim() || !email.includes('@')) {
+      showToast('error', '请输入有效的邮箱地址');
       return;
     }
-    localStorage.setItem('atelier_api_key', apiKey.trim());
-    localStorage.setItem('atelier_initialized', 'true');
-    showToast('success', '配置完成');
-    onComplete();
+
+    setIsSendingCode(true);
+    try {
+      const result = await sendVerificationCode(email);
+      if (result.success) {
+        showToast('success', '验证码已发送到您的邮箱');
+        setCountdown(60);
+      } else {
+        showToast('error', result.error || '发送验证码失败');
+      }
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isLoading) return;
+
+    if (mode === 'register') {
+      if (!nickname.trim()) {
+        showToast('error', '请输入昵称');
+        return;
+      }
+      if (!verificationCode.trim()) {
+        showToast('error', '请输入验证码');
+        return;
+      }
+      if (password.length < 6) {
+        showToast('error', '密码长度至少为 6 位');
+        return;
+      }
+      if (password !== confirmPassword) {
+        showToast('error', '两次输入的密码不一致');
+        return;
+      }
+    } else {
+      if (!email.trim() || !password) {
+        showToast('error', '请输入邮箱和密码');
+        return;
+      }
+    }
+
+    setIsLoading(true);
+    try {
+      if (mode === 'login') {
+        const result = await login(email, password);
+        if (!result.success) {
+          showToast('error', result.error || '登录失败');
+        }
+      } else {
+        const result = await register(email, password, nickname, verificationCode);
+        if (!result.success) {
+          showToast('error', result.error || '注册失败');
+        } else {
+          showToast('success', '注册成功');
+        }
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -1544,7 +1771,7 @@ const WelcomeView = ({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-lg"
+        className="w-full max-w-md"
       >
         <div className="text-center mb-10">
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-indigo-600/30">
@@ -1555,56 +1782,113 @@ const WelcomeView = ({
         </div>
 
         <div className="bg-[#1c1f26] rounded-2xl p-8 border border-white/5 shadow-2xl">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-            <Key className="w-5 h-5 text-indigo-400" />
-            配置 API 密钥
-          </h2>
-          <div className="space-y-6">
+          <div className="flex gap-2 p-1 bg-[#111317] rounded-xl mb-6">
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'login' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              登录
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('register')}
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'register' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              注册
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {mode === 'register' && (
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">昵称</label>
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  placeholder="您的昵称"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-white/80">API 密钥</label>
+              <label className="block text-sm font-bold text-white/80">邮箱</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+              />
+            </div>
+
+            {mode === 'register' && (
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">邮箱验证码</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    placeholder="输入验证码"
+                    className="flex-1 bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendCode}
+                    disabled={isSendingCode || countdown > 0}
+                    className="px-4 py-3 bg-indigo-600/20 hover:bg-indigo-600/30 disabled:bg-slate-700/50 disabled:cursor-not-allowed text-indigo-400 disabled:text-slate-500 rounded-lg font-bold transition-all whitespace-nowrap text-sm"
+                  >
+                    {isSendingCode ? '发送中...' : countdown > 0 ? `${countdown}秒` : '发送验证码'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-white/80">密码</label>
               <div className="relative">
                 <input
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
-                  placeholder="输入您的 API 密钥"
-                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 pr-12 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono text-sm"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="输入密码"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 pr-12 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowKey(!showKey)}
+                  onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
                 >
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
-            <div className="flex items-start gap-2 p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
-              <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-slate-400">
-                点击
-                <a
-                  href="https://newapi.asia/console/personal"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-indigo-400 hover:underline mx-1"
-                >
-                  个人设置
-                </a>
-                获取 API 密钥。
-              </p>
-            </div>
+            {mode === 'register' && (
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">确认密码</label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="再次输入密码"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                />
+              </div>
+            )}
 
             <button
-              onClick={handleSaveApiKey}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
             >
-              <Zap className="w-4 h-4 fill-current" />
-              开始使用
+              {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
+              {isLoading ? '处理中...' : mode === 'login' ? '登录' : '注册'}
             </button>
-          </div>
+          </form>
         </div>
 
         <p className="text-center text-slate-500 text-xs mt-6">
@@ -1616,92 +1900,276 @@ const WelcomeView = ({
 };
 
 const SettingsView = ({
-  apiKey,
-  setApiKey,
   showToast,
-  onClearConfig
 }: {
-  apiKey: string,
-  setApiKey: (key: string) => void,
   showToast: (type: 'success' | 'error' | 'info', message: string) => void,
-  onClearConfig: () => void
 }) => {
-  const [localApiKey, setLocalApiKey] = useState(apiKey);
-  const [showKey, setShowKey] = useState(false);
+  const { user, updateProfile, updatePassword, logout } = useAuth();
+  const [profile, setProfile] = useState({ nickname: user?.nickname || '', avatar: user?.avatar || '' });
+  const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
+  const [logs, setLogs] = useState<ComputePointLog[]>([]);
+  const [logsTotal, setLogsTotal] = useState(0);
+  const [logsFilter, setLogsFilter] = useState<string>('');
+  const [logsPage, setLogsPage] = useState(0);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
-  const handleSaveApiKey = () => {
-    if (!localApiKey.trim()) {
-      showToast('error', '请输入 API 密钥');
-      return;
+  useEffect(() => {
+    if (user) {
+      setProfile({ nickname: user.nickname || '', avatar: user.avatar || '' });
     }
-    setApiKey(localApiKey.trim());
-    localStorage.setItem('atelier_api_key', localApiKey.trim());
-    showToast('success', 'API 密钥已保存');
+  }, [user]);
+
+  useEffect(() => {
+    loadLogs();
+  }, [logsFilter, logsPage]);
+
+  const loadLogs = async () => {
+    setIsLoadingLogs(true);
+    try {
+      const result = await getComputePointLogs(logsFilter || undefined, 20, logsPage * 20);
+      if (result.success && result.data) {
+        setLogs(result.data.logs);
+        setLogsTotal(result.data.total);
+      }
+    } catch (error) {
+      console.error('Load logs error:', error);
+    } finally {
+      setIsLoadingLogs(false);
+    }
   };
 
-  const handleClearConfig = () => {
-    localStorage.removeItem('atelier_api_key');
-    localStorage.removeItem('atelier_initialized');
-    setApiKey('');
-    setLocalApiKey('');
-    onClearConfig();
-    showToast('info', '配置已清除');
+  const handleSaveProfile = async () => {
+    const result = await updateProfile({ nickname: profile.nickname.trim(), avatar: profile.avatar.trim() });
+    if (result.success) {
+      showToast('success', '个人资料已更新');
+    } else {
+      showToast('error', result.error || '更新失败');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwords.new.length < 6) {
+      showToast('error', '新密码长度至少为 6 位');
+      return;
+    }
+    if (passwords.new !== passwords.confirm) {
+      showToast('error', '两次输入的新密码不一致');
+      return;
+    }
+    const result = await updatePassword(passwords.current, passwords.new);
+    if (result.success) {
+      showToast('success', '密码已修改，请重新登录');
+      setPasswords({ current: '', new: '', confirm: '' });
+      await logout();
+    } else {
+      showToast('error', result.error || '修改失败');
+    }
   };
 
   return (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="space-y-2">
-          <h1 className="text-4xl font-black font-headline text-white tracking-tight">API 配置</h1>
-          <p className="text-slate-400">管理您的 API 访问密钥。</p>
+          <h1 className="text-4xl font-black font-headline text-white tracking-tight">个人中心</h1>
+          <p className="text-slate-400">管理您的账户资料、算力值与安全选项。</p>
         </div>
 
-        <section className="space-y-6">
+        {/* 个人资料 */}
+        <section className="space-y-4">
           <div className="flex items-center gap-4">
-            <Key className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold font-headline text-white">API 密钥</h2>
+            <User className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-bold font-headline text-white">个人资料</h2>
           </div>
-          <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-6 border border-white/5">
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-white/80">当前 API 密钥</label>
-              <div className="relative">
+          <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-5 border border-white/5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">昵称</label>
                 <input
-                  type={showKey ? 'text' : 'password'}
-                  value={localApiKey}
-                  onChange={(e) => setLocalApiKey(e.target.value)}
-                  placeholder="输入新的 API 密钥"
-                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 pr-12 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono text-sm"
+                  type="text"
+                  value={profile.nickname}
+                  onChange={(e) => setProfile(p => ({ ...p, nickname: e.target.value }))}
+                  placeholder="您的昵称"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
-                >
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">头像 URL</label>
+                <input
+                  type="text"
+                  value={profile.avatar}
+                  onChange={(e) => setProfile(p => ({ ...p, avatar: e.target.value }))}
+                  placeholder="https://..."
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                />
               </div>
             </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleSaveApiKey}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-lg font-bold transition-all"
-              >
-                保存密钥
-              </button>
+            <div className="flex items-center gap-3 p-4 bg-indigo-600/10 rounded-xl border border-indigo-500/20">
+              <Zap className="w-5 h-5 text-indigo-400" />
+              <div className="flex-1">
+                <p className="text-sm font-bold text-white">当前算力值</p>
+                <p className="text-xs text-slate-400 mt-0.5">生成图片会消耗算力值（V2: 1点 / PRO: 3点）</p>
+              </div>
+              <div className="text-2xl font-black text-indigo-400">{user?.compute_points || 0}</div>
             </div>
+            <button
+              onClick={handleSaveProfile}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-lg font-bold transition-all"
+            >
+              保存资料
+            </button>
           </div>
         </section>
 
-        <div className="pt-4 flex justify-end">
-          <button
-            onClick={handleClearConfig}
-            className="px-5 py-2.5 text-rose-400 hover:text-rose-300 transition-colors font-medium flex items-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            清除配置
-          </button>
-        </div>
+        {/* 算力记录 */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-4">
+            <History className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-bold font-headline text-white">算力记录</h2>
+          </div>
+          <div className="bg-[#1c1f26] rounded-2xl border border-white/5 overflow-hidden">
+            <div className="p-4 border-b border-white/5 flex items-center justify-between">
+              <select
+                value={logsFilter}
+                onChange={(e) => {
+                  setLogsFilter(e.target.value);
+                  setLogsPage(0);
+                }}
+                className="bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+              >
+                <option value="">全部记录</option>
+                <option value="gift">赠送</option>
+                <option value="compensation">补偿</option>
+                <option value="deduct">扣除</option>
+                <option value="clear">清空</option>
+                <option value="consume">消费</option>
+              </select>
+              <button
+                onClick={loadLogs}
+                disabled={isLoadingLogs}
+                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-sm font-medium transition-all"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoadingLogs ? 'animate-spin' : ''}`} />
+                刷新
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[#111317]">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">时间</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">类型</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">变动</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">原因</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {logs.map((log) => (
+                    <tr key={log.id} className="hover:bg-[#111317] transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-400">
+                        {new Date(log.created_at).toLocaleString('zh-CN')}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${
+                          log.type === 'gift' ? 'bg-green-600/20 text-green-400' :
+                          log.type === 'compensation' ? 'bg-blue-600/20 text-blue-400' :
+                          log.type === 'deduct' ? 'bg-orange-600/20 text-orange-400' :
+                          log.type === 'clear' ? 'bg-red-600/20 text-red-400' :
+                          'bg-purple-600/20 text-purple-400'
+                        }`}>
+                          {log.type === 'gift' ? '赠送' :
+                           log.type === 'compensation' ? '补偿' :
+                           log.type === 'deduct' ? '扣除' :
+                           log.type === 'clear' ? '清空' : '消费'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`text-sm font-bold ${log.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {log.amount > 0 ? '+' : ''}{log.amount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-400">{log.reason || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {logs.length === 0 && !isLoadingLogs && (
+                <div className="text-center py-12">
+                  <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                  <p className="text-slate-500 text-sm">暂无记录</p>
+                </div>
+              )}
+            </div>
+            {logsTotal > 20 && (
+              <div className="p-4 border-t border-white/5 flex items-center justify-between">
+                <button
+                  onClick={() => setLogsPage(p => Math.max(0, p - 1))}
+                  disabled={logsPage === 0}
+                  className="px-3 py-1.5 bg-[#111317] hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
+                >
+                  上一页
+                </button>
+                <span className="text-sm text-slate-400">
+                  第 {logsPage + 1} 页 / 共 {Math.ceil(logsTotal / 20)} 页
+                </span>
+                <button
+                  onClick={() => setLogsPage(p => p + 1)}
+                  disabled={(logsPage + 1) * 20 >= logsTotal}
+                  className="px-3 py-1.5 bg-[#111317] hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
+                >
+                  下一页
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* 修改密码 */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-4">
+            <LogOut className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-bold font-headline text-white">安全</h2>
+          </div>
+          <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-5 border border-white/5">
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-white/80">当前密码</label>
+              <input
+                type="password"
+                value={passwords.current}
+                onChange={(e) => setPasswords(p => ({ ...p, current: e.target.value }))}
+                placeholder="当前密码"
+                className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">新密码</label>
+                <input
+                  type="password"
+                  value={passwords.new}
+                  onChange={(e) => setPasswords(p => ({ ...p, new: e.target.value }))}
+                  placeholder="至少 6 位"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">确认新密码</label>
+                <input
+                  type="password"
+                  value={passwords.confirm}
+                  onChange={(e) => setPasswords(p => ({ ...p, confirm: e.target.value }))}
+                  placeholder="再次输入新密码"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                />
+              </div>
+            </div>
+            <button
+              onClick={handleChangePassword}
+              className="w-full bg-[#2a2e38] hover:bg-slate-600 text-white py-2.5 rounded-lg font-bold transition-all"
+            >
+              修改密码
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -1709,13 +2177,221 @@ const SettingsView = ({
 
 
 
+// --- Compute Plans Modal ---
+const computePlans = [
+  {
+    name: '入门版',
+    price: '29',
+    period: '月付',
+    monthlyQuota: 1900,
+    dailySignIn: 15,
+    qualities: ['1K', '2K'],
+    concurrency: 2,
+    watermark: false,
+    extras: []
+  },
+  {
+    name: '基础版',
+    price: '69',
+    period: '月付',
+    monthlyQuota: 5200,
+    dailySignIn: 15,
+    qualities: ['1K', '2K', '4K'],
+    concurrency: 3,
+    watermark: false,
+    extras: []
+  },
+  {
+    name: '高级版',
+    price: '98',
+    period: '月付',
+    monthlyQuota: 7700,
+    dailySignIn: 25,
+    qualities: ['1K', '2K', '4K'],
+    concurrency: 4,
+    watermark: false,
+    extras: []
+  },
+  {
+    name: '年付入门版',
+    price: '319',
+    period: '年付',
+    monthlyQuota: 1900,
+    dailySignIn: 15,
+    qualities: ['1K', '2K'],
+    concurrency: 2,
+    watermark: false,
+    extras: []
+  },
+  {
+    name: '年付基础版',
+    price: '799',
+    period: '年付',
+    monthlyQuota: 7700,
+    dailySignIn: 25,
+    qualities: ['1K', '2K', '4K'],
+    concurrency: 4,
+    watermark: false,
+    extras: ['无限画布(pro)', '助力AI学习成长1年']
+  },
+  {
+    name: '年付高级版',
+    price: '1199',
+    period: '年付',
+    monthlyQuota: 7700,
+    dailySignIn: 25,
+    qualities: ['1K', '2K', '4K'],
+    concurrency: 4,
+    watermark: false,
+    extras: ['无限画布(vip)', '助力AI学习成长1年', '优先咨询服务']
+  }
+];
+
+const ComputePlansModal = ({ onClose }: { onClose: () => void }) => {
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+
+  const filteredPlans = computePlans.filter(plan =>
+    billingCycle === 'monthly' ? plan.period === '月付' : plan.period === '年付'
+  );
+
+  return (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+    onClick={onClose}
+  >
+    <motion.div
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.9, opacity: 0 }}
+      className="bg-[#1c1f26] rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto custom-scrollbar"
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="sticky top-0 bg-[#1c1f26] border-b border-[#2a2e38] p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-black font-headline text-white">算力套餐</h2>
+            <p className="text-slate-400 text-sm mt-1">选择适合您的算力套餐，开启 AI 创作之旅</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 bg-[#111317] hover:bg-[#2a2e38] rounded-full transition-colors"
+          >
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+        {/* Billing Cycle Toggle */}
+        <div className="flex items-center justify-center">
+          <div className="bg-[#111317] rounded-full p-1 flex">
+            <button
+              onClick={() => setBillingCycle('monthly')}
+              className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
+                billingCycle === 'monthly'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              月付
+            </button>
+            <button
+              onClick={() => setBillingCycle('yearly')}
+              className={`px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 ${
+                billingCycle === 'yearly'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              年付
+              <span className="text-[10px] bg-green-600/20 text-green-400 px-2 py-0.5 rounded-full">优惠</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredPlans.map((plan) => (
+          <div
+            key={plan.name}
+            className={`bg-[#111317] rounded-xl p-5 border flex flex-col ${
+              billingCycle === 'yearly' && plan.name.includes('高级版')
+                ? 'border-indigo-500 ring-2 ring-indigo-500/20'
+                : billingCycle === 'monthly' && plan.name === '高级版'
+                ? 'border-indigo-500 ring-2 ring-indigo-500/20'
+                : 'border-[#2a2e38] hover:border-slate-600'
+            } transition-all`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+              {billingCycle === 'yearly' && plan.name.includes('高级版') && (
+                <span className="px-2 py-0.5 bg-indigo-600/20 text-indigo-400 text-[10px] font-bold rounded-full">推荐</span>
+              )}
+              {billingCycle === 'monthly' && plan.name === '高级版' && (
+                <span className="px-2 py-0.5 bg-indigo-600/20 text-indigo-400 text-[10px] font-bold rounded-full">推荐</span>
+              )}
+            </div>
+            <div className="mb-4">
+              <span className="text-3xl font-black text-white">¥{plan.price}</span>
+              <span className="text-slate-500 text-sm">/{plan.period}</span>
+            </div>
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2 text-sm">
+                <Zap className="w-4 h-4 text-indigo-400" />
+                <span className="text-slate-300">每月赠送 <span className="text-white font-bold">{plan.monthlyQuota}</span> 积分</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Check className="w-4 h-4 text-green-400" />
+                <span className="text-slate-300">每日签到 <span className="text-white font-bold">{plan.dailySignIn}</span> 积分</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <span className="text-slate-300">支持 <span className="text-white font-bold">{plan.qualities.join('、')}</span> 画质</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Layers className="w-4 h-4 text-amber-400" />
+                <span className="text-slate-300"><span className="text-white font-bold">{plan.concurrency}</span> 个并发</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Check className="w-4 h-4 text-cyan-400" />
+                <span className="text-slate-300">高清无水印</span>
+              </div>
+            </div>
+            {plan.extras.length > 0 && (
+              <div className="mb-4 p-3 bg-indigo-600/10 rounded-lg">
+                <p className="text-xs text-indigo-400 font-bold mb-1">额外权益</p>
+                {plan.extras.map((extra, i) => (
+                  <div key={i} className="flex items-center gap-1 text-xs text-slate-300">
+                    <Star className="w-3 h-3 text-indigo-400" />
+                    {extra}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className={`w-full py-2.5 rounded-lg font-bold transition-all mt-auto ${
+                (billingCycle === 'yearly' && plan.name.includes('高级版')) ||
+                (billingCycle === 'monthly' && plan.name === '高级版')
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  : 'bg-[#2a2e38] hover:bg-slate-600 text-white'
+              }`}
+            >
+              暂未开放
+            </button>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  </motion.div>
+  );
+};
+
 // --- Main App ---
 export default function App() {
+  const { user, isLoading: authLoading, refreshUser } = useAuth();
   const [view, setView] = useState<View>('workspace');
-  const [apiKey, setApiKey] = useState(localStorage.getItem('atelier_api_key') || '');
   const [activeMenuItem, setActiveMenuItem] = useState<MenuItemId>('workspace');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [isFirstVisit, setIsFirstVisit] = useState(!localStorage.getItem('atelier_initialized'));
 
   // Workspace settings state
   const [model, setModel] = useState('🍌全能图片V2');
@@ -1724,10 +2400,11 @@ export default function App() {
   const [structure, setStructure] = useState(82);
   const [aspectRatio, setAspectRatio] = useState('auto');
   const [quality, setQuality] = useState('2K');
-  
+
   // Gallery state
   const [galleryCategory, setGalleryCategory] = useState<GalleryCategory>('hot');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showComputeModal, setShowComputeModal] = useState(false);
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString();
@@ -1738,62 +2415,33 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const handleWelcomeComplete = useCallback(() => {
-    setApiKey(localStorage.getItem('atelier_api_key') || '');
-    setIsFirstVisit(false);
-  }, []);
-
-  const handleClearConfig = useCallback(() => {
-    setApiKey('');
-    setIsFirstVisit(true);
-    setView('workspace');
-  }, []);
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + Enter: Generate
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         if (view === 'workspace') {
           showToast('info', '快捷键: Cmd/Ctrl + Enter 触发生成');
         }
       }
-      
-      // Cmd/Ctrl + S: Save
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         showToast('info', '快捷键: Cmd/Ctrl + S 保存设置');
       }
-      
-      // Escape: Close modal/dismiss
       if (e.key === 'Escape') {
         setToasts([]);
       }
-      
-      // Cmd/Ctrl + 1: Workspace
       if ((e.metaKey || e.ctrlKey) && e.key === '1') {
         e.preventDefault();
         setView('workspace');
       }
-      
-      // Cmd/Ctrl + 2: Gallery
       if ((e.metaKey || e.ctrlKey) && e.key === '2') {
         e.preventDefault();
         setView('gallery');
       }
-      
-      // Cmd/Ctrl + 3: Settings
       if ((e.metaKey || e.ctrlKey) && e.key === '3') {
         e.preventDefault();
         setView('settings');
-      }
-
-      // G then H: Gallery Hot
-      // G then L: Gallery Latest
-      // G then S: Gallery Style
-      if (view === 'gallery' && e.key === 'g') {
-        // Could implement golf-style shortcuts
       }
     };
 
@@ -1801,9 +2449,36 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [view, showToast]);
 
-  if (isFirstVisit) {
-    return <WelcomeView onComplete={handleWelcomeComplete} showToast={showToast} />;
+  // 页面重新可见时刷新算力值
+  useEffect(() => {
+    if (!user) return;
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshUser();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user, refreshUser]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#111317] flex items-center justify-center">
+        <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
+      </div>
+    );
   }
+
+  if (!user) {
+    return <WelcomeView showToast={showToast} />;
+  }
+
+  const apiKey = user.api_key || '';
 
   return (
     <div className="flex h-screen font-sans overflow-hidden">
@@ -1819,6 +2494,10 @@ export default function App() {
         <TopBar
           currentView={view}
           setView={setView}
+          onShowComputeModal={() => {
+            refreshUser();
+            setShowComputeModal(true);
+          }}
         />
 
         <main className="flex-1 flex flex-col bg-[#111317] overflow-hidden">
@@ -1860,12 +2539,10 @@ export default function App() {
                 />
               )}
               {view === 'settings' && (
-                <SettingsView
-                  apiKey={apiKey}
-                  setApiKey={setApiKey}
-                  showToast={showToast}
-                  onClearConfig={handleClearConfig}
-                />
+                <SettingsView showToast={showToast} />
+              )}
+              {view === 'admin' && (
+                <AdminPanel showToast={showToast} />
               )}
             </motion.div>
           </AnimatePresence>
@@ -1875,6 +2552,13 @@ export default function App() {
           <p>© 2026 Atelier AI. 致力于用 AI 赋能每一位设计师。</p>
         </footer>
       </div>
+
+      {/* Compute Plans Modal */}
+      <AnimatePresence>
+        {showComputeModal && (
+          <ComputePlansModal onClose={() => setShowComputeModal(false)} />
+        )}
+      </AnimatePresence>
 
       {/* Toast Notifications */}
       <AnimatePresence>

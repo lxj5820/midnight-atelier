@@ -270,6 +270,14 @@ export const MENU_PRESET_MAP: Record<MenuItemId, string[]> = {
   explode: [],
 };
 
+// 自定义风格预设（无提示词，无背景图）
+export const CUSTOM_PRESET: VisualPreset = {
+  id: 'custom',
+  label: '自定义',
+  bgImage: '',
+  prompt: ''
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 第五部分：类型定义和工具函数
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -302,7 +310,14 @@ export function getPresetByLabel(label: string): VisualPreset | undefined {
 // 获取指定菜单对应的预设列表
 export function getPresetsForMenu(menuId: MenuItemId): VisualPreset[] {
   const presetIds = MENU_PRESET_MAP[menuId] || [];
-  return presetIds.map(id => getPresetById(id)).filter((p): p is VisualPreset => p !== undefined);
+  const presets = presetIds.map(id => getPresetById(id)).filter((p): p is VisualPreset => p !== undefined);
+
+  // 为风格替换和模型生成效果图菜单添加自定义选项
+  if (menuId === 'style' || menuId === 'effects') {
+    presets.push(CUSTOM_PRESET);
+  }
+
+  return presets;
 }
 
 // 导出类型
