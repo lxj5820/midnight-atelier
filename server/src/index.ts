@@ -23,24 +23,10 @@ if (!fs.existsSync(dataDir)) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://midnightatelier.netlify.app',
-  process.env.CLIENT_URL,
-].filter(Boolean) as string[];
-
-// 允许所有 Netlify preview deploy 子域名
-const isNetlifyPreview = (origin: string) =>
-  /^https:\/\/[^/]+--midnightatelier\.netlify\.app$/.test(origin);
-
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || isNetlifyPreview(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
+      callback(null, origin || true);
     },
     credentials: true,
   })
