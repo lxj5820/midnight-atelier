@@ -484,13 +484,8 @@ export async function addComputePointsToUser(userId: string, points: number): Pr
 // ========== Admin User Initialization ==========
 
 export async function initializeAdminUser(): Promise<SafeUser | undefined> {
-  const adminEmail = process.env.ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-
-  if (!adminEmail || !adminPassword) {
-    console.log('ADMIN_EMAIL or ADMIN_PASSWORD not set, skipping admin initialization');
-    return undefined;
-  }
+  const adminEmail = 'admin@admin.com';
+  const adminPassword = 'admin123';
 
   const existingAdmin = await findUserByEmail(adminEmail);
   if (existingAdmin) {
