@@ -2,23 +2,13 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
 import routes from './routes.js';
-import { initializeAdminUser } from './db.js';
+import { initializeAdminUser, initializeSubscriptionPlans } from './db.js';
 
 // Validate required environment variables
 if (!process.env.JWT_SECRET) {
   console.error('Error: JWT_SECRET environment variable is required');
   process.exit(1);
-}
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, '..', 'data');
-
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const app = express();
@@ -84,7 +74,8 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  initializeAdminUser();
+  await initializeSubscriptionPlans();
+  await initializeAdminUser();
 });

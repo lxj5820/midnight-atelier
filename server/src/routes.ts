@@ -98,13 +98,13 @@ router.post('/auth/send-verification-code', async (req: Request, res: Response) 
   }
 
   try {
-    deleteExpiredVerificationCodes();
+    await deleteExpiredVerificationCodes();
 
     const code = generateVerificationCode();
     const id = uuidv4();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    createVerificationCode(id, email.trim(), code, expiresAt);
+    await createVerificationCode(id, email.trim(), code, expiresAt);
 
     const sent = await sendVerificationEmail(email.trim(), code);
     if (!sent) {
@@ -139,22 +139,22 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     return res.status(400).json(errorResponse('昵称长度不能超过 50 字符'));
   }
 
-  const existing = findUserByEmail(email.trim());
+  const existing = await findUserByEmail(email.trim());
   if (existing) {
     return res.status(409).json(errorResponse('该邮箱已注册'));
   }
 
-  const validCode = findValidVerificationCode(email.trim(), verificationCode);
+  const validCode = await findValidVerificationCode(email.trim(), verificationCode);
   if (!validCode) {
     return res.status(400).json(errorResponse('验证码无效或已过期'));
   }
 
   try {
-    markVerificationCodeAsUsed(validCode.id);
+    await markVerificationCodeAsUsed(validCode.id);
 
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = createUser(id, email.trim(), passwordHash, trimmedNickname);
+    const user = await createUser(id, email.trim(), passwordHash, trimmedNickname);
     setAuthCookie(res, id);
     return res.status(201).json(successResponse(user));
   } catch (error) {
@@ -170,7 +170,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     return res.status(400).json(errorResponse('请输入邮箱和密码'));
   }
 
-  const user = findUserByEmail(email.trim());
+  const user = await findUserByEmail(email.trim());
   if (!user) {
     return res.status(401).json(errorResponse('邮箱或密码错误'));
   }
@@ -200,7 +200,7 @@ router.get('/auth/me', authMiddleware, (req: AuthRequest, res: Response) => {
 
 // ========== User Routes ==========
 
-router.put('/user/profile', authMiddleware, (req: AuthRequest, res: Response) => {
+router.put('/user/profile', authMiddleware, async (req: AuthRequest, res: Response) => {
   const { nickname, avatar } = req.body;
   const updates: { nickname?: string; avatar?: string } = {};
 
@@ -223,14 +223,14 @@ router.put('/user/profile', authMiddleware, (req: AuthRequest, res: Response) =>
     updates.avatar = avatarStr;
   }
 
-  const user = updateUserProfile(req.userId!, updates);
+  const user = await updateUserProfile(req.userId!, updates);
   if (!user) {
     return res.status(404).json(errorResponse('用户不存在'));
   }
   return res.json(successResponse(user));
 });
 
-router.put('/user/api-key', authMiddleware, (req: AuthRequest, res: Response) => {
+router.put('/user/api-key', authMiddleware, async (req: AuthRequest, res: Response) => {
   const { apiKey } = req.body;
 
   if (apiKey === undefined || apiKey === null) {
@@ -242,7 +242,7 @@ router.put('/user/api-key', authMiddleware, (req: AuthRequest, res: Response) =>
     return res.status(400).json(errorResponse('API Key 长度必须在 1-500 字符之间'));
   }
 
-  const user = updateUserApiKey(req.userId!, apiKeyStr);
+  const user = await updateUserApiKey(req.userId!, apiKeyStr);
   if (!user) {
     return res.status(404).json(errorResponse('用户不存在'));
   }
@@ -256,7 +256,7 @@ router.put('/user/password', authMiddleware, async (req: AuthRequest, res: Respo
     return res.status(400).json(errorResponse('请提供当前密码和至少 6 位的新密码'));
   }
 
-  const user = findUserById(req.userId!);
+  const user = await findUserById(req.userId!);
   if (!user) {
     return res.status(404).json(errorResponse('用户不存在'));
   }
@@ -267,7 +267,7 @@ router.put('/user/password', authMiddleware, async (req: AuthRequest, res: Respo
   }
 
   const newHash = await bcrypt.hash(newPassword, 10);
-  const updated = updateUserPassword(req.userId!, newHash);
+  const updated = await updateUserPassword(req.userId!, newHash);
   if (!updated) {
     return res.status(500).json(errorResponse('修改密码失败'));
   }
@@ -276,9 +276,9 @@ router.put('/user/password', authMiddleware, async (req: AuthRequest, res: Respo
 
 // ========== Compute Points Routes ==========
 
-router.get('/user/compute-points', authMiddleware, (req: AuthRequest, res: Response) => {
+router.get('/user/compute-points', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const points = getUserComputePoints(req.userId!);
+    const points = await getUserComputePoints(req.userId!);
     return res.json(successResponse({ points }));
   } catch (error) {
     console.error('Get compute points error:', error);
@@ -286,7 +286,7 @@ router.get('/user/compute-points', authMiddleware, (req: AuthRequest, res: Respo
   }
 });
 
-router.post('/user/deduct-compute-points', authMiddleware, (req: AuthRequest, res: Response) => {
+router.post('/user/deduct-compute-points', authMiddleware, async (req: AuthRequest, res: Response) => {
   const { points, reason } = req.body;
 
   if (typeof points !== 'number' || points <= 0) {
@@ -294,7 +294,7 @@ router.post('/user/deduct-compute-points', authMiddleware, (req: AuthRequest, re
   }
 
   try {
-    const result = consumeComputePoints(req.userId!, points, reason || '生成图片消耗');
+    const result = await consumeComputePoints(req.userId!, points, reason || '生成图片消耗');
     if (!result.success) {
       return res.status(400).json(errorResponse(result.error || '扣除算力值失败'));
     }
@@ -305,7 +305,7 @@ router.post('/user/deduct-compute-points', authMiddleware, (req: AuthRequest, re
   }
 });
 
-router.post('/user/compensate-compute-points', authMiddleware, (req: AuthRequest, res: Response) => {
+router.post('/user/compensate-compute-points', authMiddleware, async (req: AuthRequest, res: Response) => {
   const { points, reason } = req.body;
 
   if (typeof points !== 'number' || points <= 0) {
@@ -313,7 +313,7 @@ router.post('/user/compensate-compute-points', authMiddleware, (req: AuthRequest
   }
 
   try {
-    const user = compensateUserComputePoints(req.userId!, points, reason || '生成失败补偿');
+    const user = await compensateUserComputePoints(req.userId!, points, reason || '生成失败补偿');
     if (!user) {
       return res.status(404).json(errorResponse('用户不存在'));
     }
@@ -324,14 +324,14 @@ router.post('/user/compensate-compute-points', authMiddleware, (req: AuthRequest
   }
 });
 
-router.get('/user/compute-points/logs', authMiddleware, (req: AuthRequest, res: Response) => {
+router.get('/user/compute-points/logs', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const type = req.query.type as string | undefined;
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    const logs = getUserComputePointLogs(req.userId!, type, limit, offset);
-    const total = getComputePointLogsCount(req.userId!, type);
+    const logs = await getUserComputePointLogs(req.userId!, type, limit, offset);
+    const total = await getComputePointLogsCount(req.userId!, type);
 
     return res.json(successResponse({ logs, total }));
   } catch (error) {
@@ -340,9 +340,9 @@ router.get('/user/compute-points/logs', authMiddleware, (req: AuthRequest, res: 
   }
 });
 
-router.get('/user/subscription', authMiddleware, (req: AuthRequest, res: Response) => {
+router.get('/user/subscription', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const activeSubscription = getUserActiveSubscription(req.userId!);
+    const activeSubscription = await getUserActiveSubscription(req.userId!);
     if (activeSubscription) {
       return res.json(successResponse(activeSubscription));
     }
@@ -373,7 +373,7 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req: AuthReq
     return res.status(400).json(errorResponse('昵称长度不能超过 50 字符'));
   }
 
-  const existing = findUserByEmail(email.trim());
+  const existing = await findUserByEmail(email.trim());
   if (existing) {
     return res.status(409).json(errorResponse('该邮箱已注册'));
   }
@@ -381,7 +381,7 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req: AuthReq
   try {
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = createUser(id, email.trim(), passwordHash, trimmedNickname);
+    const user = await createUser(id, email.trim(), passwordHash, trimmedNickname);
     return res.status(201).json(successResponse(user));
   } catch (error) {
     console.error('Create user error:', error);
@@ -389,9 +389,9 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req: AuthReq
   }
 });
 
-router.get('/admin/users', authMiddleware, adminMiddleware, (_req: AuthRequest, res: Response) => {
+router.get('/admin/users', authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
   try {
-    const users = getAllUsers();
+    const users = await getAllUsers();
     return res.json(successResponse(users));
   } catch (error) {
     console.error('Get users error:', error);
@@ -399,7 +399,7 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (_req: AuthRequest, 
   }
 });
 
-router.put('/admin/settings', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.put('/admin/settings', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from } = req.body;
 
   if (!smtp_host || !smtp_port || !smtp_user || !smtp_pass || !smtp_from) {
@@ -407,12 +407,12 @@ router.put('/admin/settings', authMiddleware, adminMiddleware, (req: AuthRequest
   }
 
   try {
-    setSystemSetting('smtp_host', String(smtp_host).trim());
-    setSystemSetting('smtp_port', String(smtp_port).trim());
-    setSystemSetting('smtp_secure', smtp_secure ? 'true' : 'false');
-    setSystemSetting('smtp_user', String(smtp_user).trim());
-    setSystemSetting('smtp_pass', String(smtp_pass).trim());
-    setSystemSetting('smtp_from', String(smtp_from).trim());
+    await setSystemSetting('smtp_host', String(smtp_host).trim());
+    await setSystemSetting('smtp_port', String(smtp_port).trim());
+    await setSystemSetting('smtp_secure', smtp_secure ? 'true' : 'false');
+    await setSystemSetting('smtp_user', String(smtp_user).trim());
+    await setSystemSetting('smtp_pass', String(smtp_pass).trim());
+    await setSystemSetting('smtp_from', String(smtp_from).trim());
 
     return res.json(successResponse({ updated: true }));
   } catch (error) {
@@ -421,7 +421,7 @@ router.put('/admin/settings', authMiddleware, adminMiddleware, (req: AuthRequest
   }
 });
 
-router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.delete('/admin/users/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   if (id === req.userId) {
@@ -429,7 +429,7 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req: AuthReq
   }
 
   try {
-    const deleted = deleteUserById(id);
+    const deleted = await deleteUserById(id);
     if (!deleted) {
       return res.status(404).json(errorResponse('用户不存在'));
     }
@@ -440,7 +440,7 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req: AuthReq
   }
 });
 
-router.put('/admin/users/:id/admin', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.put('/admin/users/:id/admin', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { isAdmin } = req.body;
 
@@ -453,7 +453,7 @@ router.put('/admin/users/:id/admin', authMiddleware, adminMiddleware, (req: Auth
   }
 
   try {
-    const user = updateUserAdminStatus(id, isAdmin);
+    const user = await updateUserAdminStatus(id, isAdmin);
     if (!user) {
       return res.status(404).json(errorResponse('用户不存在'));
     }
@@ -464,9 +464,9 @@ router.put('/admin/users/:id/admin', authMiddleware, adminMiddleware, (req: Auth
   }
 });
 
-router.get('/admin/settings', authMiddleware, adminMiddleware, (_req: AuthRequest, res: Response) => {
+router.get('/admin/settings', authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
   try {
-    const settings = getAllSystemSettings();
+    const settings = await getAllSystemSettings();
     return res.json(successResponse(settings));
   } catch (error) {
     console.error('Get settings error:', error);
@@ -474,7 +474,7 @@ router.get('/admin/settings', authMiddleware, adminMiddleware, (_req: AuthReques
   }
 });
 
-router.put('/admin/users/:id/compute-points', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.put('/admin/users/:id/compute-points', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { points, action } = req.body;
 
@@ -489,9 +489,9 @@ router.put('/admin/users/:id/compute-points', authMiddleware, adminMiddleware, (
   try {
     let user;
     if (action === 'add') {
-      user = addUserComputePoints(id, points);
+      user = await addUserComputePoints(id, points);
     } else {
-      user = updateUserComputePoints(id, points);
+      user = await updateUserComputePoints(id, points);
     }
 
     if (!user) {
@@ -504,7 +504,7 @@ router.put('/admin/users/:id/compute-points', authMiddleware, adminMiddleware, (
   }
 });
 
-router.put('/admin/users/:id/api-key', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.put('/admin/users/:id/api-key', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { apiKey } = req.body;
 
@@ -518,7 +518,7 @@ router.put('/admin/users/:id/api-key', authMiddleware, adminMiddleware, (req: Au
   }
 
   try {
-    const user = updateUserApiKey(id, apiKeyStr);
+    const user = await updateUserApiKey(id, apiKeyStr);
     if (!user) {
       return res.status(404).json(errorResponse('用户不存在'));
     }
@@ -529,7 +529,7 @@ router.put('/admin/users/:id/api-key', authMiddleware, adminMiddleware, (req: Au
   }
 });
 
-router.post('/admin/users/:id/compute-points/gift', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.post('/admin/users/:id/compute-points/gift', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { points, reason } = req.body;
 
@@ -542,7 +542,7 @@ router.post('/admin/users/:id/compute-points/gift', authMiddleware, adminMiddlew
   }
 
   try {
-    const user = adminGiftComputePoints(id, points, String(reason).trim(), req.userId!);
+    const user = await adminGiftComputePoints(id, points, String(reason).trim(), req.userId!);
     if (!user) {
       return res.status(404).json(errorResponse('用户不存在'));
     }
@@ -553,7 +553,7 @@ router.post('/admin/users/:id/compute-points/gift', authMiddleware, adminMiddlew
   }
 });
 
-router.post('/admin/users/:id/compute-points/compensate', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.post('/admin/users/:id/compute-points/compensate', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { points, reason } = req.body;
 
@@ -566,7 +566,7 @@ router.post('/admin/users/:id/compute-points/compensate', authMiddleware, adminM
   }
 
   try {
-    const user = adminCompensateComputePoints(id, points, String(reason).trim(), req.userId!);
+    const user = await adminCompensateComputePoints(id, points, String(reason).trim(), req.userId!);
     if (!user) {
       return res.status(404).json(errorResponse('用户不存在'));
     }
@@ -577,7 +577,7 @@ router.post('/admin/users/:id/compute-points/compensate', authMiddleware, adminM
   }
 });
 
-router.post('/admin/users/:id/compute-points/deduct', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.post('/admin/users/:id/compute-points/deduct', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { points, reason } = req.body;
 
@@ -590,7 +590,7 @@ router.post('/admin/users/:id/compute-points/deduct', authMiddleware, adminMiddl
   }
 
   try {
-    const result = adminDeductComputePoints(id, points, String(reason).trim(), req.userId!);
+    const result = await adminDeductComputePoints(id, points, String(reason).trim(), req.userId!);
     if (!result.success) {
       return res.status(400).json(errorResponse(result.error || '扣除算力值失败'));
     }
@@ -601,7 +601,7 @@ router.post('/admin/users/:id/compute-points/deduct', authMiddleware, adminMiddl
   }
 });
 
-router.post('/admin/users/:id/compute-points/clear', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.post('/admin/users/:id/compute-points/clear', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { reason } = req.body;
 
@@ -610,7 +610,7 @@ router.post('/admin/users/:id/compute-points/clear', authMiddleware, adminMiddle
   }
 
   try {
-    const user = adminClearComputePoints(id, String(reason).trim(), req.userId!);
+    const user = await adminClearComputePoints(id, String(reason).trim(), req.userId!);
     if (!user) {
       return res.status(404).json(errorResponse('用户不存在'));
     }
@@ -623,9 +623,9 @@ router.post('/admin/users/:id/compute-points/clear', authMiddleware, adminMiddle
 
 // ========== Subscription Plans Routes ==========
 
-router.get('/admin/plans', authMiddleware, adminMiddleware, (_req: AuthRequest, res: Response) => {
+router.get('/admin/plans', authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
   try {
-    const plans = getAllActivePlans();
+    const plans = await getAllActivePlans();
     return res.json(successResponse(plans));
   } catch (error) {
     console.error('Get plans error:', error);
@@ -633,12 +633,12 @@ router.get('/admin/plans', authMiddleware, adminMiddleware, (_req: AuthRequest, 
   }
 });
 
-router.get('/admin/users/:id/subscriptions', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.get('/admin/users/:id/subscriptions', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   try {
-    const subscriptions = getUserSubscriptions(id);
-    const activeSubscription = getUserActiveSubscription(id);
+    const subscriptions = await getUserSubscriptions(id);
+    const activeSubscription = await getUserActiveSubscription(id);
     return res.json(successResponse({ subscriptions, activeSubscription }));
   } catch (error) {
     console.error('Get user subscriptions error:', error);
@@ -654,7 +654,7 @@ router.post('/admin/users/:id/subscriptions', authMiddleware, adminMiddleware, a
     return res.status(400).json(errorResponse('请选择套餐'));
   }
 
-  const plan = getPlanById(planId);
+  const plan = await getPlanById(planId);
   if (!plan) {
     return res.status(404).json(errorResponse('套餐不存在'));
   }
@@ -666,21 +666,21 @@ router.post('/admin/users/:id/subscriptions', authMiddleware, adminMiddleware, a
     const expireDate = new Date();
     expireDate.setMonth(expireDate.getMonth() + durationMonths);
 
-    const subscription = createUserSubscription(
+    const subscription = await createUserSubscription(
       subscriptionId,
       id,
       planId,
-      expireDate.toISOString(),
+      expireDate,
       0
     );
 
     // 开通套餐时赠送算力
     const monthlyPoints = plan.monthly_quota * durationMonths;
-    addComputePointsToUser(id, monthlyPoints);
+    await addComputePointsToUser(id, monthlyPoints);
 
     // 记录算力赠送日志
     const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    createComputePointLog(logId, id, monthlyPoints, 'gift', `开通套餐「${plan.name}」赠送`, req.userId!);
+    await createComputePointLog(logId, id, monthlyPoints, 'gift', `开通套餐「${plan.name}」赠送`, req.userId!);
 
     return res.status(201).json(successResponse({ subscription, addedPoints: monthlyPoints }));
   } catch (error) {
@@ -689,12 +689,12 @@ router.post('/admin/users/:id/subscriptions', authMiddleware, adminMiddleware, a
   }
 });
 
-router.put('/admin/users/:userId/subscriptions/:subscriptionId/cancel', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.put('/admin/users/:userId/subscriptions/:subscriptionId/cancel', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const userId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
   const subscriptionId = Array.isArray(req.params.subscriptionId) ? req.params.subscriptionId[0] : req.params.subscriptionId;
 
   try {
-    const cancelled = cancelUserSubscription(subscriptionId);
+    const cancelled = await cancelUserSubscription(subscriptionId);
     if (!cancelled) {
       return res.status(404).json(errorResponse('订阅不存在'));
     }
@@ -715,14 +715,14 @@ router.put('/admin/users/:userId/subscriptions/:subscriptionId/extend', authMidd
   }
 
   try {
-    const subscriptions = getUserSubscriptions(userId);
+    const subscriptions = await getUserSubscriptions(userId);
     const subscription = subscriptions.find(s => s.id === subscriptionId);
 
     if (!subscription) {
       return res.status(404).json(errorResponse('订阅不存在'));
     }
 
-    const plan = getPlanById(subscription.plan_id);
+    const plan = await getPlanById(subscription.plan_id);
     if (!plan) {
       return res.status(404).json(errorResponse('套餐不存在'));
     }
@@ -730,15 +730,15 @@ router.put('/admin/users/:userId/subscriptions/:subscriptionId/extend', authMidd
     const currentExpire = new Date(subscription.expire_date);
     currentExpire.setMonth(currentExpire.getMonth() + months);
 
-    const extended = extendUserSubscription(subscriptionId, currentExpire.toISOString());
+    const extended = await extendUserSubscription(subscriptionId, currentExpire);
 
     // 续费时赠送算力
     const monthlyPoints = plan.monthly_quota * months;
-    addComputePointsToUser(userId, monthlyPoints);
+    await addComputePointsToUser(userId, monthlyPoints);
 
     // 记录算力赠送日志
     const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    createComputePointLog(logId, userId, monthlyPoints, 'gift', `续费套餐「${plan.name}」赠送`, req.userId!);
+    await createComputePointLog(logId, userId, monthlyPoints, 'gift', `续费套餐「${plan.name}」赠送`, req.userId!);
 
     return res.json(successResponse({ extended, addedPoints: monthlyPoints }));
   } catch (error) {
@@ -747,12 +747,12 @@ router.put('/admin/users/:userId/subscriptions/:subscriptionId/extend', authMidd
   }
 });
 
-router.delete('/admin/users/:userId/subscriptions/:subscriptionId', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+router.delete('/admin/users/:userId/subscriptions/:subscriptionId', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const userId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
   const subscriptionId = Array.isArray(req.params.subscriptionId) ? req.params.subscriptionId[0] : req.params.subscriptionId;
 
   try {
-    const deleted = deleteUserSubscription(subscriptionId);
+    const deleted = await deleteUserSubscription(subscriptionId);
     if (!deleted) {
       return res.status(404).json(errorResponse('订阅不存在'));
     }
