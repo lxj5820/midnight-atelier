@@ -109,7 +109,7 @@ export async function refundComputePoints(reason?: string) {
   });
 }
 
-export async function getRegistrationStatus(): Promise<ApiResponse<{ registration_enabled: boolean }>> {
+export async function getRegistrationStatus(): Promise<ApiResponse<{ registration_enabled: boolean; requires_verification?: boolean }>> {
   return await apiFetch('/public/registration-status', { method: 'GET' });
 }
 

@@ -160,8 +160,10 @@ router.post('/auth/send-verification-code', async (req: Request, res: Response) 
 router.get('/public/registration-status', async (_req: Request, res: Response) => {
   try {
     const registrationEnabled = await getSystemSetting('registration_enabled');
+    const requiresVerification = await getSystemSetting('registration_requires_verification');
     return res.json(successResponse({
-      registration_enabled: registrationEnabled !== 'false'
+      registration_enabled: registrationEnabled !== 'false',
+      requires_verification: requiresVerification !== 'false' // 默认需要验证
     }));
   } catch (error) {
     console.error('Get registration status error:', error);
@@ -178,6 +180,10 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     return res.status(403).json(errorResponse('当前已关闭注册功能'));
   }
 
+  // 检查是否需要邮箱验证
+  const requiresVerification = await getSystemSetting('registration_requires_verification');
+  const needVerify = requiresVerification !== 'false'; // 默认需要验证
+
   if (!email || !email.includes('@')) {
     return res.status(400).json(errorResponse('请输入有效的邮箱地址'));
   }
@@ -186,9 +192,6 @@ router.post('/auth/register', async (req: Request, res: Response) => {
   }
   if (!nickname || String(nickname).trim().length === 0) {
     return res.status(400).json(errorResponse('请输入昵称'));
-  }
-  if (!verificationCode) {
-    return res.status(400).json(errorResponse('请输入验证码'));
   }
 
   const trimmedNickname = String(nickname).trim();
@@ -201,13 +204,25 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     return res.status(409).json(errorResponse('该邮箱已注册'));
   }
 
-  const validCode = await findValidVerificationCode(email.trim(), verificationCode);
-  if (!validCode) {
-    return res.status(400).json(errorResponse('验证码无效或已过期'));
+  // 如果需要验证，则检查验证码
+  if (needVerify) {
+    if (!verificationCode) {
+      return res.status(400).json(errorResponse('请输入验证码'));
+    }
+    const validCode = await findValidVerificationCode(email.trim(), verificationCode);
+    if (!validCode) {
+      return res.status(400).json(errorResponse('验证码无效或已过期'));
+    }
   }
 
   try {
-    await markVerificationCodeAsUsed(validCode.id);
+    // 如果需要验证，标记验证码为已用
+    if (needVerify && verificationCode) {
+      const validCode = await findValidVerificationCode(email.trim(), verificationCode);
+      if (validCode) {
+        await markVerificationCodeAsUsed(validCode.id);
+      }
+    }
 
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 10);
@@ -493,7 +508,7 @@ router.get('/admin/users', authMiddleware, adminMiddleware, async (_req: AuthReq
 });
 
 router.put('/admin/settings', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-  const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, registration_enabled, default_api_key } = req.body;
+  const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, registration_enabled, registration_requires_verification, default_api_key } = req.body;
 
   try {
     // Validate SMTP if any SMTP field is provided
@@ -512,6 +527,11 @@ router.put('/admin/settings', authMiddleware, adminMiddleware, async (req: AuthR
     // Update registration enabled if provided
     if (registration_enabled !== undefined) {
       await setSystemSetting('registration_enabled', registration_enabled ? 'true' : 'false');
+    }
+
+    // Update registration requires verification if provided
+    if (registration_requires_verification !== undefined) {
+      await setSystemSetting('registration_requires_verification', registration_requires_verification ? 'true' : 'false');
     }
 
     // Update default API key if provided

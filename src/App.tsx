@@ -1737,6 +1737,7 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  const [requiresVerification, setRequiresVerification] = useState(true);
   const { login, register, sendVerificationCode } = useAuth();
 
   useEffect(() => {
@@ -1746,6 +1747,7 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
         const result = await getRegistrationStatus();
         if (result?.success && result.data?.registration_enabled !== undefined) {
           setRegistrationEnabled(result.data.registration_enabled);
+          setRequiresVerification(result.data.requires_verification !== false);
         }
       } catch (e) {
         console.error('Failed to load settings:', e);
@@ -1790,7 +1792,7 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
         showToast('error', '请输入昵称');
         return;
       }
-      if (!verificationCode.trim()) {
+      if (requiresVerification && !verificationCode.trim()) {
         showToast('error', '请输入验证码');
         return;
       }
@@ -1889,7 +1891,7 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
               />
             </div>
 
-            {mode === 'register' && registrationEnabled && (
+            {mode === 'register' && registrationEnabled && requiresVerification && (
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-white/80">邮箱验证码</label>
                 <div className="flex gap-2">

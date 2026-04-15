@@ -43,7 +43,7 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<'users' | 'logs' | 'plans' | 'settings'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [smtpSettings, setSmtpSettings] = useState<SmtpSettings & { registration_enabled?: boolean; default_api_key?: string }>({
+  const [smtpSettings, setSmtpSettings] = useState<SmtpSettings & { registration_enabled?: boolean; registration_requires_verification?: boolean; default_api_key?: string }>({
     smtp_host: '',
     smtp_port: '587',
     smtp_secure: 'false',
@@ -51,6 +51,7 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
     smtp_pass: '',
     smtp_from: '',
     registration_enabled: true,
+    registration_requires_verification: true,
     default_api_key: '',
   });
   const [showSmtpPass, setShowSmtpPass] = useState(false);
@@ -148,6 +149,7 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
           smtp_pass: result.data.smtp_pass || '',
           smtp_from: result.data.smtp_from || '',
           registration_enabled: result.data.registration_enabled !== 'false',
+          registration_requires_verification: result.data.registration_requires_verification !== 'false',
           default_api_key: result.data.default_api_key || '',
         });
         setDefaultApiKeyInput(result.data.default_api_key || '');
@@ -291,6 +293,22 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
       if (result.success) {
         setSmtpSettings({ ...smtpSettings, registration_enabled: newValue });
         showToast('success', newValue ? '已开启注册功能' : '已关闭注册功能');
+      } else {
+        showToast('error', result.error || '操作失败');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleVerification = async () => {
+    const newValue = !smtpSettings.registration_requires_verification;
+    setIsLoading(true);
+    try {
+      const result = await updateSystemSettings({ registration_requires_verification: newValue });
+      if (result.success) {
+        setSmtpSettings({ ...smtpSettings, registration_requires_verification: newValue });
+        showToast('success', newValue ? '已开启邮箱验证' : '已关闭邮箱验证');
       } else {
         showToast('error', result.error || '操作失败');
       }
@@ -1222,6 +1240,25 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                   <span
                     className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
                       smtpSettings.registration_enabled ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-[#111317] rounded-xl border border-white/5">
+                <div>
+                  <p className="text-white font-bold">注册需要邮箱验证</p>
+                  <p className="text-slate-400 text-sm mt-1">关闭后用户可直接注册，无需验证码</p>
+                </div>
+                <button
+                  onClick={() => handleToggleVerification()}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                    smtpSettings.registration_requires_verification ? 'bg-indigo-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                      smtpSettings.registration_requires_verification ? 'translate-x-7' : 'translate-x-1'
                     }`}
                   />
                 </button>

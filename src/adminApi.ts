@@ -12,6 +12,7 @@ export interface SmtpSettings {
 
 export interface SystemSettings extends SmtpSettings {
   registration_enabled?: boolean;
+  registration_requires_verification?: boolean;
   default_api_key?: string;
 }
 
@@ -34,7 +35,7 @@ export async function getSystemSettings() {
   return await apiFetch<Record<string, string>>('/admin/settings', { method: 'GET' });
 }
 
-export async function updateSystemSettings(settings: Partial<SystemSettings> & { registration_enabled?: boolean }) {
+export async function updateSystemSettings(settings: Partial<SystemSettings> & { registration_enabled?: boolean; registration_requires_verification?: boolean }) {
   return await apiFetch('/admin/settings', {
     method: 'PUT',
     body: JSON.stringify(settings),
