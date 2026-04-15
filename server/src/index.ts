@@ -64,12 +64,22 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, async () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  await initializeAdminUser();
-  await initializeSubscriptionPlans();
-  await initializeSystemSettings();
-});
+// Vercel serverless mode - don't use app.listen
+const isVercel = process.env.VERCEL === 'true';
+
+if (!isVercel) {
+  app.listen(PORT, async () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    await initializeAdminUser();
+    await initializeSubscriptionPlans();
+    await initializeSystemSettings();
+  });
+}
+
+// Initialize on startup (for both local and Vercel)
+initializeAdminUser().catch(console.error);
+initializeSubscriptionPlans().catch(console.error);
+initializeSystemSettings().catch(console.error);
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
@@ -80,3 +90,5 @@ process.on('SIGTERM', async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
+
+export default app;
