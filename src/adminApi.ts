@@ -10,6 +10,10 @@ export interface SmtpSettings {
   smtp_from: string;
 }
 
+export interface SystemSettings extends SmtpSettings {
+  registration_enabled?: boolean;
+}
+
 export async function getAdminUsers() {
   return await apiFetch<User[]>('/admin/users', { method: 'GET' });
 }
@@ -29,7 +33,7 @@ export async function getSystemSettings() {
   return await apiFetch<Record<string, string>>('/admin/settings', { method: 'GET' });
 }
 
-export async function updateSystemSettings(settings: SmtpSettings) {
+export async function updateSystemSettings(settings: Partial<SystemSettings> & { registration_enabled?: boolean }) {
   return await apiFetch('/admin/settings', {
     method: 'PUT',
     body: JSON.stringify(settings),
@@ -97,6 +101,8 @@ export interface SubscriptionPlan {
   concurrency: number;
   watermark: number;
   extras: string;
+  is_active: number;
+  sort_order: number;
 }
 
 export interface UserSubscription {
@@ -111,8 +117,41 @@ export interface UserSubscription {
   plan_period: string;
 }
 
+export interface PlanInput {
+  id: string;
+  name: string;
+  price: number;
+  period: string;
+  monthlyQuota: number;
+  dailySignIn: number;
+  qualities: string;
+  concurrency: number;
+  watermark?: boolean;
+  extras?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
 export async function getAdminPlans() {
   return await apiFetch<SubscriptionPlan[]>('/admin/plans', { method: 'GET' });
+}
+
+export async function createPlan(plan: PlanInput) {
+  return await apiFetch<SubscriptionPlan>('/admin/plans', {
+    method: 'POST',
+    body: JSON.stringify(plan),
+  });
+}
+
+export async function updatePlan(id: string, plan: Partial<PlanInput>) {
+  return await apiFetch<SubscriptionPlan>(`/admin/plans/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(plan),
+  });
+}
+
+export async function deletePlan(id: string) {
+  return await apiFetch(`/admin/plans/${id}`, { method: 'DELETE' });
 }
 
 export async function getUserSubscriptions(userId: string) {
@@ -120,7 +159,7 @@ export async function getUserSubscriptions(userId: string) {
 }
 
 export async function createUserSubscription(userId: string, planId: string, months?: number) {
-  return await apiFetch<{ subscription: UserSubscription; addedPoints: number }>(`/admin/users/${userId}/subscriptions`, {
+  return await apiFetch<{ subscription: UserSubscription; addedPoints: number; monthlyPoints: number; dailyPoints: number }>(`/admin/users/${userId}/subscriptions`, {
     method: 'POST',
     body: JSON.stringify({ planId, months }),
   });
@@ -133,7 +172,7 @@ export async function cancelUserSubscription(userId: string, subscriptionId: str
 }
 
 export async function extendUserSubscription(userId: string, subscriptionId: string, months: number) {
-  return await apiFetch(`/admin/users/${userId}/subscriptions/${subscriptionId}/extend`, {
+  return await apiFetch<{ extended: UserSubscription; addedPoints: number; monthlyPoints: number; dailyPoints: number }>(`/admin/users/${userId}/subscriptions/${subscriptionId}/extend`, {
     method: 'PUT',
     body: JSON.stringify({ months }),
   });
@@ -142,5 +181,17 @@ export async function extendUserSubscription(userId: string, subscriptionId: str
 export async function deleteUserSubscription(userId: string, subscriptionId: string) {
   return await apiFetch(`/admin/users/${userId}/subscriptions/${subscriptionId}`, {
     method: 'DELETE',
+  });
+}
+
+// Email Templates
+export async function getEmailTemplates() {
+  return await apiFetch<Record<string, string>>('/admin/email-templates', { method: 'GET' });
+}
+
+export async function updateEmailTemplates(templates: Record<string, string>) {
+  return await apiFetch('/admin/email-templates', {
+    method: 'PUT',
+    body: JSON.stringify({ templates }),
   });
 }

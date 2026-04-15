@@ -28,13 +28,20 @@ export async function apiFetch<T = unknown>(
     // Get token from localStorage and add to Authorization header
     const token = getStoredToken();
 
+    const headers: Record<string, string> = {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...options.headers,
+    };
+
+    // Only set Content-Type for JSON requests when body exists and is not FormData
+    const body = options.body;
+    if (body && !(body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        ...options.headers,
-      },
+      headers,
     });
 
     const data = (await response.json().catch(() => ({}))) as ApiResponse<T>;
@@ -63,12 +70,8 @@ export async function deductComputePoints(points: number, reason?: string) {
   });
 }
 
-export async function compensateComputePoints(points: number, reason?: string) {
-  return await apiFetch('/user/compensate-compute-points', {
-    method: 'POST',
-    body: JSON.stringify({ points, reason }),
-  });
-}
+// 注意：compensateComputePoints 已删除，不再提供公开的补偿接口
+// 如需补偿，请通过管理员后台手动操作
 
 export interface ComputePointLog {
   id: string;
@@ -101,6 +104,7 @@ export interface UserSubscription {
   plan_name: string;
   plan_price: number;
   plan_period: string;
+  qualities: string[];
 }
 
 export async function getUserSubscription() {

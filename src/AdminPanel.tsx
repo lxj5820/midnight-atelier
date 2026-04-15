@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Settings, Mail, Shield, Trash2, Check, X, Eye, EyeOff, RefreshCw, Zap, Key, Plus, Gift, DollarSign, Minus, XCircle, CreditCard, Calendar, Star } from 'lucide-react';
+import { Users, Settings, Mail, Shield, Trash2, Check, X, Eye, EyeOff, RefreshCw, Zap, Key, Plus, Gift, DollarSign, Minus, XCircle, CreditCard, Calendar, Star, Package, ToggleLeft, ToggleRight, Edit2, Save } from 'lucide-react';
 import { useAuth } from './AuthContext.tsx';
 import type { User } from './AuthContext.tsx';
 import {
@@ -15,14 +15,20 @@ import {
   deductComputePoints,
   clearComputePoints,
   getAdminPlans,
+  createPlan,
+  updatePlan,
+  deletePlan,
   getUserSubscriptions,
   createUserSubscription,
   cancelUserSubscription,
   extendUserSubscription,
   deleteUserSubscription,
+  getEmailTemplates,
+  updateEmailTemplates,
   type SmtpSettings,
   type SubscriptionPlan,
   type UserSubscription,
+  type PlanInput,
 } from './adminApi';
 
 interface AdminPanelProps {
@@ -31,16 +37,17 @@ interface AdminPanelProps {
 
 export default function AdminPanel({ showToast }: AdminPanelProps) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'users' | 'smtp'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'smtp' | 'plans' | 'settings'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [smtpSettings, setSmtpSettings] = useState<SmtpSettings>({
+  const [smtpSettings, setSmtpSettings] = useState<SmtpSettings & { registration_enabled?: boolean }>({
     smtp_host: '',
     smtp_port: '587',
     smtp_secure: 'false',
     smtp_user: '',
     smtp_pass: '',
     smtp_from: '',
+    registration_enabled: true,
   });
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -67,10 +74,38 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
   const [subscribePlanId, setSubscribePlanId] = useState<string | null>(null);
   const [subscribeMonths, setSubscribeMonths] = useState(1);
 
+  // Plan management
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [planForm, setPlanForm] = useState<PlanInput>({
+    id: '',
+    name: '',
+    price: 0,
+    period: '月付',
+    monthlyQuota: 0,
+    dailySignIn: 0,
+    qualities: '[]',
+    concurrency: 1,
+    watermark: true,
+    extras: '[]',
+    isActive: true,
+    sortOrder: 0,
+  });
+
+  // Email templates
+  const [emailTemplates, setEmailTemplates] = useState<Record<string, string>>({});
+  const [emailTemplateForm, setEmailTemplateForm] = useState('');
+  const verificationTemplateDefault = `您的验证码是：\${code}\n验证码有效期为 10 分钟，请尽快使用。`;
+
   useEffect(() => {
     if (activeTab === 'users') {
       loadUsers();
-    } else {
+    } else if (activeTab === 'smtp') {
+      loadSmtpSettings();
+      loadEmailTemplates();
+    } else if (activeTab === 'plans') {
+      loadPlans();
+    } else if (activeTab === 'settings') {
       loadSmtpSettings();
     }
   }, [activeTab]);
@@ -101,12 +136,39 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
           smtp_user: result.data.smtp_user || '',
           smtp_pass: result.data.smtp_pass || '',
           smtp_from: result.data.smtp_from || '',
+          registration_enabled: result.data.registration_enabled !== 'false',
         });
       } else {
         showToast('error', result.error || '加载SMTP设置失败');
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadPlans = async () => {
+    setIsLoading(true);
+    try {
+      const result = await getAdminPlans();
+      if (result.success && result.data) {
+        setPlans(result.data);
+      } else {
+        showToast('error', result.error || '加载套餐列表失败');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadEmailTemplates = async () => {
+    try {
+      const result = await getEmailTemplates();
+      if (result.success && result.data) {
+        setEmailTemplates(result.data);
+        setEmailTemplateForm(result.data.verification_code || verificationTemplateDefault);
+      }
+    } catch (error) {
+      console.error('Failed to load email templates:', error);
     }
   };
 
@@ -157,6 +219,80 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveEmailTemplate = async () => {
+    setIsLoading(true);
+    try {
+      const result = await updateEmailTemplates({
+        verification_code: emailTemplateForm,
+      });
+      if (result.success) {
+        showToast('success', '邮件模板已保存');
+      } else {
+        showToast('error', result.error || '保存失败');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleRegistration = async () => {
+    const newValue = !smtpSettings.registration_enabled;
+    setIsLoading(true);
+    try {
+      const result = await updateSystemSettings({ registration_enabled: newValue });
+      if (result.success) {
+        setSmtpSettings({ ...smtpSettings, registration_enabled: newValue });
+        showToast('success', newValue ? '已开启注册功能' : '已关闭注册功能');
+      } else {
+        showToast('error', result.error || '操作失败');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSavePlan = async () => {
+    if (!planForm.id || !planForm.name || planForm.price <= 0) {
+      showToast('error', '请填写完整的套餐信息');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      let result;
+      if (editingPlan) {
+        result = await updatePlan(editingPlan.id, planForm);
+      } else {
+        result = await createPlan(planForm);
+      }
+      if (result.success) {
+        showToast('success', editingPlan ? '套餐已更新' : '套餐已创建');
+        setShowPlanModal(false);
+        loadPlans();
+      } else {
+        showToast('error', result.error || '操作失败');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeletePlan = async (planId: string) => {
+    if (!confirm('确定要删除此套餐吗？')) return;
+
+    try {
+      const result = await deletePlan(planId);
+      if (result.success) {
+        showToast('success', '套餐已删除');
+        loadPlans();
+      } else {
+        showToast('error', result.error || '删除失败');
+      }
+    } catch (error) {
+      showToast('error', '删除失败');
     }
   };
 
@@ -424,6 +560,24 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
           >
             <Mail className="w-4 h-4" />
             SMTP设置
+          </button>
+          <button
+            onClick={() => setActiveTab('plans')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              activeTab === 'plans' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            套餐管理
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              activeTab === 'settings' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            系统设置
           </button>
         </div>
 
@@ -785,6 +939,178 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                 {isLoading ? '保存中...' : '保存配置'}
               </button>
             </div>
+
+            {/* Email Template Section */}
+            <div className="border-t border-white/5 pt-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <Mail className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-lg font-bold text-white">邮件模板配置</h3>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">验证码邮件内容</label>
+                <p className="text-xs text-slate-500">变量: {'${code}'} 会被替换为实际验证码</p>
+                <textarea
+                  value={emailTemplateForm}
+                  onChange={(e) => setEmailTemplateForm(e.target.value)}
+                  rows={4}
+                  placeholder="您的验证码是：${code}，有效期10分钟"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all resize-none"
+                />
+              </div>
+              <button
+                onClick={handleSaveEmailTemplate}
+                disabled={isLoading}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+              >
+                {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {isLoading ? '保存中...' : '保存邮件模板'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'plans' && (
+          <div className="bg-[#1c1f26] rounded-2xl border border-white/5 overflow-hidden">
+            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white">套餐管理</h2>
+              <button
+                onClick={() => {
+                  setEditingPlan(null);
+                  setPlanForm({
+                    id: '',
+                    name: '',
+                    price: 0,
+                    period: '月付',
+                    monthlyQuota: 0,
+                    dailySignIn: 0,
+                    qualities: '[]',
+                    concurrency: 1,
+                    watermark: true,
+                    extras: '[]',
+                    isActive: true,
+                    sortOrder: 0,
+                  });
+                  setShowPlanModal(true);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-sm font-medium transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                添加套餐
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[#111317]">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">套餐名称</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">价格</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">周期</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">月度积分</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">每日积分</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase">状态</th>
+                    <th className="px-6 py-3 text-right text-xs font-bold text-slate-400 uppercase">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {plans.map((plan) => (
+                    <tr key={plan.id} className="hover:bg-[#111317] transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm font-medium text-white">{plan.name}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-white">¥{plan.price}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-slate-400">{plan.period}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-indigo-400">{plan.monthly_quota}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-indigo-400">{plan.daily_sign_in}/天</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {plan.is_active === 1 ? (
+                          <span className="inline-flex items-center px-2 py-1 bg-green-600/20 text-green-400 rounded-full text-xs font-bold">启用</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-1 bg-slate-700/50 text-slate-400 rounded-full text-xs font-medium">禁用</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingPlan(plan);
+                              setPlanForm({
+                                id: plan.id,
+                                name: plan.name,
+                                price: plan.price,
+                                period: plan.period,
+                                monthlyQuota: plan.monthly_quota,
+                                dailySignIn: plan.daily_sign_in,
+                                qualities: plan.qualities,
+                                concurrency: plan.concurrency,
+                                watermark: plan.watermark === 1,
+                                extras: plan.extras,
+                                isActive: plan.is_active === 1,
+                                sortOrder: plan.sort_order,
+                              });
+                              setShowPlanModal(true);
+                            }}
+                            className="p-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg transition-all"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePlan(plan.id)}
+                            className="p-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {plans.length === 0 && !isLoading && (
+                <div className="text-center py-12">
+                  <Package className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                  <p className="text-slate-500 text-sm">暂无套餐</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="bg-[#1c1f26] rounded-2xl p-6 border border-white/5 space-y-6">
+            <div className="flex items-center gap-3">
+              <Settings className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-xl font-bold text-white">系统设置</h2>
+            </div>
+
+            <div className="space-y-6">
+              {/* Registration Toggle */}
+              <div className="flex items-center justify-between p-4 bg-[#111317] rounded-xl border border-white/5">
+                <div>
+                  <p className="text-white font-bold">允许新用户注册</p>
+                  <p className="text-slate-400 text-sm mt-1">关闭后新用户将无法注册账号</p>
+                </div>
+                <button
+                  onClick={() => handleToggleRegistration()}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                    smtpSettings.registration_enabled ? 'bg-indigo-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                      smtpSettings.registration_enabled ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1132,6 +1458,163 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                 className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold transition-all"
               >
                 确认续费
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Plan Modal */}
+      {showPlanModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1c1f26] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="sticky top-0 bg-[#1c1f26] border-b border-[#2a2e38] p-6 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white">{editingPlan ? '编辑套餐' : '添加套餐'}</h3>
+              <button
+                onClick={() => setShowPlanModal(false)}
+                className="p-2 bg-[#111317] hover:bg-[#2a2e38] rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">套餐ID</label>
+                  <input
+                    type="text"
+                    value={planForm.id}
+                    onChange={(e) => setPlanForm({ ...planForm, id: e.target.value })}
+                    placeholder="plan_basic"
+                    disabled={!!editingPlan}
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:opacity-50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">套餐名称</label>
+                  <input
+                    type="text"
+                    value={planForm.name}
+                    onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
+                    placeholder="入门版"
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">价格(元)</label>
+                  <input
+                    type="number"
+                    value={planForm.price}
+                    onChange={(e) => setPlanForm({ ...planForm, price: parseInt(e.target.value) || 0 })}
+                    placeholder="29"
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">周期</label>
+                  <select
+                    value={planForm.period}
+                    onChange={(e) => setPlanForm({ ...planForm, period: e.target.value })}
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  >
+                    <option value="月付">月付</option>
+                    <option value="年付">年付</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">月度积分</label>
+                  <input
+                    type="number"
+                    value={planForm.monthlyQuota}
+                    onChange={(e) => setPlanForm({ ...planForm, monthlyQuota: parseInt(e.target.value) || 0 })}
+                    placeholder="1900"
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">每日积分</label>
+                  <input
+                    type="number"
+                    value={planForm.dailySignIn}
+                    onChange={(e) => setPlanForm({ ...planForm, dailySignIn: parseInt(e.target.value) || 0 })}
+                    placeholder="15"
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">并发数</label>
+                  <input
+                    type="number"
+                    value={planForm.concurrency}
+                    onChange={(e) => setPlanForm({ ...planForm, concurrency: parseInt(e.target.value) || 1 })}
+                    placeholder="2"
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">排序</label>
+                  <input
+                    type="number"
+                    value={planForm.sortOrder}
+                    onChange={(e) => setPlanForm({ ...planForm, sortOrder: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">支持的画质(JSON数组)</label>
+                <input
+                  type="text"
+                  value={planForm.qualities}
+                  onChange={(e) => setPlanForm({ ...planForm, qualities: e.target.value })}
+                  placeholder="[&quot;1K&quot;, &quot;2K&quot;]"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-white/80">额外权益(JSON数组)</label>
+                <input
+                  type="text"
+                  value={planForm.extras}
+                  onChange={(e) => setPlanForm({ ...planForm, extras: e.target.value })}
+                  placeholder="[&quot;无限画布&quot;]"
+                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 font-mono text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={planForm.isActive}
+                    onChange={(e) => setPlanForm({ ...planForm, isActive: e.target.checked })}
+                    className="w-4 h-4 text-indigo-600 rounded"
+                  />
+                  <span className="text-sm text-white">启用此套餐</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={planForm.watermark}
+                    onChange={(e) => setPlanForm({ ...planForm, watermark: e.target.checked })}
+                    className="w-4 h-4 text-indigo-600 rounded"
+                  />
+                  <span className="text-sm text-white">显示水印</span>
+                </label>
+              </div>
+              <button
+                onClick={handleSavePlan}
+                disabled={isLoading}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+              >
+                {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {isLoading ? '保存中...' : '保存套餐'}
               </button>
             </div>
           </div>

@@ -206,16 +206,23 @@ export async function addUserComputePoints(id: string, points: number): Promise<
 }
 
 export async function deductUserComputePoints(id: string, points: number) {
-  const user = await prisma.user.findUnique({ where: { id } });
-  if (!user) return { success: false, error: '用户不存在' };
-
-  if (user.compute_points < points) {
+  // 使用原子操作：在同一 SQL 语句中检查余额并扣减，防止竞态条件
+  try {
+    const user = await prisma.user.update({
+      where: {
+        id,
+        compute_points: { gte: points }, // 仅当余额 >= points 时才更新
+      },
+      data: {
+        compute_points: { decrement: points }, // 原子递减
+      },
+    });
+    return { success: true, user: toSafeUser(user) };
+  } catch (error) {
+    // 如果更新失败（余额不足或用户不存在），返回错误
+    console.error('Deduct compute points error:', error);
     return { success: false, error: '算力值不足' };
   }
-
-  const newPoints = user.compute_points - points;
-  const updatedUser = await updateUserComputePoints(id, newPoints);
-  return { success: true, user: updatedUser };
 }
 
 // ========== Compute Point Logs ==========
@@ -321,14 +328,8 @@ export async function consumeComputePoints(userId: string, points: number, reaso
   return result;
 }
 
-export async function compensateUserComputePoints(userId: string, points: number, reason: string) {
-  const user = await addUserComputePoints(userId, points);
-  if (user) {
-    const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    await createComputePointLog(logId, userId, points, 'compensation', reason, userId);
-  }
-  return user;
-}
+// 注意：compensateUserComputePoints 已删除，不再提供公开的补偿接口
+// 如需补偿，请通过管理员后台手动操作
 
 // ========== Subscription Plans ==========
 
@@ -448,6 +449,7 @@ export async function getUserActiveSubscription(userId: string) {
     plan_name: sub.plan.name,
     plan_price: sub.plan.price,
     plan_period: sub.plan.period,
+    qualities: JSON.parse(sub.plan.qualities) as string[],
   };
 }
 
@@ -572,4 +574,150 @@ export async function initializeSubscriptionPlans() {
     await prisma.subscriptionPlan.create({ data: plan });
   }
   console.log('Subscription plans initialized');
+}
+
+// ========== Subscription Plan CRUD ==========
+
+export interface PlanInput {
+  id: string;
+  name: string;
+  price: number;
+  period: string;
+  monthlyQuota: number;
+  dailySignIn: number;
+  qualities: string;
+  concurrency: number;
+  watermark?: boolean;
+  extras?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export async function createSubscriptionPlan(plan: PlanInput) {
+  const result = await prisma.subscriptionPlan.create({
+    data: {
+      id: plan.id,
+      name: plan.name,
+      price: plan.price,
+      period: plan.period,
+      monthlyQuota: plan.monthlyQuota,
+      dailySignIn: plan.dailySignIn,
+      qualities: plan.qualities,
+      concurrency: plan.concurrency,
+      watermark: plan.watermark ?? true,
+      extras: plan.extras ?? '[]',
+      isActive: plan.isActive ?? true,
+      sortOrder: plan.sortOrder ?? 0,
+    },
+  });
+  return {
+    id: result.id,
+    name: result.name,
+    price: result.price,
+    period: result.period,
+    monthly_quota: result.monthlyQuota,
+    daily_sign_in: result.dailySignIn,
+    qualities: result.qualities,
+    concurrency: result.concurrency,
+    watermark: result.watermark ? 1 : 0,
+    extras: result.extras,
+    is_active: result.isActive ? 1 : 0,
+    sort_order: result.sortOrder,
+    created_at: result.createdAt.toISOString(),
+  };
+}
+
+export async function updateSubscriptionPlan(id: string, updates: Partial<PlanInput>) {
+  const result = await prisma.subscriptionPlan.update({
+    where: { id },
+    data: {
+      ...(updates.name !== undefined && { name: updates.name }),
+      ...(updates.price !== undefined && { price: updates.price }),
+      ...(updates.period !== undefined && { period: updates.period }),
+      ...(updates.monthlyQuota !== undefined && { monthlyQuota: updates.monthlyQuota }),
+      ...(updates.dailySignIn !== undefined && { dailySignIn: updates.dailySignIn }),
+      ...(updates.qualities !== undefined && { qualities: updates.qualities }),
+      ...(updates.concurrency !== undefined && { concurrency: updates.concurrency }),
+      ...(updates.watermark !== undefined && { watermark: updates.watermark }),
+      ...(updates.extras !== undefined && { extras: updates.extras }),
+      ...(updates.isActive !== undefined && { isActive: updates.isActive }),
+      ...(updates.sortOrder !== undefined && { sortOrder: updates.sortOrder }),
+    },
+  });
+  return {
+    id: result.id,
+    name: result.name,
+    price: result.price,
+    period: result.period,
+    monthly_quota: result.monthlyQuota,
+    daily_sign_in: result.dailySignIn,
+    qualities: result.qualities,
+    concurrency: result.concurrency,
+    watermark: result.watermark ? 1 : 0,
+    extras: result.extras,
+    is_active: result.isActive ? 1 : 0,
+    sort_order: result.sortOrder,
+    created_at: result.createdAt.toISOString(),
+  };
+}
+
+export async function deleteSubscriptionPlan(id: string): Promise<boolean> {
+  try {
+    await prisma.subscriptionPlan.delete({ where: { id } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function getAllPlansIncludingInactive(): Promise<SubscriptionPlan[]> {
+  const plans = await prisma.subscriptionPlan.findMany({
+    orderBy: { sortOrder: 'asc' },
+  });
+  return plans.map(p => ({
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    period: p.period,
+    monthly_quota: p.monthlyQuota,
+    daily_sign_in: p.dailySignIn,
+    qualities: p.qualities,
+    concurrency: p.concurrency,
+    watermark: p.watermark ? 1 : 0,
+    extras: p.extras,
+    is_active: p.isActive ? 1 : 0,
+    sort_order: p.sortOrder,
+    created_at: p.createdAt.toISOString(),
+  }));
+}
+
+// ========== Email Templates ==========
+
+const EMAIL_TEMPLATES = {
+  verification_code: 'verification_code',
+};
+
+export async function getEmailTemplate(key: string): Promise<string | undefined> {
+  return await getSystemSetting(`email_template_${key}`);
+}
+
+export async function setEmailTemplate(key: string, value: string) {
+  await setSystemSetting(`email_template_${key}`, value);
+}
+
+export async function getAllEmailTemplates(): Promise<Record<string, string>> {
+  const settings = await getAllSystemSettings();
+  const templates: Record<string, string> = {};
+  for (const key of Object.keys(settings)) {
+    if (key.startsWith('email_template_')) {
+      templates[key.replace('email_template_', '')] = settings[key];
+    }
+  }
+  return templates;
+}
+
+export async function updateEmailTemplates(templates: Record<string, string>) {
+  for (const [key, value] of Object.entries(templates)) {
+    await setEmailTemplate(key, value);
+  }
 }

@@ -31,8 +31,8 @@ import {
   adminDeductComputePoints,
   adminClearComputePoints,
   consumeComputePoints,
-  compensateUserComputePoints,
   getAllActivePlans,
+  getAllPlansIncludingInactive,
   getPlanById,
   getUserSubscriptions,
   getUserActiveSubscription,
@@ -42,6 +42,12 @@ import {
   deleteUserSubscription,
   addComputePointsToUser,
   createComputePointLog,
+  createSubscriptionPlan,
+  updateSubscriptionPlan,
+  deleteSubscriptionPlan,
+  getAllEmailTemplates,
+  updateEmailTemplates,
+  prisma,
 } from './db.js';
 import { authMiddleware, adminMiddleware, AuthRequest } from './middleware.js';
 import { sendVerificationEmail, generateVerificationCode } from './email.js';
@@ -120,6 +126,12 @@ router.post('/auth/send-verification-code', async (req: Request, res: Response) 
 
 router.post('/auth/register', async (req: Request, res: Response) => {
   const { email, password, nickname, verificationCode } = req.body;
+
+  // 检查注册开关
+  const registrationEnabled = await getSystemSetting('registration_enabled');
+  if (registrationEnabled === 'false') {
+    return res.status(403).json(errorResponse('当前已关闭注册功能'));
+  }
 
   if (!email || !email.includes('@')) {
     return res.status(400).json(errorResponse('请输入有效的邮箱地址'));
@@ -309,24 +321,8 @@ router.post('/user/deduct-compute-points', authMiddleware, async (req: AuthReque
   }
 });
 
-router.post('/user/compensate-compute-points', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const { points, reason } = req.body;
-
-  if (typeof points !== 'number' || points <= 0) {
-    return res.status(400).json(errorResponse('算力值必须为正数'));
-  }
-
-  try {
-    const user = await compensateUserComputePoints(req.userId!, points, reason || '生成失败补偿');
-    if (!user) {
-      return res.status(404).json(errorResponse('用户不存在'));
-    }
-    return res.json(successResponse(user));
-  } catch (error) {
-    console.error('Compensate compute points error:', error);
-    return res.status(500).json(errorResponse('补偿算力值失败'));
-  }
-});
+// 注意：compensateUserComputePoints 已从 db.ts 移除，不再提供公开的补偿接口
+// 算力扣除失败时会在 deductComputePoints 内部自动回滚
 
 router.get('/user/compute-points/logs', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -404,19 +400,26 @@ router.get('/admin/users', authMiddleware, adminMiddleware, async (_req: AuthReq
 });
 
 router.put('/admin/settings', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-  const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from } = req.body;
-
-  if (!smtp_host || !smtp_port || !smtp_user || !smtp_pass || !smtp_from) {
-    return res.status(400).json(errorResponse('请填写完整的 SMTP 配置'));
-  }
+  const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, registration_enabled } = req.body;
 
   try {
-    await setSystemSetting('smtp_host', String(smtp_host).trim());
-    await setSystemSetting('smtp_port', String(smtp_port).trim());
-    await setSystemSetting('smtp_secure', smtp_secure ? 'true' : 'false');
-    await setSystemSetting('smtp_user', String(smtp_user).trim());
-    await setSystemSetting('smtp_pass', String(smtp_pass).trim());
-    await setSystemSetting('smtp_from', String(smtp_from).trim());
+    // Validate SMTP if any SMTP field is provided
+    if (smtp_host || smtp_port || smtp_user || smtp_pass || smtp_from) {
+      if (!smtp_host || !smtp_port || !smtp_user || !smtp_pass || !smtp_from) {
+        return res.status(400).json(errorResponse('请填写完整的 SMTP 配置'));
+      }
+      await setSystemSetting('smtp_host', String(smtp_host).trim());
+      await setSystemSetting('smtp_port', String(smtp_port).trim());
+      await setSystemSetting('smtp_secure', smtp_secure ? 'true' : 'false');
+      await setSystemSetting('smtp_user', String(smtp_user).trim());
+      await setSystemSetting('smtp_pass', String(smtp_pass).trim());
+      await setSystemSetting('smtp_from', String(smtp_from).trim());
+    }
+
+    // Update registration enabled if provided
+    if (registration_enabled !== undefined) {
+      await setSystemSetting('registration_enabled', registration_enabled ? 'true' : 'false');
+    }
 
     return res.json(successResponse({ updated: true }));
   } catch (error) {
@@ -475,6 +478,34 @@ router.get('/admin/settings', authMiddleware, adminMiddleware, async (_req: Auth
   } catch (error) {
     console.error('Get settings error:', error);
     return res.status(500).json(errorResponse('获取系统设置失败'));
+  }
+});
+
+// ========== Email Templates Routes ==========
+
+router.get('/admin/email-templates', authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
+  try {
+    const templates = await getAllEmailTemplates();
+    return res.json(successResponse(templates));
+  } catch (error) {
+    console.error('Get email templates error:', error);
+    return res.status(500).json(errorResponse('获取邮件模板失败'));
+  }
+});
+
+router.put('/admin/email-templates', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  const { templates } = req.body;
+
+  if (!templates || typeof templates !== 'object') {
+    return res.status(400).json(errorResponse('无效的模板数据'));
+  }
+
+  try {
+    await updateEmailTemplates(templates);
+    return res.json(successResponse({ updated: true }));
+  } catch (error) {
+    console.error('Update email templates error:', error);
+    return res.status(500).json(errorResponse('更新邮件模板失败'));
   }
 });
 
@@ -553,7 +584,7 @@ router.post('/admin/users/:id/compute-points/gift', authMiddleware, adminMiddlew
     return res.json(successResponse(user));
   } catch (error) {
     console.error('Gift compute points error:', error);
-    return res.status(500).json(errorResponse(`赠送算力值失败: ${error instanceof Error ? error.message : String(error)}`));
+    return res.status(500).json(errorResponse('赠送算力值失败'));
   }
 });
 
@@ -577,7 +608,7 @@ router.post('/admin/users/:id/compute-points/compensate', authMiddleware, adminM
     return res.json(successResponse(user));
   } catch (error) {
     console.error('Compensate compute points error:', error);
-    return res.status(500).json(errorResponse(`补偿算力值失败: ${error instanceof Error ? error.message : String(error)}`));
+    return res.status(500).json(errorResponse('补偿算力值失败'));
   }
 });
 
@@ -601,7 +632,7 @@ router.post('/admin/users/:id/compute-points/deduct', authMiddleware, adminMiddl
     return res.json(successResponse(result.user));
   } catch (error) {
     console.error('Deduct compute points error:', error);
-    return res.status(500).json(errorResponse(`扣除算力值失败: ${error instanceof Error ? error.message : String(error)}`));
+    return res.status(500).json(errorResponse('扣除算力值失败'));
   }
 });
 
@@ -621,7 +652,7 @@ router.post('/admin/users/:id/compute-points/clear', authMiddleware, adminMiddle
     return res.json(successResponse(user));
   } catch (error) {
     console.error('Clear compute points error:', error);
-    return res.status(500).json(errorResponse(`清空算力值失败: ${error instanceof Error ? error.message : String(error)}`));
+    return res.status(500).json(errorResponse('清空算力值失败'));
   }
 });
 
@@ -629,11 +660,68 @@ router.post('/admin/users/:id/compute-points/clear', authMiddleware, adminMiddle
 
 router.get('/admin/plans', authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
   try {
-    const plans = await getAllActivePlans();
+    const plans = await getAllPlansIncludingInactive();
     return res.json(successResponse(plans));
   } catch (error) {
     console.error('Get plans error:', error);
     return res.status(500).json(errorResponse('获取套餐列表失败'));
+  }
+});
+
+router.post('/admin/plans', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  const { id, name, price, period, monthlyQuota, dailySignIn, qualities, concurrency, watermark, extras, isActive, sortOrder } = req.body;
+
+  if (!id || !name || price === undefined || !period) {
+    return res.status(400).json(errorResponse('请填写完整的套餐信息'));
+  }
+
+  try {
+    const plan = await createSubscriptionPlan({
+      id, name, price, period,
+      monthlyQuota: monthlyQuota || 0,
+      dailySignIn: dailySignIn || 0,
+      qualities: qualities || '[]',
+      concurrency: concurrency || 1,
+      watermark: watermark ?? true,
+      extras: extras || '[]',
+      isActive: isActive ?? true,
+      sortOrder: sortOrder ?? 0,
+    });
+    return res.status(201).json(successResponse(plan));
+  } catch (error) {
+    console.error('Create plan error:', error);
+    return res.status(500).json(errorResponse('创建套餐失败'));
+  }
+});
+
+router.put('/admin/plans/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const updates = req.body;
+
+  try {
+    const plan = await updateSubscriptionPlan(id, updates);
+    if (!plan) {
+      return res.status(404).json(errorResponse('套餐不存在'));
+    }
+    return res.json(successResponse(plan));
+  } catch (error) {
+    console.error('Update plan error:', error);
+    return res.status(500).json(errorResponse('更新套餐失败'));
+  }
+});
+
+router.delete('/admin/plans/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  try {
+    const deleted = await deleteSubscriptionPlan(id);
+    if (!deleted) {
+      return res.status(404).json(errorResponse('套餐不存在'));
+    }
+    return res.json(successResponse({ deleted: true }));
+  } catch (error) {
+    console.error('Delete plan error:', error);
+    return res.status(500).json(errorResponse('删除套餐失败'));
   }
 });
 
@@ -664,29 +752,59 @@ router.post('/admin/users/:id/subscriptions', authMiddleware, adminMiddleware, a
   }
 
   const durationMonths = months || (plan.period === '年付' ? 12 : 1);
+  const daysInMonth = 30;
 
   try {
     const subscriptionId = `sub_${uuidv4()}`;
     const expireDate = new Date();
     expireDate.setMonth(expireDate.getMonth() + durationMonths);
 
-    const subscription = await createUserSubscription(
-      subscriptionId,
-      id,
-      planId,
-      expireDate,
-      0
-    );
-
-    // 开通套餐时赠送算力
+    // 开通套餐时赠送算力：月度积分 + 每日积分 * 30天
     const monthlyPoints = plan.monthly_quota * durationMonths;
-    await addComputePointsToUser(id, monthlyPoints);
-
-    // 记录算力赠送日志
+    const dailyPoints = plan.daily_sign_in * daysInMonth * durationMonths;
+    const totalPoints = monthlyPoints + dailyPoints;
     const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    await createComputePointLog(logId, id, monthlyPoints, 'gift', `开通套餐「${plan.name}」赠送`, req.userId!);
 
-    return res.status(201).json(successResponse({ subscription, addedPoints: monthlyPoints }));
+    // 使用事务保证一致性：创建订阅 -> 赠送算力 -> 记录日志
+    await prisma.$transaction([
+      prisma.userSubscription.create({
+        data: {
+          id: subscriptionId,
+          userId: id,
+          planId: planId,
+          expireDate: expireDate,
+          autoRenew: false,
+        },
+      }),
+      prisma.user.update({
+        where: { id },
+        data: { compute_points: { increment: totalPoints } },
+      }),
+      prisma.computePointLog.create({
+        data: {
+          id: logId,
+          userId: id,
+          amount: totalPoints,
+          type: 'gift',
+          reason: `开通套餐「${plan.name}」赠送（月度${monthlyPoints} + 每日${dailyPoints}）`,
+          operatorId: req.userId!,
+        },
+      }),
+    ]);
+
+    const subscription = {
+      id: subscriptionId,
+      user_id: id,
+      plan_id: planId,
+      status: 'active',
+      start_date: new Date().toISOString(),
+      expire_date: expireDate.toISOString(),
+      auto_renew: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    return res.status(201).json(successResponse({ subscription, addedPoints: totalPoints, monthlyPoints, dailyPoints }));
   } catch (error) {
     console.error('Create subscription error:', error);
     return res.status(500).json(errorResponse('开通套餐失败'));
@@ -734,17 +852,36 @@ router.put('/admin/users/:userId/subscriptions/:subscriptionId/extend', authMidd
     const currentExpire = new Date(subscription.expire_date);
     currentExpire.setMonth(currentExpire.getMonth() + months);
 
-    const extended = await extendUserSubscription(subscriptionId, currentExpire);
-
-    // 续费时赠送算力
+    // 续费时赠送算力：月度积分 + 每日积分 * 30天
+    const daysInMonth = 30;
     const monthlyPoints = plan.monthly_quota * months;
-    await addComputePointsToUser(userId, monthlyPoints);
-
-    // 记录算力赠送日志
+    const dailyPoints = plan.daily_sign_in * daysInMonth * months;
+    const totalPoints = monthlyPoints + dailyPoints;
     const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    await createComputePointLog(logId, userId, monthlyPoints, 'gift', `续费套餐「${plan.name}」赠送`, req.userId!);
 
-    return res.json(successResponse({ extended, addedPoints: monthlyPoints }));
+    // 使用事务保证一致性：更新订阅到期时间 -> 赠送算力 -> 记录日志
+    const extended = await prisma.$transaction([
+      prisma.userSubscription.update({
+        where: { id: subscriptionId },
+        data: { expireDate: currentExpire },
+      }),
+      prisma.user.update({
+        where: { id: userId },
+        data: { compute_points: { increment: totalPoints } },
+      }),
+      prisma.computePointLog.create({
+        data: {
+          id: logId,
+          userId: userId,
+          amount: totalPoints,
+          type: 'gift',
+          reason: `续费套餐「${plan.name}」赠送（月度${monthlyPoints} + 每日${dailyPoints}）`,
+          operatorId: req.userId!,
+        },
+      }),
+    ]);
+
+    return res.json(successResponse({ extended: { subscriptionId, expireDate: currentExpire }, addedPoints: totalPoints, monthlyPoints, dailyPoints }));
   } catch (error) {
     console.error('Extend subscription error:', error);
     return res.status(500).json(errorResponse('续费套餐失败'));

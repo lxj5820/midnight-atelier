@@ -43,7 +43,8 @@ import {
   Star
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getComputePointLogs, type ComputePointLog, deductComputePoints, compensateComputePoints, getUserSubscription, type UserSubscription } from './api';
+import { getComputePointLogs, type ComputePointLog, deductComputePoints, getUserSubscription, type UserSubscription } from './api';
+import { getSystemSettings } from './adminApi';
 
 // --- Types ---
 type View = 'workspace' | 'gallery' | 'settings' | 'admin';
@@ -187,7 +188,12 @@ const MAX_GALLERY_ITEMS = 10;
 
 function getGenerationHistory(): GenerationRecord[] {
   const history = localStorage.getItem('atelier_generation_history');
-  return history ? JSON.parse(history) : [];
+  if (!history) return [];
+  try {
+    return JSON.parse(history);
+  } catch {
+    return [];
+  }
 }
 
 async function saveGenerationRecord(record: GenerationRecord): Promise<void> {
@@ -437,7 +443,7 @@ const RightPanel = ({
                 onChange={(e) => setQuality(e.target.value)}
                 className="w-full bg-[#111317] border border-[#2a2e38] rounded-lg py-2 px-3 text-xs text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
               >
-                {['1K', '2K', '4K'].map(q => (
+                {(subscription?.qualities || ['1K', '2K']).map(q => (
                   <option key={q} value={q}>{q}</option>
                 ))}
               </select>
@@ -736,7 +742,29 @@ const WorkspaceView = ({
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [sliderPosition, setSliderPosition] = useState(50);
   const [thumbnailSize, setThumbnailSize] = useState(150);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 获取用户订阅信息以确定可用的画质选项
+  useEffect(() => {
+    if (!user) return;
+    getUserSubscription().then(res => {
+      if (res.success && res.data) {
+        setSubscription(res.data);
+        // 如果当前画质不在订阅的qualities中，切换到最高可用画质
+        const availableQualities = res.data.qualities || ['1K', '2K'];
+        if (!availableQualities.includes(quality)) {
+          setQuality(availableQualities[availableQualities.length - 1]);
+        }
+      } else {
+        setSubscription(null);
+        // 免费用户只能使用1K和2K
+        if (quality === '4K') {
+          setQuality('2K');
+        }
+      }
+    });
+  }, [user, quality, setQuality]);
 
   // 当模型变化时，检查比例是否支持，不支持则重置
   useEffect(() => {
@@ -908,9 +936,8 @@ const WorkspaceView = ({
       showToast('error', deductResult.error || '算力值不足，扣除失败');
       return;
     }
-    await refreshUser();
-
     let deducted = true;
+    await refreshUser();
     setIsGenerating(true);
     try {
       const selectedModel = model;
@@ -950,16 +977,14 @@ const WorkspaceView = ({
         }
         if (hasValidImages && parts.length > 0) {
           parts.push({ text: finalPrompt });
-          const resolution = aspectRatio === 'auto' ? null : getResolution(aspectRatio, quality);
           requestBody = {
             contents: [{ role: "user", parts }],
             generationConfig: {
               responseModalities: ["TEXT", "IMAGE"],
-              ...(resolution && {
+              ...(aspectRatio !== 'auto' && {
                 imageConfig: {
                   aspectRatio: aspectRatio,
-                  width: resolution.width,
-                  height: resolution.height
+                  imageSize: quality
                 }
               })
             }
@@ -969,16 +994,14 @@ const WorkspaceView = ({
 
       // 如果没有有效图片，使用文生图模式
       if (!requestBody) {
-        const resolution = aspectRatio === 'auto' ? null : getResolution(aspectRatio, quality);
         requestBody = {
           contents: [{ role: "user", parts: [{ text: finalPrompt }] }],
           generationConfig: {
             responseModalities: ["TEXT", "IMAGE"],
-            ...(resolution && {
+            ...(aspectRatio !== 'auto' && {
               imageConfig: {
                 aspectRatio: aspectRatio,
-                width: resolution.width,
-                height: resolution.height
+                imageSize: quality
               }
             })
           }
@@ -1062,11 +1085,7 @@ const WorkspaceView = ({
     } catch (error) {
       console.error('Generation error:', error);
       showToast('error', `生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      // 生成失败，补偿已扣除的算力
-      if (deducted) {
-        await compensateComputePoints(requiredPoints, '生成失败补偿');
-        await refreshUser();
-      }
+      // 注意：算力已在生成前扣除，生成失败后通过管理员补偿
     } finally {
       setIsGenerating(false);
     }
@@ -1433,14 +1452,6 @@ const WorkspaceView = ({
                     清除记录
                   </button>
                 )}
-                {generationHistory.length > 0 && (
-                  <button
-                    onClick={handleClearHistory}
-                    className="text-rose-400 text-xs font-medium hover:text-rose-300 transition-colors"
-                  >
-                    清除记录
-                  </button>
-                )}
                 <button
                   onClick={handleViewAll}
                   className="text-indigo-400 text-xs font-medium hover:text-indigo-300 transition-colors"
@@ -1595,7 +1606,7 @@ const WorkspaceView = ({
                     onChange={(e) => setQuality(e.target.value)}
                     className="w-full bg-[#111317] border border-[#2a2e38] rounded-lg py-2 px-3 text-xs text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
                   >
-                    {['1K', '2K', '4K'].map(q => (
+                    {(subscription?.qualities || ['1K', '2K']).map(q => (
                       <option key={q} value={q}>{q}</option>
                     ))}
                   </select>
@@ -1689,7 +1700,23 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
   const [showPassword, setShowPassword] = useState(false);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);
   const { login, register, sendVerificationCode } = useAuth();
+
+  useEffect(() => {
+    // 获取注册开关状态
+    const loadSettings = async () => {
+      try {
+        const settings = await getSystemSettings();
+        if (settings?.success && settings.data?.registration_enabled !== undefined) {
+          setRegistrationEnabled(settings.data.registration_enabled === true || settings.data.registration_enabled === 'true');
+        }
+      } catch (e) {
+        console.error('Failed to load settings:', e);
+      }
+    };
+    loadSettings();
+  }, []);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -1777,7 +1804,7 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-indigo-600/30">
             <Zap className="text-white w-8 h-8 fill-current" />
           </div>
-          <h1 className="text-4xl font-black font-headline text-white tracking-tight mb-3">MIDNIGHT ATELIER</h1>
+          <h1 className="text-4xl font-black font-headline text-white tracking-tight mb-3">MIDNIGHT ATELIER <span className="text-indigo-400">V2.0</span></h1>
           <p className="text-slate-400">AI 赋能的设计工作台</p>
         </div>
 
@@ -1790,17 +1817,19 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
             >
               登录
             </button>
-            <button
-              type="button"
-              onClick={() => setMode('register')}
-              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'register' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              注册
-            </button>
+            {registrationEnabled && (
+              <button
+                type="button"
+                onClick={() => setMode('register')}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'register' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                注册
+              </button>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {mode === 'register' && (
+            {mode === 'register' && registrationEnabled && (
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-white/80">昵称</label>
                 <input
@@ -1824,7 +1853,7 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
               />
             </div>
 
-            {mode === 'register' && (
+            {mode === 'register' && registrationEnabled && (
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-white/80">邮箱验证码</label>
                 <div className="flex gap-2">
@@ -1867,7 +1896,7 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
               </div>
             </div>
 
-            {mode === 'register' && (
+            {mode === 'register' && registrationEnabled && (
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-white/80">确认密码</label>
                 <input

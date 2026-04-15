@@ -24,42 +24,22 @@ if (!fs.existsSync(dataDir)) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS headers - must be before any other handlers to catch preflight
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const allowedOrigins = [
-    'https://midnightatelier.netlify.app',
-    'https://midnight-atelier-production.up.railway.app',
-    'http://localhost:3000',
-    'http://localhost:8080',
-  ];
-
-  // Allow Netlify preview deployments and localhost
-  const isAllowedOrigin = origin && (allowedOrigins.includes(origin) || origin.endsWith('.netlify.app') || origin.includes('localhost'));
-
-  if (origin && isAllowedOrigin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
-
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
 app.use(
   cors({
-    origin: [
-      'https://midnightatelier.netlify.app',
-      'https://*.netlify.app',
-      'https://midnight-atelier-production.up.railway.app',
-      'http://localhost:3000',
-      'http://localhost:8080',
-    ],
+    origin: (origin, callback) => {
+      const allowed = [
+        'https://midnightatelier.netlify.app',
+        'https://midnight-atelier-production.up.railway.app',
+        'http://localhost:3000',
+        'http://localhost:8080',
+      ];
+      // 允许 Netlify preview 部署 (--midnightatelier.netlify.app 格式) 和 localhost
+      if (!origin || allowed.includes(origin) || origin.endsWith('--midnightatelier.netlify.app') || origin.includes('localhost')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
@@ -72,7 +52,7 @@ app.use('/api', routes);
 app.get('/', (_req, res) => {
   res.json({
     message: 'Midnight Atelier API Server',
-    version: '1.1',
+    version: '2.0',
     endpoints: {
       health: '/health',
       api: '/api'
