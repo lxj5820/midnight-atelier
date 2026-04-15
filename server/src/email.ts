@@ -39,18 +39,33 @@ export async function getSmtpConfig(): Promise<SmtpConfig | null> {
   }
 }
 
-export async function sendVerificationEmail(email: string, code: string): Promise<boolean> {
-  const config = await getSmtpConfig();
-  if (!config) {
-    console.error('SMTP not configured - config is null');
+// 使用 IPv4 地址连接
+async function sendEmailIPv4(email: string, code: string, config: SmtpConfig): Promise<boolean> {
+  const template = await getEmailTemplate('verification_code') || '您的验证码是：${code}\n验证码有效期为 10 分钟，请尽快使用。';
+  const emailContent = template.replace(/\$\{code\}/g, code);
+
+  // 解析域名的 IPv4 地址
+  const addresses = await new Promise< string[]>((resolve) => {
+    dns.resolve4(config.host, (err, result) => {
+      if (err || !result) {
+        resolve([]);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+
+  if (addresses.length === 0) {
+    console.error(`Failed to resolve IPv4 for ${config.host}`);
     return false;
   }
 
-  try {
-    // 直接使用配置创建 transporter，让 nodemailer 处理连接
-    // Railway 环境需要明确使用 IPv4
+  const ip = addresses[0];
+  console.log(`Resolved ${config.host} to ${ip}, sending email...`);
+
+  return new Promise((resolve) => {
     const transporter = nodemailer.createTransport({
-      host: config.host,
+      host: ip,
       port: config.port,
       secure: config.secure,
       auth: {
@@ -60,28 +75,34 @@ export async function sendVerificationEmail(email: string, code: string): Promis
       tls: {
         rejectUnauthorized: false,
       },
-      // 强制使用 IPv4
-      family: 4,
     } as nodemailer.TransportOptions);
 
-    // 获取邮件模板，默认使用硬编码模板
-    let template = await getEmailTemplate('verification_code');
-    if (!template) {
-      template = '您的验证码是：${code}\n验证码有效期为 10 分钟，请尽快使用。';
-    }
-    // 替换占位符
-    const emailContent = template.replace(/\$\{code\}/g, code);
-
-    console.log(`Sending email to ${email} via ${config.host}:${config.port}`);
-    await transporter.sendMail({
+    transporter.sendMail({
       from: config.from,
       to: email,
       subject: 'Midnight Atelier - 邮箱验证码',
       text: emailContent,
+    }, (err, info) => {
+      if (err) {
+        console.error('SMTP send error:', err.message);
+        resolve(false);
+      } else {
+        console.log('Email sent:', info?.response);
+        resolve(true);
+      }
     });
+  });
+}
 
-    console.log('Email sent successfully');
-    return true;
+export async function sendVerificationEmail(email: string, code: string): Promise<boolean> {
+  const config = await getSmtpConfig();
+  if (!config) {
+    console.error('SMTP not configured - config is null');
+    return false;
+  }
+
+  try {
+    return await sendEmailIPv4(email, code, config);
   } catch (error: any) {
     console.error('Failed to send email:', error?.message || error);
     return false;
