@@ -3,6 +3,9 @@ import dns from 'dns';
 import crypto from 'crypto';
 import { getAllSystemSettings, getEmailTemplate } from './db.js';
 
+// Railway 环境不支持 IPv6 出站，全局强制 DNS 解析优先返回 IPv4
+dns.setDefaultResultOrder('ipv4first');
+
 export interface SmtpConfig {
   host: string;
   port: number;
@@ -60,8 +63,6 @@ async function sendEmailIPv4(email: string, code: string, config: SmtpConfig): P
       tls: {
         rejectUnauthorized: process.env.NODE_ENV === 'production',
       },
-      // Force IPv4 to avoid Railway IPv6 issues while keeping TLS cert validation
-      family: 4,
       connectionTimeout: 10000,
       socketTimeout: 10000,
     } as nodemailer.TransportOptions);
