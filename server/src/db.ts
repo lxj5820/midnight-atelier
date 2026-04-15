@@ -350,17 +350,20 @@ export async function adminCompensateComputePoints(userId: string, points: numbe
 
 export async function adminDeductComputePoints(userId: string, points: number, reason: string, operatorId: string) {
   try {
-    const user = await prisma.user.update({
-      where: {
-        id: userId,
-        compute_points: { gte: points },
-      },
-      data: {
-        compute_points: { decrement: points },
-      },
-    });
-    const logId = `log_${Date.now()}_${crypto.randomUUID()}`;
-    await createComputePointLog(logId, userId, -points, 'deduct', reason, operatorId);
+    const [user] = await prisma.$transaction([
+      prisma.user.update({
+        where: {
+          id: userId,
+          compute_points: { gte: points },
+        },
+        data: {
+          compute_points: { decrement: points },
+        },
+      }),
+      prisma.computePointLog.create({
+        data: { id: `log_${Date.now()}_${crypto.randomUUID()}`, userId, amount: -points, type: 'deduct', reason, operatorId },
+      }),
+    ]);
     return { success: true, user: toSafeUser(user) };
   } catch {
     return { success: false, error: '算力值不足或用户不存在' };
@@ -372,14 +375,18 @@ export async function adminClearComputePoints(userId: string, reason: string, op
   if (!user) return undefined;
 
   const clearedAmount = user.compute_points;
-  await prisma.user.update({
-    where: { id: userId },
-    data: { compute_points: 0 },
-  });
-  const logId = `log_${Date.now()}_${crypto.randomUUID()}`;
-  await createComputePointLog(logId, userId, -clearedAmount, 'clear', reason, operatorId);
-  const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
-  return updatedUser ? toSafeUser(updatedUser) : undefined;
+
+  const [updatedUser] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { compute_points: 0 },
+    }),
+    prisma.computePointLog.create({
+      data: { id: `log_${Date.now()}_${crypto.randomUUID()}`, userId, amount: -clearedAmount, type: 'clear', reason, operatorId },
+    }),
+  ]);
+
+  return toSafeUser(updatedUser);
 }
 
 export async function consumeComputePoints(userId: string, points: number, reason: string) {
