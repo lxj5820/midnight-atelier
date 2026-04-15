@@ -70,7 +70,12 @@ export async function deductComputePoints(points: number, reason?: string) {
   });
 }
 
-// 注意：compensateComputePoints 已删除，不再提供公开的补偿接口
+export async function refundComputePoints(reason?: string) {
+  return await apiFetch('/user/refund-compute-points', {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
 // 如需补偿，请通过管理员后台手动操作
 
 export interface ComputePointLog {

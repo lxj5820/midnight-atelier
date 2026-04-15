@@ -31,6 +31,7 @@ import {
   adminDeductComputePoints,
   adminClearComputePoints,
   consumeComputePoints,
+  refundComputePoints,
   getAllActivePlans,
   getAllPlansIncludingInactive,
   getPlanById,
@@ -318,6 +319,22 @@ router.post('/user/deduct-compute-points', authMiddleware, async (req: AuthReque
   } catch (error) {
     console.error('Deduct compute points error:', error);
     return res.status(500).json(errorResponse('扣除算力值失败'));
+  }
+});
+
+// 退款接口：允许用户退换最近5分钟内的消费
+router.post('/user/refund-compute-points', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const { reason } = req.body;
+
+  try {
+    const result = await refundComputePoints(req.userId!, reason || '生成失败退款');
+    if (!result.success) {
+      return res.status(400).json(errorResponse(result.error || '退款失败'));
+    }
+    return res.json(successResponse({ refunded: result.refunded }));
+  } catch (error) {
+    console.error('Refund compute points error:', error);
+    return res.status(500).json(errorResponse('退款失败'));
   }
 });
 

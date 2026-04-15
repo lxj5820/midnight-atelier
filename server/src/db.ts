@@ -231,7 +231,7 @@ export async function createComputePointLog(
   id: string,
   userId: string,
   amount: number,
-  type: 'gift' | 'compensation' | 'deduct' | 'clear' | 'consume',
+  type: 'gift' | 'compensation' | 'deduct' | 'clear' | 'consume' | 'refund',
   reason: string,
   operatorId: string = ''
 ) {
@@ -326,6 +326,41 @@ export async function consumeComputePoints(userId: string, points: number, reaso
     await createComputePointLog(logId, userId, -points, 'consume', reason, userId);
   }
   return result;
+}
+
+// 退款：查找最近的消费记录并退款（仅允许5分钟内的消费记录退款）
+export async function refundComputePoints(userId: string, reason: string): Promise<{ success: boolean; refunded?: number; error?: string }> {
+  // 查找5分钟内的最近一条消费记录
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+  const logs = await prisma.computePointLog.findMany({
+    where: {
+      userId,
+      type: 'consume',
+      createdAt: { gte: fiveMinutesAgo },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+  });
+
+  if (logs.length === 0) {
+    return { success: false, error: '无可退款的记录或已超过退款时限' };
+  }
+
+  const log = logs[0];
+  const refundedAmount = Math.abs(log.amount);
+
+  // 退还算力
+  const result = await addUserComputePoints(userId, refundedAmount);
+  if (!result) {
+    return { success: false, error: '退款失败' };
+  }
+
+  // 记录退款日志
+  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  await createComputePointLog(logId, userId, refundedAmount, 'refund', reason, userId);
+
+  return { success: true, refunded: refundedAmount };
 }
 
 // 注意：compensateUserComputePoints 已删除，不再提供公开的补偿接口

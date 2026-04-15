@@ -43,7 +43,7 @@ import {
   Star
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getComputePointLogs, type ComputePointLog, deductComputePoints, getUserSubscription, type UserSubscription } from './api';
+import { getComputePointLogs, type ComputePointLog, deductComputePoints, refundComputePoints, getUserSubscription, type UserSubscription } from './api';
 import { getSystemSettings } from './adminApi';
 
 // --- Types ---
@@ -69,6 +69,12 @@ interface GenerationRecord {
   imageUrl: string;
   referenceImageUrl?: string;
   createdAt: string;
+  resolution?: {
+    width: number;
+    height: number;
+    quality: string;
+    aspectRatio: string;
+  };
 }
 
 interface GalleryItem {
@@ -692,7 +698,7 @@ const TopBar = ({
           </>
         )}
         <span className="text-xs font-bold text-slate-500">
-          V1.1
+          V2.0
         </span>
       </div>
     </header>
@@ -981,12 +987,10 @@ const WorkspaceView = ({
             contents: [{ role: "user", parts }],
             generationConfig: {
               responseModalities: ["TEXT", "IMAGE"],
-              ...(aspectRatio !== 'auto' && {
-                imageConfig: {
-                  aspectRatio: aspectRatio,
-                  imageSize: quality
-                }
-              })
+              imageConfig: {
+                ...(aspectRatio !== 'auto' && { aspectRatio: aspectRatio }),
+                imageSize: quality
+              }
             }
           };
         }
@@ -998,19 +1002,17 @@ const WorkspaceView = ({
           contents: [{ role: "user", parts: [{ text: finalPrompt }] }],
           generationConfig: {
             responseModalities: ["TEXT", "IMAGE"],
-            ...(aspectRatio !== 'auto' && {
-              imageConfig: {
-                aspectRatio: aspectRatio,
-                imageSize: quality
-              }
-            })
+            imageConfig: {
+              ...(aspectRatio !== 'auto' && { aspectRatio: aspectRatio }),
+              imageSize: quality
+            }
           }
         };
       }
 
       // 添加超时控制
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2分钟超时
+      const timeoutId = setTimeout(() => controller.abort(), 800000); // 800秒超时
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -1070,13 +1072,22 @@ const WorkspaceView = ({
       // 生成成功后清除上传的参考图，防止下次生成时被误用
       setImageUrls([]);
 
+      // 获取分辨率信息
+      const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
+
       const record: GenerationRecord = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         type: activeMenuItem,
         prompt: prompt,
         imageUrl: imageUrl,
         referenceImageUrl: imageUrls[0] || undefined,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        resolution: {
+          width: resolution?.width || 0,
+          height: resolution?.height || 0,
+          quality: quality,
+          aspectRatio: aspectRatio,
+        },
       };
       await saveGenerationRecord(record);
       setHistoryRefreshKey(k => k + 1);
@@ -1084,8 +1095,22 @@ const WorkspaceView = ({
       showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！已消耗 ${requiredPoints} 点算力`);
     } catch (error) {
       console.error('Generation error:', error);
-      showToast('error', `生成失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      // 注意：算力已在生成前扣除，生成失败后通过管理员补偿
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      const isTimeout = errorMessage === 'signal is aborted without reason' || errorMessage.includes('aborted');
+      if (isTimeout) {
+        showToast('error', '请求超时（2分钟），可能是网络问题');
+      } else {
+        showToast('error', `生成失败: ${errorMessage}`);
+      }
+      // 生成失败，退还算力
+      if (deducted) {
+        const refundResult = await refundComputePoints(isTimeout ? '请求超时退款' : '生成失败退款');
+        if (refundResult.success) {
+          showToast('info', '算力已退还');
+          await refreshUser();
+        }
+        deducted = false;
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -1482,6 +1507,9 @@ const WorkspaceView = ({
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
                       <p className="text-[9px] text-slate-400 mt-0.5">
                         {new Date(record.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {record.resolution && (
+                          <span className="ml-1 text-indigo-400">{record.resolution.width > 0 ? `${record.resolution.width}×${record.resolution.height} ` : ''}{record.resolution.quality}</span>
+                        )}
                       </p>
                       <div className="flex gap-1 mt-1">
                         <button
