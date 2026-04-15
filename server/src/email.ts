@@ -49,12 +49,15 @@ export async function sendVerificationEmail(email: string, code: string): Promis
       host: config.host,
       port: config.port,
       secure: config.secure,
-      disableIPv6: true,
+      requireTLS: true,
       auth: {
         user: config.user,
         pass: config.pass,
       },
-    });
+      tls: {
+        rejectUnauthorized: false,
+      },
+    } as nodemailer.TransportOptions);
 
     // 获取邮件模板，默认使用硬编码模板
     let template = await getEmailTemplate('verification_code');
