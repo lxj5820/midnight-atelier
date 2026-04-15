@@ -63,11 +63,43 @@ export async function apiFetch<T = unknown>(
   }
 }
 
-export async function deductComputePoints(points: number, reason?: string) {
+export async function deductComputePoints(points: number, reason?: string, model?: string, type?: string) {
   return await apiFetch('/user/deduct-compute-points', {
     method: 'POST',
-    body: JSON.stringify({ points, reason }),
+    body: JSON.stringify({ points, reason, model, type }),
   });
+}
+
+export async function getGenerationLogs(params: {
+  user_id?: string;
+  model?: string;
+  type?: string;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params.user_id) query.append('user_id', params.user_id);
+  if (params.model) query.append('model', params.model);
+  if (params.type) query.append('type', params.type);
+  if (params.start_date) query.append('start_date', params.start_date);
+  if (params.end_date) query.append('end_date', params.end_date);
+  if (params.limit) query.append('limit', String(params.limit));
+  if (params.offset) query.append('offset', String(params.offset));
+
+  return await apiFetch<{ logs: GenerationLog[]; total: number }>(`/admin/generation-logs?${query.toString()}`, { method: 'GET' });
+}
+
+export interface GenerationLog {
+  id: string;
+  userId: string;
+  model: string;
+  type: string;
+  points: number;
+  createdAt: string;
+  userNickname?: string;
+  userEmail?: string;
 }
 
 export async function refundComputePoints(reason?: string) {
@@ -75,6 +107,18 @@ export async function refundComputePoints(reason?: string) {
     method: 'POST',
     body: JSON.stringify({ reason }),
   });
+}
+
+export async function getRegistrationStatus(): Promise<ApiResponse<{ registration_enabled: boolean }>> {
+  return await apiFetch('/public/registration-status', { method: 'GET' });
+}
+
+export async function getDefaultApiKey(): Promise<ApiResponse<{ default_api_key: string }>> {
+  return await apiFetch('/public/default-api-key', { method: 'GET' });
+}
+
+export async function dailySignIn(): Promise<ApiResponse<{ signedIn: boolean; points?: number; message?: string }>> {
+  return await apiFetch('/user/daily-sign-in', { method: 'POST' });
 }
 // 如需补偿，请通过管理员后台手动操作
 
@@ -88,13 +132,21 @@ export interface ComputePointLog {
   created_at: string;
 }
 
-export async function getComputePointLogs(type?: string, limit: number = 100, offset: number = 0) {
-  const params = new URLSearchParams();
-  if (type) params.append('type', type);
-  params.append('limit', limit.toString());
-  params.append('offset', offset.toString());
+export async function getComputePointLogs(params: {
+  type?: string;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  const searchParams = new URLSearchParams();
+  if (params.type) searchParams.append('type', params.type);
+  if (params.start_date) searchParams.append('start_date', params.start_date);
+  if (params.end_date) searchParams.append('end_date', params.end_date);
+  if (params.limit) searchParams.append('limit', params.limit.toString());
+  if (params.offset) searchParams.append('offset', params.offset.toString());
 
-  return await apiFetch<{ logs: ComputePointLog[]; total: number }>(`/user/compute-points/logs?${params.toString()}`, {
+  return await apiFetch<{ logs: ComputePointLog[]; total: number }>(`/user/compute-points/logs?${searchParams.toString()}`, {
     method: 'GET',
   });
 }

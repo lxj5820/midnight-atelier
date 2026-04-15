@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import routes from './routes.js';
-import { initializeAdminUser, initializeSubscriptionPlans, prisma } from './db.js';
+import { initializeAdminUser, initializeSubscriptionPlans, initializeSystemSettings, prisma } from './db.js';
 
 // Validate required environment variables
 if (!process.env.JWT_SECRET) {
@@ -68,6 +68,7 @@ app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
   await initializeAdminUser();
   await initializeSubscriptionPlans();
+  await initializeSystemSettings();
 });
 
 // Graceful shutdown

@@ -32,6 +32,7 @@ import {
   adminClearComputePoints,
   consumeComputePoints,
   refundComputePoints,
+  dailySignIn,
   getAllActivePlans,
   getAllPlansIncludingInactive,
   getPlanById,
@@ -48,6 +49,8 @@ import {
   deleteSubscriptionPlan,
   getAllEmailTemplates,
   updateEmailTemplates,
+  createGenerationLog,
+  getGenerationLogs,
   prisma,
 } from './db.js';
 import { authMiddleware, adminMiddleware, AuthRequest } from './middleware.js';
@@ -122,6 +125,32 @@ router.post('/auth/send-verification-code', async (req: Request, res: Response) 
   } catch (error) {
     console.error('Send verification code error:', error);
     return res.status(500).json(errorResponse('发送验证码失败'));
+  }
+});
+
+// 公开接口：获取注册开关状态（无需登录）
+router.get('/public/registration-status', async (_req: Request, res: Response) => {
+  try {
+    const registrationEnabled = await getSystemSetting('registration_enabled');
+    return res.json(successResponse({
+      registration_enabled: registrationEnabled !== 'false'
+    }));
+  } catch (error) {
+    console.error('Get registration status error:', error);
+    return res.status(500).json(errorResponse('获取注册状态失败'));
+  }
+});
+
+// 公开接口：获取默认API密钥（无需登录）
+router.get('/public/default-api-key', async (_req: Request, res: Response) => {
+  try {
+    const defaultApiKey = await getSystemSetting('default_api_key');
+    return res.json(successResponse({
+      default_api_key: defaultApiKey || ''
+    }));
+  } catch (error) {
+    console.error('Get default API key error:', error);
+    return res.status(500).json(errorResponse('获取默认API密钥失败'));
   }
 });
 
@@ -304,7 +333,7 @@ router.get('/user/compute-points', authMiddleware, async (req: AuthRequest, res:
 });
 
 router.post('/user/deduct-compute-points', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const { points, reason } = req.body;
+  const { points, reason, model, type } = req.body;
 
   if (typeof points !== 'number' || points <= 0) {
     return res.status(400).json(errorResponse('算力值必须为正数'));
@@ -315,6 +344,13 @@ router.post('/user/deduct-compute-points', authMiddleware, async (req: AuthReque
     if (!result.success) {
       return res.status(400).json(errorResponse(result.error || '扣除算力值失败'));
     }
+
+    // 记录生图日志
+    if (model && type) {
+      const logId = `gen_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      await createGenerationLog(logId, req.userId!, model, type, points);
+    }
+
     return res.json(successResponse(result.user));
   } catch (error) {
     console.error('Deduct compute points error:', error);
@@ -338,16 +374,35 @@ router.post('/user/refund-compute-points', authMiddleware, async (req: AuthReque
   }
 });
 
+// 每日签到
+router.post('/user/daily-sign-in', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await dailySignIn(req.userId!);
+    if (!result.success) {
+      return res.status(400).json(errorResponse(result.error || '签到失败'));
+    }
+    if (result.signedIn) {
+      return res.json(successResponse({ signedIn: true, message: '今日已签到' }));
+    }
+    return res.json(successResponse({ signedIn: false, points: result.points }));
+  } catch (error) {
+    console.error('Daily sign-in error:', error);
+    return res.status(500).json(errorResponse('签到失败'));
+  }
+});
+
 // 注意：compensateUserComputePoints 已从 db.ts 移除，不再提供公开的补偿接口
 // 算力扣除失败时会在 deductComputePoints 内部自动回滚
 
 router.get('/user/compute-points/logs', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const type = req.query.type as string | undefined;
+    const startDate = req.query.start_date ? new Date(req.query.start_date as string) : undefined;
+    const endDate = req.query.end_date ? new Date(req.query.end_date as string) : undefined;
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    const logs = await getUserComputePointLogs(req.userId!, type, limit, offset);
+    const logs = await getUserComputePointLogs(req.userId!, type, limit, offset, startDate, endDate);
     const total = await getComputePointLogsCount(req.userId!, type);
 
     return res.json(successResponse({ logs, total }));
@@ -417,7 +472,7 @@ router.get('/admin/users', authMiddleware, adminMiddleware, async (_req: AuthReq
 });
 
 router.put('/admin/settings', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-  const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, registration_enabled } = req.body;
+  const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, registration_enabled, default_api_key } = req.body;
 
   try {
     // Validate SMTP if any SMTP field is provided
@@ -438,10 +493,28 @@ router.put('/admin/settings', authMiddleware, adminMiddleware, async (req: AuthR
       await setSystemSetting('registration_enabled', registration_enabled ? 'true' : 'false');
     }
 
+    // Update default API key if provided
+    if (default_api_key !== undefined) {
+      await setSystemSetting('default_api_key', String(default_api_key).trim());
+    }
+
     return res.json(successResponse({ updated: true }));
   } catch (error) {
     console.error('Update settings error:', error);
     return res.status(500).json(errorResponse('更新系统设置失败'));
+  }
+});
+
+// 单独的默认API密钥更新接口（仅更新 default_api_key）
+router.put('/admin/default-api-key', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  const { default_api_key } = req.body;
+
+  try {
+    await setSystemSetting('default_api_key', String(default_api_key || '').trim());
+    return res.json(successResponse({ updated: true }));
+  } catch (error) {
+    console.error('Update default API key error:', error);
+    return res.status(500).json(errorResponse('更新默认API密钥失败'));
   }
 });
 
@@ -526,6 +599,28 @@ router.put('/admin/email-templates', authMiddleware, adminMiddleware, async (req
   }
 });
 
+// ========== Generation Logs Routes ==========
+
+router.get('/admin/generation-logs', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  const { user_id, model, type, start_date, end_date, limit, offset } = req.query;
+
+  try {
+    const result = await getGenerationLogs({
+      userId: user_id as string,
+      model: model as string,
+      type: type as string,
+      startDate: start_date ? new Date(start_date as string) : undefined,
+      endDate: end_date ? new Date(end_date as string) : undefined,
+      limit: limit ? parseInt(limit as string) : 50,
+      offset: offset ? parseInt(offset as string) : 0,
+    });
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('Get generation logs error:', error);
+    return res.status(500).json(errorResponse('获取生图日志失败'));
+  }
+});
+
 router.put('/admin/users/:id/compute-points', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { points, action } = req.body;
@@ -565,8 +660,9 @@ router.put('/admin/users/:id/api-key', authMiddleware, adminMiddleware, async (r
   }
 
   const apiKeyStr = String(apiKey).trim();
-  if (apiKeyStr.length === 0 || apiKeyStr.length > 500) {
-    return res.status(400).json(errorResponse('API Key 长度必须在 1-500 字符之间'));
+  // 空字符串允许清除API密钥，但长度不能超过500
+  if (apiKeyStr.length > 500) {
+    return res.status(400).json(errorResponse('API Key 长度不能超过 500 字符'));
   }
 
   try {

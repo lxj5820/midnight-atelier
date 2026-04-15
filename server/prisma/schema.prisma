@@ -22,6 +22,7 @@ model User {
   emailVerificationCodes EmailVerificationCode[]
   computePointLogs       ComputePointLog[]
   userSubscriptions      UserSubscription[]
+  generationLogs         GenerationLog[]
 }
 
 model EmailVerificationCode {
@@ -91,4 +92,18 @@ model UserSubscription {
   plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model GenerationLog {
+  id        String   @id @default(uuid())
+  userId    String
+  model     String
+  type      String
+  points    Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }

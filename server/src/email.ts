@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { getSystemSetting } from './db.js';
+import { getSystemSetting, getEmailTemplate } from './db.js';
 
 export interface SmtpConfig {
   host: string;
@@ -55,21 +55,19 @@ export async function sendVerificationEmail(email: string, code: string): Promis
       },
     });
 
+    // 获取邮件模板，默认使用硬编码模板
+    let template = await getEmailTemplate('verification_code');
+    if (!template) {
+      template = '您的验证码是：${code}\n验证码有效期为 10 分钟，请尽快使用。';
+    }
+    // 替换占位符
+    const emailContent = template.replace(/\$\{code\}/g, code);
+
     await transporter.sendMail({
       from: config.from,
       to: email,
       subject: 'Midnight Atelier - 邮箱验证码',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">邮箱验证码</h2>
-          <p>您的验证码是：</p>
-          <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #333;">
-            ${code}
-          </div>
-          <p style="color: #666; margin-top: 20px;">验证码有效期为 10 分钟，请尽快使用。</p>
-          <p style="color: #999; font-size: 12px; margin-top: 30px;">如果这不是您的操作，请忽略此邮件。</p>
-        </div>
-      `,
+      text: emailContent,
     });
 
     return true;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Settings, Mail, Shield, Trash2, Check, X, Eye, EyeOff, RefreshCw, Zap, Key, Plus, Gift, DollarSign, Minus, XCircle, CreditCard, Calendar, Star, Package, ToggleLeft, ToggleRight, Edit2, Save } from 'lucide-react';
+import { Users, Settings, Mail, Shield, Trash2, Check, X, Eye, EyeOff, RefreshCw, Zap, Key, Plus, Gift, DollarSign, Minus, XCircle, CreditCard, Calendar, Star, Package, ToggleLeft, ToggleRight, Edit2, Save, History } from 'lucide-react';
 import { useAuth } from './AuthContext.tsx';
 import type { User } from './AuthContext.tsx';
 import {
@@ -25,10 +25,13 @@ import {
   deleteUserSubscription,
   getEmailTemplates,
   updateEmailTemplates,
+  updateDefaultApiKey,
+  getGenerationLogs,
   type SmtpSettings,
   type SubscriptionPlan,
   type UserSubscription,
   type PlanInput,
+  type GenerationLog,
 } from './adminApi';
 
 interface AdminPanelProps {
@@ -37,10 +40,10 @@ interface AdminPanelProps {
 
 export default function AdminPanel({ showToast }: AdminPanelProps) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'users' | 'smtp' | 'plans' | 'settings'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'logs' | 'smtp' | 'plans' | 'settings'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [smtpSettings, setSmtpSettings] = useState<SmtpSettings & { registration_enabled?: boolean }>({
+  const [smtpSettings, setSmtpSettings] = useState<SmtpSettings & { registration_enabled?: boolean; default_api_key?: string }>({
     smtp_host: '',
     smtp_port: '587',
     smtp_secure: 'false',
@@ -48,6 +51,7 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
     smtp_pass: '',
     smtp_from: '',
     registration_enabled: true,
+    default_api_key: '',
   });
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -59,6 +63,7 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [newUser, setNewUser] = useState({ email: '', password: '', nickname: '' });
+  const [defaultApiKeyInput, setDefaultApiKeyInput] = useState('');
 
   // Subscription management
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -97,9 +102,17 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
   const [emailTemplateForm, setEmailTemplateForm] = useState('');
   const verificationTemplateDefault = `您的验证码是：\${code}\n验证码有效期为 10 分钟，请尽快使用。`;
 
+  // Generation logs
+  const [generationLogs, setGenerationLogs] = useState<GenerationLog[]>([]);
+  const [logsTotal, setLogsTotal] = useState(0);
+  const [logsPage, setLogsPage] = useState(1);
+  const [logFilter, setLogFilter] = useState({ user_id: '', model: '', type: '', start_date: '', end_date: '' });
+
   useEffect(() => {
     if (activeTab === 'users') {
       loadUsers();
+    } else if (activeTab === 'logs') {
+      loadGenerationLogs();
     } else if (activeTab === 'smtp') {
       loadSmtpSettings();
       loadEmailTemplates();
@@ -137,7 +150,9 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
           smtp_pass: result.data.smtp_pass || '',
           smtp_from: result.data.smtp_from || '',
           registration_enabled: result.data.registration_enabled !== 'false',
+          default_api_key: result.data.default_api_key || '',
         });
+        setDefaultApiKeyInput(result.data.default_api_key || '');
       } else {
         showToast('error', result.error || '加载SMTP设置失败');
       }
@@ -170,6 +185,34 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
     } catch (error) {
       console.error('Failed to load email templates:', error);
     }
+  };
+
+  const loadGenerationLogs = async () => {
+    setIsLoading(true);
+    try {
+      const result = await getGenerationLogs({
+        user_id: logFilter.user_id || undefined,
+        model: logFilter.model || undefined,
+        type: logFilter.type || undefined,
+        start_date: logFilter.start_date || undefined,
+        end_date: logFilter.end_date || undefined,
+        limit: 20,
+        offset: (logsPage - 1) * 20,
+      });
+      if (result.success && result.data) {
+        setGenerationLogs(result.data.logs);
+        setLogsTotal(result.data.total);
+      }
+    } catch (error) {
+      console.error('Failed to load generation logs:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearchLogs = () => {
+    setLogsPage(1);
+    loadGenerationLogs();
   };
 
   const handleDeleteUser = async (userId: string) => {
@@ -214,6 +257,10 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
       const result = await updateSystemSettings(smtpSettings);
       if (result.success) {
         showToast('success', 'SMTP设置已保存');
+        // 同时保存默认API密钥
+        if (smtpSettings.default_api_key !== undefined) {
+          await updateDefaultApiKey(smtpSettings.default_api_key);
+        }
       } else {
         showToast('error', result.error || '保存失败');
       }
@@ -248,6 +295,21 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
         showToast('success', newValue ? '已开启注册功能' : '已关闭注册功能');
       } else {
         showToast('error', result.error || '操作失败');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveDefaultApiKey = async () => {
+    setIsLoading(true);
+    try {
+      const result = await updateDefaultApiKey(defaultApiKeyInput);
+      if (result.success) {
+        setSmtpSettings({ ...smtpSettings, default_api_key: defaultApiKeyInput });
+        showToast('success', '默认API密钥已保存');
+      } else {
+        showToast('error', result.error || '保存失败');
       }
     } finally {
       setIsLoading(false);
@@ -365,6 +427,20 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
       }
     } catch (error) {
       showToast('error', '更新失败');
+    }
+  };
+
+  const handleClearApiKey = async (userId: string) => {
+    try {
+      const result = await updateUserApiKey(userId, '');
+      if (result.success) {
+        showToast('success', 'API Key 已清除');
+        loadUsers();
+      } else {
+        showToast('error', result.error || '清除失败');
+      }
+    } catch (error) {
+      showToast('error', '清除失败');
     }
   };
 
@@ -553,6 +629,15 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
             用户管理
           </button>
           <button
+            onClick={() => setActiveTab('logs')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              activeTab === 'logs' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            生图日志
+          </button>
+          <button
             onClick={() => setActiveTab('smtp')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
               activeTab === 'smtp' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
@@ -604,6 +689,36 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                 </button>
               </div>
             </div>
+
+            {/* 全局默认API密钥设置 */}
+            <div className="p-4 border-b border-white/5 bg-[#0d0f14]">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-white font-bold">全局默认API密钥</p>
+                  <p className="text-slate-400 text-sm mt-0.5">用户未配置自己的API Key时使用此密钥</p>
+                </div>
+                <div className="flex items-center gap-2 flex-1 max-w-md">
+                  <input
+                    type="password"
+                    value={defaultApiKeyInput}
+                    onChange={(e) => setDefaultApiKeyInput(e.target.value)}
+                    placeholder="输入默认API密钥..."
+                    className="flex-1 bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                  <button
+                    onClick={handleSaveDefaultApiKey}
+                    disabled={isLoading}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white text-sm font-bold rounded-lg transition-colors shrink-0"
+                  >
+                    保存
+                  </button>
+                </div>
+                {smtpSettings.default_api_key && (
+                  <span className="text-emerald-400 text-xs shrink-0">已配置 ✓</span>
+                )}
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-[#111317]">
@@ -611,6 +726,7 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">用户</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">邮箱</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">角色</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">套餐</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">API密钥</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">算力值</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">注册时间</th>
@@ -634,16 +750,45 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">{u.email}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {u.is_admin === 1 ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-full text-xs font-bold">
-                            <Shield className="w-3 h-3" />
-                            管理员
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-1 bg-slate-700/50 text-slate-400 rounded-full text-xs font-medium">
-                            普通用户
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {u.is_admin === 1 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-full text-xs font-bold">
+                              <Shield className="w-3 h-3" />
+                              管理员
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 bg-slate-700/50 text-slate-400 rounded-full text-xs font-medium">
+                              普通用户
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleToggleAdmin(u.id, u.is_admin)}
+                            className="p-1 text-slate-500 hover:text-indigo-400 transition-colors"
+                            title={u.is_admin === 1 ? '取消管理员' : '设为管理员'}
+                          >
+                            <Shield className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {u.subscription_plan ? (
+                            <span className="inline-flex items-center px-2 py-1 bg-emerald-600/20 text-emerald-400 rounded-full text-xs font-medium">
+                              {u.subscription_plan}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 bg-slate-700/50 text-slate-500 rounded-full text-xs font-medium">
+                              无套餐
+                            </span>
+                          )}
+                          <button
+                            onClick={() => openSubscriptionModal(u.id, u.nickname)}
+                            className="p-1 text-slate-500 hover:text-emerald-400 transition-colors"
+                            title="管理套餐"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {editingApiKeyUserId === u.id ? (
@@ -684,27 +829,38 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                         ) : (
                           <div className="flex items-center gap-2">
                             {u.api_key ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-600/20 text-green-400 rounded-full text-xs font-bold">
-                                <Key className="w-3 h-3" />
-                                已配置
-                              </span>
+                              <>
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-600/20 text-green-400 rounded-full text-xs font-bold">
+                                  <Key className="w-3 h-3" />
+                                  已配置
+                                </span>
+                                <button
+                                  onClick={() => handleClearApiKey(u.id)}
+                                  className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
+                                  title="清除API密钥"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700/50 text-slate-400 rounded-full text-xs font-medium">
-                                <Key className="w-3 h-3" />
-                                未配置
-                              </span>
+                              <>
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700/50 text-slate-400 rounded-full text-xs font-medium">
+                                  <Key className="w-3 h-3" />
+                                  未配置
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setEditingApiKeyUserId(u.id);
+                                    setApiKeyInput('');
+                                    setShowApiKey(false);
+                                  }}
+                                  className="p-1 text-slate-500 hover:text-indigo-400 transition-colors"
+                                  title="设置API密钥"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
-                            <button
-                              onClick={() => {
-                                setEditingApiKeyUserId(u.id);
-                                setApiKeyInput(u.api_key || '');
-                                setShowApiKey(false);
-                              }}
-                              className="p-1 text-slate-500 hover:text-indigo-400 transition-colors"
-                              title="设置API密钥"
-                            >
-                              <Settings className="w-3.5 h-3.5" />
-                            </button>
                           </div>
                         )}
                       </td>
@@ -784,28 +940,13 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => openSubscriptionModal(u.id, u.nickname)}
-                            className="px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-xs font-medium transition-all"
-                          >
-                            <CreditCard className="w-3 h-3 inline mr-1" />
-                            套餐
-                          </button>
                           {u.id !== user.id && (
-                            <>
-                              <button
-                                onClick={() => handleToggleAdmin(u.id, u.is_admin)}
-                                className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-xs font-medium transition-all"
-                              >
-                                {u.is_admin === 1 ? '取消管理员' : '设为管理员'}
-                              </button>
-                              <button
-                                onClick={() => handleDeleteUser(u.id)}
-                                className="p-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg transition-all"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleDeleteUser(u.id)}
+                              className="p-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-lg transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           )}
                           {u.id === user.id && (
                             <span className="text-xs text-slate-500">当前用户</span>
@@ -823,6 +964,135 @@ export default function AdminPanel({ showToast }: AdminPanelProps) {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="bg-[#1c1f26] rounded-2xl border border-white/5 overflow-hidden">
+            <div className="p-6 border-b border-white/5">
+              <h2 className="text-xl font-bold text-white">生图日志</h2>
+              <p className="text-slate-400 text-sm mt-1">共 {logsTotal} 条记录</p>
+            </div>
+
+            {/* Filters */}
+            <div className="p-4 border-b border-white/5 bg-[#0d0f14]">
+              <div className="grid grid-cols-5 gap-3">
+                <input
+                  type="text"
+                  placeholder="用户昵称"
+                  value={logFilter.user_id}
+                  onChange={(e) => setLogFilter({ ...logFilter, user_id: e.target.value })}
+                  className="bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <input
+                  type="text"
+                  placeholder="模型"
+                  value={logFilter.model}
+                  onChange={(e) => setLogFilter({ ...logFilter, model: e.target.value })}
+                  className="bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <input
+                  type="text"
+                  placeholder="类型"
+                  value={logFilter.type}
+                  onChange={(e) => setLogFilter({ ...logFilter, type: e.target.value })}
+                  className="bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <input
+                  type="date"
+                  placeholder="开始日期"
+                  value={logFilter.start_date}
+                  onChange={(e) => setLogFilter({ ...logFilter, start_date: e.target.value })}
+                  className="bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    placeholder="结束日期"
+                    value={logFilter.end_date}
+                    onChange={(e) => setLogFilter({ ...logFilter, end_date: e.target.value })}
+                    className="flex-1 bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                  <button
+                    onClick={handleSearchLogs}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg transition-colors shrink-0"
+                  >
+                    筛选
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[#111317]">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">时间</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">用户</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">模型</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">类型</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">消耗算力</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {generationLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-[#111317] transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
+                        {new Date(log.createdAt).toLocaleString('zh-CN')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-white">{log.userNickname || '未知'}</span>
+                          <span className="text-xs text-slate-500">{log.userEmail || ''}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{log.model}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-full text-xs font-medium">
+                          {log.type}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-rose-600/20 text-rose-400 rounded-full text-xs font-bold">
+                          <Zap className="w-3 h-3" />
+                          {log.points}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {generationLogs.length === 0 && !isLoading && (
+                <div className="text-center py-12">
+                  <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                  <p className="text-slate-500 text-sm">暂无生图记录</p>
+                </div>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {logsTotal > 20 && (
+              <div className="p-4 border-t border-white/5 flex items-center justify-between">
+                <button
+                  onClick={() => { setLogsPage(p => Math.max(1, p - 1)); loadGenerationLogs(); }}
+                  disabled={logsPage === 1}
+                  className="px-4 py-2 bg-[#1c1f26] hover:bg-[#2a2e38] text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                >
+                  上一页
+                </button>
+                <span className="text-sm text-slate-400">
+                  第 {logsPage} / {Math.ceil(logsTotal / 20)} 页
+                </span>
+                <button
+                  onClick={() => { setLogsPage(p => p + 1); loadGenerationLogs(); }}
+                  disabled={logsPage >= Math.ceil(logsTotal / 20)}
+                  className="px-4 py-2 bg-[#1c1f26] hover:bg-[#2a2e38] text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                >
+                  下一页
+                </button>
+              </div>
+            )}
           </div>
         )}
 

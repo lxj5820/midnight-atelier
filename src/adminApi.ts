@@ -12,6 +12,7 @@ export interface SmtpSettings {
 
 export interface SystemSettings extends SmtpSettings {
   registration_enabled?: boolean;
+  default_api_key?: string;
 }
 
 export async function getAdminUsers() {
@@ -37,6 +38,13 @@ export async function updateSystemSettings(settings: Partial<SystemSettings> & {
   return await apiFetch('/admin/settings', {
     method: 'PUT',
     body: JSON.stringify(settings),
+  });
+}
+
+export async function updateDefaultApiKey(apiKey: string) {
+  return await apiFetch('/admin/default-api-key', {
+    method: 'PUT',
+    body: JSON.stringify({ default_api_key: apiKey }),
   });
 }
 
@@ -194,4 +202,37 @@ export async function updateEmailTemplates(templates: Record<string, string>) {
     method: 'PUT',
     body: JSON.stringify({ templates }),
   });
+}
+
+// Generation Logs
+export interface GenerationLog {
+  id: string;
+  userId: string;
+  model: string;
+  type: string;
+  points: number;
+  createdAt: string;
+  userNickname?: string;
+  userEmail?: string;
+}
+
+export async function getGenerationLogs(params: {
+  user_id?: string;
+  model?: string;
+  type?: string;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params.user_id) query.append('user_id', params.user_id);
+  if (params.model) query.append('model', params.model);
+  if (params.type) query.append('type', params.type);
+  if (params.start_date) query.append('start_date', params.start_date);
+  if (params.end_date) query.append('end_date', params.end_date);
+  if (params.limit) query.append('limit', String(params.limit));
+  if (params.offset) query.append('offset', String(params.offset));
+
+  return await apiFetch<{ logs: GenerationLog[]; total: number }>(`/admin/generation-logs?${query.toString()}`, { method: 'GET' });
 }

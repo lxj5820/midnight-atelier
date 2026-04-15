@@ -26,6 +26,7 @@ export interface SafeUser {
   compute_points: number;
   created_at: string;
   updated_at: string;
+  subscription_plan?: string;
 }
 
 export function toSafeUser(user: User): SafeUser {
@@ -35,6 +36,14 @@ export function toSafeUser(user: User): SafeUser {
     created_at: safe.created_at.toISOString(),
     updated_at: safe.updated_at.toISOString(),
   };
+}
+
+export function toSafeUserWithSubscription(user: User, planName?: string): SafeUser {
+  const safe = toSafeUser(user);
+  if (planName) {
+    safe.subscription_plan = planName;
+  }
+  return safe;
 }
 
 export async function findUserByEmail(email: string): Promise<User | undefined> {
@@ -163,8 +172,22 @@ export async function getAllSystemSettings(): Promise<Record<string, string>> {
 // ========== Admin Functions ==========
 
 export async function getAllUsers(): Promise<SafeUser[]> {
-  const users = await prisma.user.findMany({ orderBy: { created_at: 'desc' } });
-  return users.map(toSafeUser);
+  const users = await prisma.user.findMany({
+    orderBy: { created_at: 'desc' },
+    include: {
+      userSubscriptions: {
+        where: { status: 'active', expireDate: { gt: new Date() } },
+        orderBy: { expireDate: 'desc' },
+        take: 1,
+        include: { plan: true },
+      },
+    },
+  });
+
+  return users.map((user) => {
+    const activeSub = user.userSubscriptions[0];
+    return toSafeUserWithSubscription(user, activeSub?.plan?.name);
+  });
 }
 
 export async function deleteUserById(id: string): Promise<boolean> {
@@ -231,7 +254,7 @@ export async function createComputePointLog(
   id: string,
   userId: string,
   amount: number,
-  type: 'gift' | 'compensation' | 'deduct' | 'clear' | 'consume' | 'refund',
+  type: 'gift' | 'compensation' | 'deduct' | 'clear' | 'consume' | 'refund' | 'sign_in',
   reason: string,
   operatorId: string = ''
 ) {
@@ -247,12 +270,24 @@ export async function createComputePointLog(
   });
 }
 
-export async function getUserComputePointLogs(userId: string, type?: string, limit: number = 100, offset: number = 0) {
+export async function getUserComputePointLogs(
+  userId: string,
+  type?: string,
+  limit: number = 100,
+  offset: number = 0,
+  startDate?: Date,
+  endDate?: Date
+) {
+  const where: any = { userId };
+  if (type) where.type = type;
+  if (startDate || endDate) {
+    where.createdAt = {};
+    if (startDate) where.createdAt.gte = startDate;
+    if (endDate) where.createdAt.lte = endDate;
+  }
+
   const logs = await prisma.computePointLog.findMany({
-    where: {
-      userId,
-      ...(type ? { type } : {}),
-    },
+    where,
     orderBy: { createdAt: 'desc' },
     take: limit,
     skip: offset,
@@ -363,6 +398,54 @@ export async function refundComputePoints(userId: string, reason: string): Promi
   return { success: true, refunded: refundedAmount };
 }
 
+// 每日签到：检查用户是否已签到，签到则赠送积分
+export async function dailySignIn(userId: string): Promise<{ success: boolean; signedIn?: boolean; points?: number; error?: string }> {
+  // 获取用户活跃订阅
+  const activeSubscription = await getUserActiveSubscription(userId);
+  if (!activeSubscription) {
+    return { success: false, error: '暂无有效订阅，无法签到' };
+  }
+
+  // 获取每日签到积分
+  const dailyPoints = activeSubscription.daily_sign_in || 0;
+  if (dailyPoints <= 0) {
+    return { success: false, error: '当前订阅不支持签到' };
+  }
+
+  // 检查今日是否已签到（查找今天的 sign_in 类型日志）
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const existingSignIn = await prisma.computePointLog.findFirst({
+    where: {
+      userId,
+      type: 'sign_in',
+      createdAt: {
+        gte: today,
+        lt: tomorrow,
+      },
+    },
+  });
+
+  if (existingSignIn) {
+    return { success: true, signedIn: true, points: 0 };
+  }
+
+  // 签到送积分
+  const user = await addUserComputePoints(userId, dailyPoints);
+  if (!user) {
+    return { success: false, error: '签到失败' };
+  }
+
+  // 记录签到日志
+  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  await createComputePointLog(logId, userId, dailyPoints, 'sign_in', `每日签到奖励「${activeSubscription.plan_name}」`, userId);
+
+  return { success: true, signedIn: false, points: dailyPoints };
+}
+
 // 注意：compensateUserComputePoints 已删除，不再提供公开的补偿接口
 // 如需补偿，请通过管理员后台手动操作
 
@@ -394,6 +477,11 @@ export interface UserSubscription {
   auto_renew: number;
   created_at: string;
   updated_at: string;
+  plan_name?: string;
+  plan_price?: number;
+  plan_period?: string;
+  qualities?: string[];
+  daily_sign_in?: number;
 }
 
 export async function getAllActivePlans(): Promise<SubscriptionPlan[]> {
@@ -485,6 +573,7 @@ export async function getUserActiveSubscription(userId: string) {
     plan_price: sub.plan.price,
     plan_period: sub.plan.period,
     qualities: JSON.parse(sub.plan.qualities) as string[],
+    daily_sign_in: sub.plan.dailySignIn,
   };
 }
 
@@ -609,6 +698,21 @@ export async function initializeSubscriptionPlans() {
     await prisma.subscriptionPlan.create({ data: plan });
   }
   console.log('Subscription plans initialized');
+}
+
+// ========== Initialize System Settings ==========
+
+export async function initializeSystemSettings() {
+  // 确保 registration_enabled 设置存在，默认值为 'true'（开启）
+  const existingSetting = await prisma.systemSetting.findUnique({
+    where: { key: 'registration_enabled' }
+  });
+  if (!existingSetting) {
+    await prisma.systemSetting.create({
+      data: { key: 'registration_enabled', value: 'true' }
+    });
+    console.log('System setting registration_enabled initialized to true');
+  }
 }
 
 // ========== Subscription Plan CRUD ==========
@@ -755,4 +859,74 @@ export async function updateEmailTemplates(templates: Record<string, string>) {
   for (const [key, value] of Object.entries(templates)) {
     await setEmailTemplate(key, value);
   }
+}
+
+// ========== Generation Log ==========
+
+export interface GenerationLog {
+  id: string;
+  userId: string;
+  model: string;
+  type: string;
+  points: number;
+  createdAt: string;
+  userNickname?: string;
+  userEmail?: string;
+}
+
+export async function createGenerationLog(id: string, userId: string, model: string, type: string, points: number) {
+  await prisma.generationLog.create({
+    data: {
+      id,
+      userId,
+      model,
+      type,
+      points,
+    },
+  });
+}
+
+export async function getGenerationLogs(params: {
+  userId?: string;
+  model?: string;
+  type?: string;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+  offset?: number;
+}): Promise<{ logs: GenerationLog[]; total: number }> {
+  const where: any = {};
+  if (params.userId) where.userId = params.userId;
+  if (params.model) where.model = { contains: params.model };
+  if (params.type) where.type = params.type;
+  if (params.startDate || params.endDate) {
+    where.createdAt = {};
+    if (params.startDate) where.createdAt.gte = params.startDate;
+    if (params.endDate) where.createdAt.lte = params.endDate;
+  }
+
+  const [logs, total] = await Promise.all([
+    prisma.generationLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: params.limit || 50,
+      skip: params.offset || 0,
+      include: { user: true },
+    }),
+    prisma.generationLog.count({ where }),
+  ]);
+
+  return {
+    logs: logs.map(log => ({
+      id: log.id,
+      userId: log.userId,
+      model: log.model,
+      type: log.type,
+      points: log.points,
+      createdAt: log.createdAt.toISOString(),
+      userNickname: log.user?.nickname,
+      userEmail: log.user?.email,
+    })),
+    total,
+  };
 }

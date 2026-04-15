@@ -40,10 +40,11 @@ import {
   Key,
   ChevronUp,
   History,
-  Star
+  Star,
+  Gift
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getComputePointLogs, type ComputePointLog, deductComputePoints, refundComputePoints, getUserSubscription, type UserSubscription } from './api';
+import { getComputePointLogs, type ComputePointLog, deductComputePoints, refundComputePoints, getUserSubscription, type UserSubscription, getRegistrationStatus, dailySignIn, getDefaultApiKey } from './api';
 import { getSystemSettings } from './adminApi';
 
 // --- Types ---
@@ -613,12 +614,14 @@ const TopBar = ({
   currentView,
   setView,
   onShowComputeModal,
+  showToast,
 }: {
   currentView: View,
   setView: (v: View) => void,
   onShowComputeModal: () => void,
+  showToast: (type: 'success' | 'error' | 'info', message: string) => void,
 }) => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
 
   useEffect(() => {
@@ -666,6 +669,27 @@ const TopBar = ({
       <div className="flex items-center gap-4">
         {user && (
           <>
+            {planName !== 'free版' && (
+              <button
+                onClick={async () => {
+                  const result = await dailySignIn();
+                  if (result.success) {
+                    if (result.data?.signedIn) {
+                      showToast('info', '今日已签到');
+                    } else {
+                      showToast('success', `签到成功！获得 ${result.data?.points} 算力`);
+                      refreshUser();
+                    }
+                  } else {
+                    showToast('error', result.error || '签到失败');
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600/10 rounded-full border border-emerald-500/20 cursor-pointer hover:bg-emerald-600/20 transition-colors"
+              >
+                <Gift className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-bold text-emerald-400">签到</span>
+              </button>
+            )}
             <div
               onClick={onShowComputeModal}
               className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 rounded-full border border-indigo-500/20 cursor-pointer hover:bg-indigo-600/20 transition-colors"
@@ -937,7 +961,7 @@ const WorkspaceView = ({
     }
 
     // 先扣除算力值，再开始生成
-    const deductResult = await deductComputePoints(requiredPoints, '生成图片消耗');
+    const deductResult = await deductComputePoints(requiredPoints, '生成图片消耗', model, getMenuItemLabel(activeMenuItem));
     if (!deductResult.success) {
       showToast('error', deductResult.error || '算力值不足，扣除失败');
       return;
@@ -1735,9 +1759,9 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
     // 获取注册开关状态
     const loadSettings = async () => {
       try {
-        const settings = await getSystemSettings();
-        if (settings?.success && settings.data?.registration_enabled !== undefined) {
-          setRegistrationEnabled(settings.data.registration_enabled === true || settings.data.registration_enabled === 'true');
+        const result = await getRegistrationStatus();
+        if (result?.success && result.data?.registration_enabled !== undefined) {
+          setRegistrationEnabled(result.data.registration_enabled);
         }
       } catch (e) {
         console.error('Failed to load settings:', e);
@@ -1962,28 +1986,37 @@ const SettingsView = ({
   showToast: (type: 'success' | 'error' | 'info', message: string) => void,
 }) => {
   const { user, updateProfile, updatePassword, logout } = useAuth();
-  const [profile, setProfile] = useState({ nickname: user?.nickname || '', avatar: user?.avatar || '' });
+  const [profile, setProfile] = useState({ nickname: user?.nickname || '' });
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [logs, setLogs] = useState<ComputePointLog[]>([]);
   const [logsTotal, setLogsTotal] = useState(0);
-  const [logsFilter, setLogsFilter] = useState<string>('');
   const [logsPage, setLogsPage] = useState(0);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'info' | 'logs'>('info');
+  const [logFilter, setLogFilter] = useState({ type: '', start_date: '', end_date: '' });
 
   useEffect(() => {
     if (user) {
-      setProfile({ nickname: user.nickname || '', avatar: user.avatar || '' });
+      setProfile({ nickname: user.nickname || '' });
     }
   }, [user]);
 
   useEffect(() => {
-    loadLogs();
-  }, [logsFilter, logsPage]);
+    if (settingsTab === 'logs') {
+      loadLogs();
+    }
+  }, [settingsTab, logsPage]);
 
   const loadLogs = async () => {
     setIsLoadingLogs(true);
     try {
-      const result = await getComputePointLogs(logsFilter || undefined, 20, logsPage * 20);
+      const result = await getComputePointLogs({
+        type: logFilter.type || undefined,
+        start_date: logFilter.start_date || undefined,
+        end_date: logFilter.end_date || undefined,
+        limit: 20,
+        offset: logsPage * 20,
+      });
       if (result.success && result.data) {
         setLogs(result.data.logs);
         setLogsTotal(result.data.total);
@@ -1996,7 +2029,7 @@ const SettingsView = ({
   };
 
   const handleSaveProfile = async () => {
-    const result = await updateProfile({ nickname: profile.nickname.trim(), avatar: profile.avatar.trim() });
+    const result = await updateProfile({ nickname: profile.nickname.trim() });
     if (result.success) {
       showToast('success', '个人资料已更新');
     } else {
@@ -2025,208 +2058,262 @@ const SettingsView = ({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-      <div className="max-w-3xl mx-auto space-y-8">
+      <div className="max-w-3xl mx-auto space-y-6">
         <div className="space-y-2">
           <h1 className="text-4xl font-black font-headline text-white tracking-tight">个人中心</h1>
           <p className="text-slate-400">管理您的账户资料、算力值与安全选项。</p>
         </div>
 
-        {/* 个人资料 */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-4">
-            <User className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold font-headline text-white">个人资料</h2>
-          </div>
-          <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-5 border border-white/5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-white/80">昵称</label>
-                <input
-                  type="text"
-                  value={profile.nickname}
-                  onChange={(e) => setProfile(p => ({ ...p, nickname: e.target.value }))}
-                  placeholder="您的昵称"
-                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-white/80">头像 URL</label>
-                <input
-                  type="text"
-                  value={profile.avatar}
-                  onChange={(e) => setProfile(p => ({ ...p, avatar: e.target.value }))}
-                  placeholder="https://..."
-                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-4 bg-indigo-600/10 rounded-xl border border-indigo-500/20">
-              <Zap className="w-5 h-5 text-indigo-400" />
-              <div className="flex-1">
-                <p className="text-sm font-bold text-white">当前算力值</p>
-                <p className="text-xs text-slate-400 mt-0.5">生成图片会消耗算力值（V2: 1点 / PRO: 3点）</p>
-              </div>
-              <div className="text-2xl font-black text-indigo-400">{user?.compute_points || 0}</div>
-            </div>
-            <button
-              onClick={handleSaveProfile}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-lg font-bold transition-all"
-            >
-              保存资料
-            </button>
-          </div>
-        </section>
+        {/* Tab Navigation */}
+        <div className="flex gap-2 p-1 bg-[#1c1f26] rounded-xl border border-white/5 w-fit">
+          <button
+            onClick={() => setSettingsTab('info')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              settingsTab === 'info' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <User className="w-4 h-4" />
+            个人资料
+          </button>
+          <button
+            onClick={() => setSettingsTab('logs')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              settingsTab === 'logs' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            算力记录
+          </button>
+        </div>
 
-        {/* 算力记录 */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-4">
-            <History className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold font-headline text-white">算力记录</h2>
-          </div>
-          <div className="bg-[#1c1f26] rounded-2xl border border-white/5 overflow-hidden">
-            <div className="p-4 border-b border-white/5 flex items-center justify-between">
-              <select
-                value={logsFilter}
-                onChange={(e) => {
-                  setLogsFilter(e.target.value);
-                  setLogsPage(0);
-                }}
-                className="bg-[#111317] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
-              >
-                <option value="">全部记录</option>
-                <option value="gift">赠送</option>
-                <option value="compensation">补偿</option>
-                <option value="deduct">扣除</option>
-                <option value="clear">清空</option>
-                <option value="consume">消费</option>
-              </select>
-              <button
-                onClick={loadLogs}
-                disabled={isLoadingLogs}
-                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-sm font-medium transition-all"
-              >
-                <RefreshCw className={`w-4 h-4 ${isLoadingLogs ? 'animate-spin' : ''}`} />
-                刷新
-              </button>
+        {/* Personal Info Tab */}
+        {settingsTab === 'info' && (
+          <>
+            <section className="space-y-4">
+              <div className="flex items-center gap-4">
+                <User className="w-5 h-5 text-indigo-400" />
+                <h2 className="text-xl font-bold font-headline text-white">个人资料</h2>
+              </div>
+              <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-5 border border-white/5">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">昵称</label>
+                  <input
+                    type="text"
+                    value={profile.nickname}
+                    onChange={(e) => setProfile(p => ({ ...p, nickname: e.target.value }))}
+                    placeholder="您的昵称"
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">邮箱</label>
+                  <div className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-slate-400">
+                    {user?.email}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-3 p-4 bg-indigo-600/10 rounded-xl border border-indigo-500/20">
+                    <Zap className="w-5 h-5 text-indigo-400" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-white">当前算力值</p>
+                    </div>
+                    <div className="text-xl font-black text-indigo-400">{user?.compute_points || 0}</div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 bg-emerald-600/10 rounded-xl border border-emerald-500/20">
+                    <Package className="w-5 h-5 text-emerald-400" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-white">当前套餐</p>
+                    </div>
+                    <div className="text-sm font-bold text-emerald-400">free版</div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSaveProfile}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-lg font-bold transition-all"
+                >
+                  保存资料
+                </button>
+              </div>
+            </section>
+
+            {/* 修改密码 */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-4">
+                <LogOut className="w-5 h-5 text-indigo-400" />
+                <h2 className="text-xl font-bold font-headline text-white">安全</h2>
+              </div>
+              <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-5 border border-white/5">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-white/80">当前密码</label>
+                  <input
+                    type="password"
+                    value={passwords.current}
+                    onChange={(e) => setPasswords(p => ({ ...p, current: e.target.value }))}
+                    placeholder="当前密码"
+                    className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-white/80">新密码</label>
+                    <input
+                      type="password"
+                      value={passwords.new}
+                      onChange={(e) => setPasswords(p => ({ ...p, new: e.target.value }))}
+                      placeholder="至少 6 位"
+                      className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-white/80">确认新密码</label>
+                    <input
+                      type="password"
+                      value={passwords.confirm}
+                      onChange={(e) => setPasswords(p => ({ ...p, confirm: e.target.value }))}
+                      placeholder="再次输入新密码"
+                      className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleChangePassword}
+                  className="w-full bg-[#2a2e38] hover:bg-slate-600 text-white py-2.5 rounded-lg font-bold transition-all"
+                >
+                  修改密码
+                </button>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* Compute Logs Tab */}
+        {settingsTab === 'logs' && (
+          <section className="space-y-4">
+            <div className="flex items-center gap-4">
+              <History className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-xl font-bold font-headline text-white">算力记录</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-[#111317]">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">时间</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">类型</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">变动</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">原因</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-[#111317] transition-colors">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-400">
-                        {new Date(log.created_at).toLocaleString('zh-CN')}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${
-                          log.type === 'gift' ? 'bg-green-600/20 text-green-400' :
-                          log.type === 'compensation' ? 'bg-blue-600/20 text-blue-400' :
-                          log.type === 'deduct' ? 'bg-orange-600/20 text-orange-400' :
-                          log.type === 'clear' ? 'bg-red-600/20 text-red-400' :
-                          'bg-purple-600/20 text-purple-400'
-                        }`}>
-                          {log.type === 'gift' ? '赠送' :
-                           log.type === 'compensation' ? '补偿' :
-                           log.type === 'deduct' ? '扣除' :
-                           log.type === 'clear' ? '清空' : '消费'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-sm font-bold ${log.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {log.amount > 0 ? '+' : ''}{log.amount}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-400">{log.reason || '-'}</td>
+            <div className="bg-[#1c1f26] rounded-2xl border border-white/5 overflow-hidden">
+              {/* Filters */}
+              <div className="p-4 border-b border-white/5 bg-[#0d0f14]">
+                <div className="grid grid-cols-4 gap-3">
+                  <select
+                    value={logFilter.type}
+                    onChange={(e) => setLogFilter(f => ({ ...f, type: e.target.value }))}
+                    className="bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  >
+                    <option value="">全部类型</option>
+                    <option value="gift">赠送</option>
+                    <option value="compensation">补偿</option>
+                    <option value="deduct">扣除</option>
+                    <option value="clear">清空</option>
+                    <option value="consume">消费</option>
+                    <option value="sign_in">签到</option>
+                    <option value="refund">退款</option>
+                  </select>
+                  <input
+                    type="date"
+                    placeholder="开始日期"
+                    value={logFilter.start_date}
+                    onChange={(e) => setLogFilter(f => ({ ...f, start_date: e.target.value }))}
+                    className="bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      placeholder="结束日期"
+                      value={logFilter.end_date}
+                      onChange={(e) => setLogFilter(f => ({ ...f, end_date: e.target.value }))}
+                      className="flex-1 bg-[#1c1f26] border border-white/5 rounded-lg py-2 px-3 text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    />
+                    <button
+                      onClick={() => { setLogsPage(0); loadLogs(); }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg transition-colors shrink-0"
+                    >
+                      筛选
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-[#111317]">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">时间</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">类型</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">变动</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">原因</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {logs.length === 0 && !isLoadingLogs && (
-                <div className="text-center py-12">
-                  <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-500 text-sm">暂无记录</p>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {logs.map((log) => (
+                      <tr key={log.id} className="hover:bg-[#111317] transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-400">
+                          {new Date(log.created_at).toLocaleString('zh-CN')}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${
+                            log.type === 'gift' ? 'bg-green-600/20 text-green-400' :
+                            log.type === 'compensation' ? 'bg-blue-600/20 text-blue-400' :
+                            log.type === 'deduct' ? 'bg-orange-600/20 text-orange-400' :
+                            log.type === 'clear' ? 'bg-red-600/20 text-red-400' :
+                            log.type === 'sign_in' ? 'bg-emerald-600/20 text-emerald-400' :
+                            log.type === 'refund' ? 'bg-cyan-600/20 text-cyan-400' :
+                            'bg-purple-600/20 text-purple-400'
+                          }`}>
+                            {log.type === 'gift' ? '赠送' :
+                             log.type === 'compensation' ? '补偿' :
+                             log.type === 'deduct' ? '扣除' :
+                             log.type === 'clear' ? '清空' :
+                             log.type === 'sign_in' ? '签到' :
+                             log.type === 'refund' ? '退款' : '消费'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`text-sm font-bold ${log.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {log.amount > 0 ? '+' : ''}{log.amount}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-400">{log.reason || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {logs.length === 0 && !isLoadingLogs && (
+                  <div className="text-center py-12">
+                    <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-500 text-sm">暂无记录</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Pagination */}
+              {logsTotal > 20 && (
+                <div className="p-4 border-t border-white/5 flex items-center justify-between">
+                  <button
+                    onClick={() => setLogsPage(p => Math.max(0, p - 1))}
+                    disabled={logsPage === 0}
+                    className="px-3 py-1.5 bg-[#111317] hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
+                  >
+                    上一页
+                  </button>
+                  <span className="text-sm text-slate-400">
+                    第 {logsPage + 1} 页 / 共 {Math.ceil(logsTotal / 20)} 页
+                  </span>
+                  <button
+                    onClick={() => setLogsPage(p => p + 1)}
+                    disabled={(logsPage + 1) * 20 >= logsTotal}
+                    className="px-3 py-1.5 bg-[#111317] hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
+                  >
+                    下一页
+                  </button>
                 </div>
               )}
             </div>
-            {logsTotal > 20 && (
-              <div className="p-4 border-t border-white/5 flex items-center justify-between">
-                <button
-                  onClick={() => setLogsPage(p => Math.max(0, p - 1))}
-                  disabled={logsPage === 0}
-                  className="px-3 py-1.5 bg-[#111317] hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
-                >
-                  上一页
-                </button>
-                <span className="text-sm text-slate-400">
-                  第 {logsPage + 1} 页 / 共 {Math.ceil(logsTotal / 20)} 页
-                </span>
-                <button
-                  onClick={() => setLogsPage(p => p + 1)}
-                  disabled={(logsPage + 1) * 20 >= logsTotal}
-                  className="px-3 py-1.5 bg-[#111317] hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-all"
-                >
-                  下一页
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* 修改密码 */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-4">
-            <LogOut className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold font-headline text-white">安全</h2>
-          </div>
-          <div className="bg-[#1c1f26] rounded-2xl p-6 space-y-5 border border-white/5">
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-white/80">当前密码</label>
-              <input
-                type="password"
-                value={passwords.current}
-                onChange={(e) => setPasswords(p => ({ ...p, current: e.target.value }))}
-                placeholder="当前密码"
-                className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-white/80">新密码</label>
-                <input
-                  type="password"
-                  value={passwords.new}
-                  onChange={(e) => setPasswords(p => ({ ...p, new: e.target.value }))}
-                  placeholder="至少 6 位"
-                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-white/80">确认新密码</label>
-                <input
-                  type="password"
-                  value={passwords.confirm}
-                  onChange={(e) => setPasswords(p => ({ ...p, confirm: e.target.value }))}
-                  placeholder="再次输入新密码"
-                  className="w-full bg-[#111317] border border-white/5 rounded-lg py-3 px-4 text-white outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                />
-              </div>
-            </div>
-            <button
-              onClick={handleChangePassword}
-              className="w-full bg-[#2a2e38] hover:bg-slate-600 text-white py-2.5 rounded-lg font-bold transition-all"
-            >
-              修改密码
-            </button>
-          </div>
-        </section>
+          </section>
+        )}
       </div>
     </div>
   );
@@ -2462,6 +2549,16 @@ export default function App() {
   const [galleryCategory, setGalleryCategory] = useState<GalleryCategory>('hot');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showComputeModal, setShowComputeModal] = useState(false);
+  const [defaultApiKey, setDefaultApiKey] = useState<string>('');
+
+  // Fetch default API key on mount
+  useEffect(() => {
+    getDefaultApiKey().then(res => {
+      if (res.success && res.data?.default_api_key) {
+        setDefaultApiKey(res.data.default_api_key);
+      }
+    }).catch(console.error);
+  }, []);
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString();
@@ -2535,7 +2632,7 @@ export default function App() {
     return <WelcomeView showToast={showToast} />;
   }
 
-  const apiKey = user.api_key || '';
+  const apiKey = user.api_key || defaultApiKey || '';
 
   return (
     <div className="flex h-screen font-sans overflow-hidden">
@@ -2555,6 +2652,7 @@ export default function App() {
             refreshUser();
             setShowComputeModal(true);
           }}
+          showToast={showToast}
         />
 
         <main className="flex-1 flex flex-col bg-[#111317] overflow-hidden">
