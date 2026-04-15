@@ -1978,10 +1978,19 @@ const SettingsView = ({
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'info' | 'logs'>('info');
   const [logFilter, setLogFilter] = useState({ type: '', start_date: '', end_date: '' });
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
 
   useEffect(() => {
     if (user) {
       setProfile({ nickname: user.nickname || '' });
+      // 获取用户订阅信息
+      getUserSubscription().then(res => {
+        if (res.success && res.data) {
+          setSubscription(res.data);
+        } else {
+          setSubscription(null);
+        }
+      });
     }
   }, [user]);
 
@@ -2108,7 +2117,7 @@ const SettingsView = ({
                     <div className="flex-1">
                       <p className="text-sm font-bold text-white">当前套餐</p>
                     </div>
-                    <div className="text-sm font-bold text-emerald-400">free版</div>
+                    <div className="text-sm font-bold text-emerald-400">{subscription?.plan_name || '免费版'}</div>
                   </div>
                 </div>
                 <button
