@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 export const prisma = new PrismaClient();
 
@@ -223,9 +224,15 @@ export async function updateUserComputePoints(id: string, points: number): Promi
 }
 
 export async function addUserComputePoints(id: string, points: number): Promise<SafeUser | undefined> {
-  const user = await prisma.user.findUnique({ where: { id } });
-  if (!user) return undefined;
-  return await updateUserComputePoints(id, user.compute_points + points);
+  try {
+    const user = await prisma.user.update({
+      where: { id },
+      data: { compute_points: { increment: points } },
+    });
+    return toSafeUser(user);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function deductUserComputePoints(id: string, points: number) {
@@ -308,37 +315,56 @@ export async function getComputePointLogsCount(userId: string, type?: string): P
 }
 
 export async function adminGiftComputePoints(userId: string, points: number, reason: string, operatorId: string) {
-  const user = await addUserComputePoints(userId, points);
-  if (user) {
-    const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    await createComputePointLog(logId, userId, points, 'gift', reason, operatorId);
+  try {
+    const [user] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { compute_points: { increment: points } },
+      }),
+      prisma.computePointLog.create({
+        data: { id: `log_${Date.now()}_${crypto.randomUUID()}`, userId, amount: points, type: 'gift', reason, operatorId },
+      }),
+    ]);
+    return toSafeUser(user);
+  } catch {
+    return undefined;
   }
-  return user;
 }
 
 export async function adminCompensateComputePoints(userId: string, points: number, reason: string, operatorId: string) {
-  const user = await addUserComputePoints(userId, points);
-  if (user) {
-    const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    await createComputePointLog(logId, userId, points, 'compensation', reason, operatorId);
+  try {
+    const [user] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { compute_points: { increment: points } },
+      }),
+      prisma.computePointLog.create({
+        data: { id: `log_${Date.now()}_${crypto.randomUUID()}`, userId, amount: points, type: 'compensation', reason, operatorId },
+      }),
+    ]);
+    return toSafeUser(user);
+  } catch {
+    return undefined;
   }
-  return user;
 }
 
 export async function adminDeductComputePoints(userId: string, points: number, reason: string, operatorId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return { success: false, error: '用户不存在' };
-
-  if (user.compute_points < points) {
-    return { success: false, error: '算力值不足' };
-  }
-
-  const updatedUser = await updateUserComputePoints(userId, user.compute_points - points);
-  if (updatedUser) {
-    const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  try {
+    const user = await prisma.user.update({
+      where: {
+        id: userId,
+        compute_points: { gte: points },
+      },
+      data: {
+        compute_points: { decrement: points },
+      },
+    });
+    const logId = `log_${Date.now()}_${crypto.randomUUID()}`;
     await createComputePointLog(logId, userId, -points, 'deduct', reason, operatorId);
+    return { success: true, user: toSafeUser(user) };
+  } catch {
+    return { success: false, error: '算力值不足或用户不存在' };
   }
-  return { success: true, user: updatedUser };
 }
 
 export async function adminClearComputePoints(userId: string, reason: string, operatorId: string) {
@@ -346,26 +372,36 @@ export async function adminClearComputePoints(userId: string, reason: string, op
   if (!user) return undefined;
 
   const clearedAmount = user.compute_points;
-  const updatedUser = await updateUserComputePoints(userId, 0);
-  if (updatedUser) {
-    const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    await createComputePointLog(logId, userId, -clearedAmount, 'clear', reason, operatorId);
-  }
-  return updatedUser;
+  await prisma.user.update({
+    where: { id: userId },
+    data: { compute_points: 0 },
+  });
+  const logId = `log_${Date.now()}_${crypto.randomUUID()}`;
+  await createComputePointLog(logId, userId, -clearedAmount, 'clear', reason, operatorId);
+  const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
+  return updatedUser ? toSafeUser(updatedUser) : undefined;
 }
 
 export async function consumeComputePoints(userId: string, points: number, reason: string) {
-  const result = await deductUserComputePoints(userId, points);
-  if (result.success && result.user) {
-    const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    await createComputePointLog(logId, userId, -points, 'consume', reason, userId);
+  try {
+    const [user] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId, compute_points: { gte: points } },
+        data: { compute_points: { decrement: points } },
+      }),
+      prisma.computePointLog.create({
+        data: { id: `log_${Date.now()}_${crypto.randomUUID()}`, userId, amount: -points, type: 'consume', reason, operatorId: userId },
+      }),
+    ]);
+    return { success: true, user: toSafeUser(user) };
+  } catch {
+    return { success: false, error: '算力值不足' };
   }
-  return result;
 }
 
 // 退款：查找最近的消费记录并退款（仅允许5分钟内的消费记录退款）
 export async function refundComputePoints(userId: string, reason: string): Promise<{ success: boolean; refunded?: number; error?: string }> {
-  // 查找5分钟内的最近一条消费记录
+  // 查找5分钟内的最近一条消费记录（排除已退款的）
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
   const logs = await prisma.computePointLog.findMany({
@@ -373,6 +409,7 @@ export async function refundComputePoints(userId: string, reason: string): Promi
       userId,
       type: 'consume',
       createdAt: { gte: fiveMinutesAgo },
+      reason: { not: { contains: '[已退款]' } },
     },
     orderBy: { createdAt: 'desc' },
     take: 1,
@@ -385,15 +422,24 @@ export async function refundComputePoints(userId: string, reason: string): Promi
   const log = logs[0];
   const refundedAmount = Math.abs(log.amount);
 
-  // 退还算力
-  const result = await addUserComputePoints(userId, refundedAmount);
-  if (!result) {
+  // 在事务中退还算力、标记原记录为已退款、记录退款日志
+  try {
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { compute_points: { increment: refundedAmount } },
+      }),
+      prisma.computePointLog.update({
+        where: { id: log.id },
+        data: { reason: log.reason + ' [已退款]' },
+      }),
+      prisma.computePointLog.create({
+        data: { id: `log_${Date.now()}_${crypto.randomUUID()}`, userId, amount: refundedAmount, type: 'refund', reason, operatorId: userId },
+      }),
+    ]);
+  } catch {
     return { success: false, error: '退款失败' };
   }
-
-  // 记录退款日志
-  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-  await createComputePointLog(logId, userId, refundedAmount, 'refund', reason, userId);
 
   return { success: true, refunded: refundedAmount };
 }
@@ -412,11 +458,11 @@ export async function dailySignIn(userId: string): Promise<{ success: boolean; s
     return { success: false, error: '当前订阅不支持签到' };
   }
 
-  // 检查今日是否已签到（查找今天的 sign_in 类型日志）
+  // 检查今日是否已签到（查找今天的 sign_in 类型日志，UTC 时间）
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
   const existingSignIn = await prisma.computePointLog.findFirst({
     where: {
@@ -433,15 +479,20 @@ export async function dailySignIn(userId: string): Promise<{ success: boolean; s
     return { success: true, signedIn: true, points: 0 };
   }
 
-  // 签到送积分
-  const user = await addUserComputePoints(userId, dailyPoints);
-  if (!user) {
+  // 在事务中送积分并记录日志
+  try {
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { compute_points: { increment: dailyPoints } },
+      }),
+      prisma.computePointLog.create({
+        data: { id: `log_${Date.now()}_${crypto.randomUUID()}`, userId, amount: dailyPoints, type: 'sign_in', reason: `每日签到奖励「${activeSubscription.plan_name}」`, operatorId: userId },
+      }),
+    ]);
+  } catch {
     return { success: false, error: '签到失败' };
   }
-
-  // 记录签到日志
-  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-  await createComputePointLog(logId, userId, dailyPoints, 'sign_in', `每日签到奖励「${activeSubscription.plan_name}」`, userId);
 
   return { success: true, signedIn: false, points: dailyPoints };
 }
@@ -639,15 +690,16 @@ export async function deleteUserSubscription(subscriptionId: string): Promise<bo
   }
 }
 
-export async function addComputePointsToUser(userId: string, points: number) {
-  return await addUserComputePoints(userId, points);
-}
-
 // ========== Admin User Initialization ==========
 
 export async function initializeAdminUser(): Promise<SafeUser | undefined> {
-  const adminEmail = 'admin@admin.com';
-  const adminPassword = 'admin123';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@midnight.com';
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminPassword) {
+    console.error('ADMIN_PASSWORD environment variable is not set, cannot create admin user');
+    return undefined;
+  }
 
   const existingAdmin = await findUserByEmail(adminEmail);
   if (existingAdmin) {
@@ -658,7 +710,7 @@ export async function initializeAdminUser(): Promise<SafeUser | undefined> {
   try {
     const { v4: uuidv4 } = await import('uuid');
     const id = uuidv4();
-    const passwordHash = bcrypt.hashSync(adminPassword, 10);
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
 
     const user = await prisma.user.create({
       data: {

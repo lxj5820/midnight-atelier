@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import dns from 'dns';
-import { getSystemSetting, getEmailTemplate } from './db.js';
+import crypto from 'crypto';
+import { getAllSystemSettings, getEmailTemplate } from './db.js';
 
 export interface SmtpConfig {
   host: string;
@@ -13,12 +14,13 @@ export interface SmtpConfig {
 
 export async function getSmtpConfig(): Promise<SmtpConfig | null> {
   try {
-    const host = await getSystemSetting('smtp_host');
-    const port = await getSystemSetting('smtp_port');
-    const secure = await getSystemSetting('smtp_secure');
-    const user = await getSystemSetting('smtp_user');
-    const pass = await getSystemSetting('smtp_pass');
-    const from = await getSystemSetting('smtp_from');
+    const allSettings = await getAllSystemSettings();
+    const host = allSettings['smtp_host'];
+    const port = allSettings['smtp_port'];
+    const secure = allSettings['smtp_secure'];
+    const user = allSettings['smtp_user'];
+    const pass = allSettings['smtp_pass'];
+    const from = allSettings['smtp_from'];
 
     if (!host || !port || !user || !pass || !from) {
       console.error('SMTP config missing values:', { host: !!host, port: !!port, user: !!user, pass: !!pass, from: !!from });
@@ -44,28 +46,11 @@ async function sendEmailIPv4(email: string, code: string, config: SmtpConfig): P
   const template = await getEmailTemplate('verification_code') || '您的验证码是：${code}\n验证码有效期为 10 分钟，请尽快使用。';
   const emailContent = template.replace(/\$\{code\}/g, code);
 
-  // 解析域名的 IPv4 地址
-  const addresses = await new Promise< string[]>((resolve) => {
-    dns.resolve4(config.host, (err, result) => {
-      if (err || !result) {
-        resolve([]);
-      } else {
-        resolve(result);
-      }
-    });
-  });
-
-  if (addresses.length === 0) {
-    console.error(`Failed to resolve IPv4 for ${config.host}`);
-    return false;
-  }
-
-  const ip = addresses[0];
-  console.log(`Resolved ${config.host} to ${ip}, sending email...`);
+  console.log(`Connecting to ${config.host}:${config.port}, sending email...`);
 
   return new Promise((resolve) => {
     const transporter = nodemailer.createTransport({
-      host: ip,
+      host: config.host,
       port: config.port,
       secure: config.secure,
       auth: {
@@ -73,8 +58,12 @@ async function sendEmailIPv4(email: string, code: string, config: SmtpConfig): P
         pass: config.pass,
       },
       tls: {
-        rejectUnauthorized: false,
+        rejectUnauthorized: process.env.NODE_ENV === 'production',
       },
+      // Force IPv4 to avoid Railway IPv6 issues while keeping TLS cert validation
+      family: 4,
+      connectionTimeout: 10000,
+      socketTimeout: 10000,
     } as nodemailer.TransportOptions);
 
     transporter.sendMail({
@@ -110,5 +99,5 @@ export async function sendVerificationEmail(email: string, code: string): Promis
 }
 
 export function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 999999).toString();
 }

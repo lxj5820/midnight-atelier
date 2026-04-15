@@ -34,7 +34,7 @@ app.use(
         'http://localhost:8080',
       ];
       // 允许 Netlify preview 部署 (--midnightatelier.netlify.app 格式) 和 localhost
-      if (!origin || allowed.includes(origin) || origin.endsWith('--midnightatelier.netlify.app') || origin.includes('localhost')) {
+      if (!origin || allowed.includes(origin) || origin.endsWith('--midnightatelier.netlify.app') || origin.startsWith('http://localhost:')) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));

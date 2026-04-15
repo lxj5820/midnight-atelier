@@ -113,10 +113,6 @@ export async function getRegistrationStatus(): Promise<ApiResponse<{ registratio
   return await apiFetch('/public/registration-status', { method: 'GET' });
 }
 
-export async function getDefaultApiKey(): Promise<ApiResponse<{ default_api_key: string }>> {
-  return await apiFetch('/public/default-api-key', { method: 'GET' });
-}
-
 export async function dailySignIn(): Promise<ApiResponse<{ signedIn: boolean; points?: number; message?: string }>> {
   return await apiFetch('/user/daily-sign-in', { method: 'POST' });
 }

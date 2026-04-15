@@ -42,7 +42,6 @@ import {
   cancelUserSubscription,
   extendUserSubscription,
   deleteUserSubscription,
-  addComputePointsToUser,
   createComputePointLog,
   createSubscriptionPlan,
   updateSubscriptionPlan,
@@ -84,7 +83,7 @@ function setAuthCookie(res: Response, userId: string) {
   const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
   res.cookie('auth_token', token, {
     httpOnly: true,
-    secure: !isRailway && process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: JWT_MAX_AGE,
   });
@@ -93,9 +92,32 @@ function setAuthCookie(res: Response, userId: string) {
 function clearAuthCookie(res: Response) {
   res.clearCookie('auth_token', {
     httpOnly: true,
-    secure: !isRailway && process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
   });
+}
+
+// ========== Rate Limiting ==========
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW = 10 * 60 * 1000; // 10 minutes
+const RATE_LIMIT_MAX = 5; // max 5 requests per window
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+  if (!record || record.resetTime < now) {
+    // Delete expired entry before creating new one to prevent memory leak
+    if (record && record.resetTime < now) {
+      rateLimitMap.delete(ip);
+    }
+    rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return true;
+  }
+  if (record.count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+  record.count++;
+  return true;
 }
 
 // ========== Auth Routes ==========
@@ -105,6 +127,12 @@ router.post('/auth/send-verification-code', async (req: Request, res: Response) 
 
   if (!email || !email.includes('@')) {
     return res.status(400).json(errorResponse('请输入有效的邮箱地址'));
+  }
+
+  // Rate limit check
+  const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(clientIP)) {
+    return res.status(429).json(errorResponse('请求过于频繁，请稍后再试'));
   }
 
   try {
@@ -138,19 +166,6 @@ router.get('/public/registration-status', async (_req: Request, res: Response) =
   } catch (error) {
     console.error('Get registration status error:', error);
     return res.status(500).json(errorResponse('获取注册状态失败'));
-  }
-});
-
-// 公开接口：获取默认API密钥（无需登录）
-router.get('/public/default-api-key', async (_req: Request, res: Response) => {
-  try {
-    const defaultApiKey = await getSystemSetting('default_api_key');
-    return res.json(successResponse({
-      default_api_key: defaultApiKey || ''
-    }));
-  } catch (error) {
-    console.error('Get default API key error:', error);
-    return res.status(500).json(errorResponse('获取默认API密钥失败'));
   }
 });
 
@@ -207,6 +222,12 @@ router.post('/auth/register', async (req: Request, res: Response) => {
 
 router.post('/auth/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
+
+  // Rate limit check for brute-force protection
+  const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(clientIP)) {
+    return res.status(429).json(errorResponse('请求过于频繁，请稍后再试'));
+  }
 
   if (!email || !password) {
     return res.status(400).json(errorResponse('请输入邮箱和密码'));

@@ -44,7 +44,7 @@ import {
   Gift
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getComputePointLogs, type ComputePointLog, deductComputePoints, refundComputePoints, getUserSubscription, type UserSubscription, getRegistrationStatus, dailySignIn, getDefaultApiKey } from './api';
+import { getComputePointLogs, type ComputePointLog, deductComputePoints, refundComputePoints, getUserSubscription, type UserSubscription, getRegistrationStatus, dailySignIn } from './api';
 import { getSystemSettings } from './adminApi';
 
 // --- Types ---
@@ -193,23 +193,9 @@ function getComputePointsCost(model: string, quality: string): number {
 
 const MAX_GALLERY_ITEMS = 10;
 
-function getGenerationHistory(): GenerationRecord[] {
-  const history = localStorage.getItem('atelier_generation_history');
-  if (!history) return [];
-  try {
-    return JSON.parse(history);
-  } catch {
-    return [];
-  }
-}
-
 async function saveGenerationRecord(record: GenerationRecord): Promise<void> {
   // IndexedDB 容量足够，直接存储完整记录（包括 base64 图片）
   await saveGenerationRecordToDB(record);
-}
-
-function getGenerationHistoryByType(type: MenuItemId): GenerationRecord[] {
-  return [];
 }
 
 function deleteGenerationRecord(id: string): void {
@@ -247,7 +233,7 @@ async function getAllGenerationRecords(): Promise<GenerationRecord[]> {
     const request = store.getAll();
     request.onsuccess = () => resolve(request.result || []);
     request.onerror = () => reject(request.error);
-    db.close();
+    tx.oncomplete = () => db.close();
   });
 }
 
@@ -264,7 +250,6 @@ async function saveGenerationRecordToDB(record: GenerationRecord): Promise<void>
     };
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-    db.close();
   });
 }
 
@@ -275,7 +260,6 @@ async function deleteGenerationRecordFromDB(id: string): Promise<void> {
     tx.objectStore(STORE_NAME).delete(id);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-    db.close();
   });
 }
 
@@ -296,7 +280,6 @@ async function clearGenerationHistoryFromDB(type?: MenuItemId): Promise<void> {
     }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-    db.close();
   });
 }
 
@@ -2550,15 +2533,6 @@ export default function App() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showComputeModal, setShowComputeModal] = useState(false);
   const [defaultApiKey, setDefaultApiKey] = useState<string>('');
-
-  // Fetch default API key on mount
-  useEffect(() => {
-    getDefaultApiKey().then(res => {
-      if (res.success && res.data?.default_api_key) {
-        setDefaultApiKey(res.data.default_api_key);
-      }
-    }).catch(console.error);
-  }, []);
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString();
