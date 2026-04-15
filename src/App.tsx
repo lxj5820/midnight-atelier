@@ -41,7 +41,8 @@ import {
   ChevronUp,
   History,
   Star,
-  Gift
+  Gift,
+  Package
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getComputePointLogs, type ComputePointLog, deductComputePoints, refundComputePoints, getUserSubscription, type UserSubscription, getRegistrationStatus, dailySignIn } from './api';
