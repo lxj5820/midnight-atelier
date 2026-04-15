@@ -1,26 +1,20 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server/dist/index.js",
-      "use": "@vercel/node",
-      "config": {
-        "distDir": "server/dist"
-      }
-    }
-  ],
+  "installCommand": "cd server && npm install",
+  "buildCommand": "cd server && npm run build",
+  "outputDirectory": "server/dist",
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "server/dist/index.js"
+      "dest": "index.js"
     },
     {
       "src": "/health",
-      "dest": "server/dist/index.js"
+      "dest": "index.js"
     },
     {
       "src": "/(.*)",
-      "dest": "server/dist/index.js"
+      "dest": "index.js"
     }
   ],
   "headers": [
@@ -33,6 +27,5 @@
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
       ]
     }
-  ],
-  "buildCommand": "cd server && npm install && npm run build"
+  ]
 }
