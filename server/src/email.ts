@@ -49,6 +49,7 @@ export async function sendVerificationEmail(email: string, code: string): Promis
       host: config.host,
       port: config.port,
       secure: config.secure,
+      disableIPv6: true,
       auth: {
         user: config.user,
         pass: config.pass,
