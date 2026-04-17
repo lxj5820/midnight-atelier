@@ -762,7 +762,7 @@ const TopBar = ({
           </>
         )}
         <span className="text-xs font-bold text-slate-500">
-          V2.0
+          V2.1
         </span>
       </div>
     </header>
@@ -1964,7 +1964,7 @@ const WelcomeView = ({ showToast }: { showToast: (type: 'success' | 'error' | 'i
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-indigo-600/30">
             <Zap className="text-white w-8 h-8 fill-current" />
           </div>
-          <h1 className="text-4xl font-black font-headline text-white tracking-tight mb-3">MIDNIGHT ATELIER <span className="text-indigo-400">V2.0</span></h1>
+          <h1 className="text-4xl font-black font-headline text-white tracking-tight mb-3">MIDNIGHT ATELIER <span className="text-indigo-400">V2.1</span></h1>
           <p className="text-slate-400">AI 赋能的设计工作台</p>
         </div>
 
