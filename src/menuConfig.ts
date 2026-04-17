@@ -1,8 +1,8 @@
 // 菜单配置 - 包含内置提示词
 import React from 'react';
-import { LayoutGrid, Palette, Box, ImageIcon, RefreshCw, Sun, Film, Globe, BarChart3, Layers, Heart, Maximize2 } from 'lucide-react';
+import { LayoutGrid, Palette, Box, ImageIcon, RefreshCw, Sun, Film, Globe, BarChart3, Layers, Heart, Maximize2, Wand2 } from 'lucide-react';
 
-export type MenuItemId = 'workspace' | 'colors' | '3d' | 'effects' | 'style' | 'lighting' | 'storyboard' | 'panorama' | 'analysis' | 'board' | 'mood' | 'explode';
+export type MenuItemId = 'workspace' | 'colors' | '3d' | 'effects' | 'style' | 'lighting' | 'storyboard' | 'panorama' | 'analysis' | 'board' | 'mood' | 'explode' | 'edit';
 
 export interface MenuItemConfig {
   id: MenuItemId;
@@ -26,6 +26,7 @@ export const menuItemsConfig: MenuItemConfig[] = [
   { id: 'board', icon: Layers, label: '设计展板', group: '汇报图操作', prompt: '将图做成竖向室内设计展板，包含这张图，简约风格，左文右图，统一色调，含{{项目名称}}+{{设计主题}}，涵盖当前空间的/功能/爆炸/材质/手绘/家具分析图，节点剖面图，全景+节点放大效果图，设计说明，3个核心亮点，图文简洁呼应，文学全部用中文', model: '🍌全能图片PRO' },
   { id: 'mood', icon: Heart, label: '情绪材料版', group: '汇报图操作', prompt: '根据底图，生成一张室内设计情绪版，图片中心为底图照片，在其周边采用网格拼贴形式展示材质与色彩搭配，每个样本附有手绘标注（中文）的简洁的标签文字顶部中央标注房间名称。素材相互堆叠以松散但有序的方式拼贴，部分用胶带固定在浅粉蓝色混合的毛毡板上，模拟真实线索版的手工质感。保证底图占画面中心主要位置。整体画面具有高级艺术感与真实感', model: '🍌全能图片V2' },
   { id: 'explode', icon: Maximize2, label: '空间爆炸图', group: '汇报图操作', prompt: '根据这张室内效果图，保留画面真实感，以3D立体轴测角度的爆炸图展示，提取其中装饰和家具的材质，以高度还原的方式精细呈现其材质纹理。每个材质的纹理缩略图在右侧，各部分均配有清晰中文标注，注明结构名称与功能说明，整体布局兼具专业性与视觉逻辑性，呈现出清晰、整洁且极具科技感的解析示意图。白色背景', model: '🍌全能图片PRO' },
+  { id: 'edit', icon: Wand2, label: '全能修改', group: '图片编辑', prompt: '', model: '🍌全能图片V2' },
 ];
 
 // 根据ID获取菜单项

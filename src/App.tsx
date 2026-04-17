@@ -5,29 +5,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  LayoutGrid,
-  Palette,
-  Box,
-  Image as ImageIcon,
-  RefreshCw,
-  Sun,
-  Film,
-  Globe,
-  BarChart3,
-  Layers,
-  Heart,
-  Maximize2,
-  Settings,
-  Upload,
-  MoreVertical,
-  Zap,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  EyeOff,
-  User,
-  Info,
   Trash2,
   Plus,
   Download,
@@ -39,21 +16,78 @@ import {
   LogOut,
   Key,
   ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   History,
   Star,
   Gift,
-  Package
+  Package,
+  Settings,
+  MoreVertical,
+  Upload,
+  User,
+  Eye,
+  EyeOff,
+  Globe,
+  Layers,
+  Zap,
+  RefreshCw,
+  Info,
+  Maximize2,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getComputePointLogs, type ComputePointLog, deductComputePoints, refundComputePoints, getUserSubscription, type UserSubscription, getRegistrationStatus, dailySignIn } from './api';
 import { getSystemSettings } from './adminApi';
 
+// 持久化状态 hook - 安全访问 localStorage
+function usePersistedState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const isClient = typeof window !== 'undefined' && window.localStorage != null;
+
+  const [state, setState] = useState<T>(() => {
+    if (!isClient) return defaultValue;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved != null) {
+        const parsed = JSON.parse(saved);
+        if (parsed != null) {
+          return parsed as T;
+        }
+      }
+    } catch {
+      // 解析失败，使用默认值
+    }
+    return defaultValue;
+  });
+
+  const setPersistedState: React.Dispatch<React.SetStateAction<T>> = useCallback((value) => {
+    setState(prev => {
+      const nextValue = typeof value === 'function' ? (value as (prev: T) => T)(prev) : value;
+      if (isClient) {
+        try {
+          localStorage.setItem(key, JSON.stringify(nextValue));
+        } catch {
+          // 存储失败，忽略
+        }
+      }
+      return nextValue;
+    });
+  }, [key, isClient]);
+
+  return [state, setPersistedState];
+}
+
 // --- Types ---
-type View = 'workspace' | 'gallery' | 'settings' | 'admin';
+type View = 'workspace' | 'gallery' | 'settings' | 'admin' | 'edit';
 import type { MenuItemId } from './menuConfig';
 import { getPresetsForMenu, type VisualPreset } from './visualPresetConfig';
 import { useAuth } from './AuthContext.tsx';
+import { GenerationProvider, useGeneration } from './GenerationContext';
 import AdminPanel from './AdminPanel.tsx';
+import EditWorkspace from './components/EditWorkspace.tsx';
+import PanoramaViewer from './components/PanoramaViewer.tsx';
+import ImageEditor from './components/ImageEditor.tsx';
 import { getPromptPlaceholder } from './menuConfig';
 type GalleryCategory = 'hot' | 'latest' | 'style';
 
@@ -70,6 +104,7 @@ interface GenerationRecord {
   prompt: string;
   imageUrl: string;
   referenceImageUrl?: string;
+  referenceImageUrls?: string[];
   createdAt: string;
   resolution?: {
     width: number;
@@ -194,7 +229,7 @@ function getComputePointsCost(model: string, quality: string): number {
 
 const MAX_GALLERY_ITEMS = 10;
 
-async function saveGenerationRecord(record: GenerationRecord): Promise<void> {
+export async function saveGenerationRecord(record: GenerationRecord): Promise<void> {
   // IndexedDB 容量足够，直接存储完整记录（包括 base64 图片）
   await saveGenerationRecordToDB(record);
 }
@@ -254,7 +289,7 @@ async function saveGenerationRecordToDB(record: GenerationRecord): Promise<void>
   });
 }
 
-async function deleteGenerationRecordFromDB(id: string): Promise<void> {
+export async function deleteGenerationRecordFromDB(id: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -284,7 +319,7 @@ async function clearGenerationHistoryFromDB(type?: MenuItemId): Promise<void> {
   });
 }
 
-async function getGenerationHistoryAsync(): Promise<GenerationRecord[]> {
+export async function getGenerationHistoryAsync(): Promise<GenerationRecord[]> {
   try {
     return await getAllGenerationRecords();
   } catch {
@@ -503,7 +538,11 @@ const Sidebar = ({
   const handleMenuItemClick = (item: typeof menuItems[0]) => {
     setActiveMenuItem(item.id);
     setModel(item.model);
-    setView('workspace');
+    if (item.id === 'edit') {
+      setView('edit');
+    } else {
+      setView('workspace');
+    }
   };
 
   return (
@@ -599,11 +638,17 @@ const TopBar = ({
   setView,
   onShowComputeModal,
   showToast,
+  activeTasks,
+  hasSignedIn,
+  onSignIn,
 }: {
   currentView: View,
   setView: (v: View) => void,
   onShowComputeModal: () => void,
   showToast: (type: 'success' | 'error' | 'info', message: string) => void,
+  activeTasks?: Array<{ id: string; menuName: string; startedAt: number }>,
+  hasSignedIn: boolean,
+  onSignIn: () => void,
 }) => {
   const { user, refreshUser } = useAuth();
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
@@ -621,8 +666,24 @@ const TopBar = ({
 
   const planName = subscription?.plan_name || 'free版';
 
+  const isGenerating = activeTasks && activeTasks.length > 0;
+
   return (
     <header className="h-16 border-b border-[#2a2e38] bg-[#111317] flex items-center justify-between px-8 sticky top-0 z-40">
+      {/* Global Generating Status - 支持多个并发生成任务 */}
+      {isGenerating && (
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 rounded-full shadow-lg shadow-indigo-500/10 z-50" style={{ maxWidth: 'calc(100% - 400px)' }}>
+          <div className="flex items-center gap-2 flex-wrap">
+            {activeTasks!.map((task, idx) => (
+              <div key={task.id} className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" style={{ animationDelay: `${idx * 0.2}s` }} />
+                <span className="text-sm text-indigo-300 font-medium whitespace-nowrap">{task.menuName} 生成中...</span>
+                {idx < activeTasks!.length - 1 && <span className="text-indigo-500 mx-1">|</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-8">
         <nav className="flex items-center gap-6">
           <button
@@ -655,23 +716,18 @@ const TopBar = ({
           <>
             {planName !== 'free版' && (
               <button
-                onClick={async () => {
-                  const result = await dailySignIn();
-                  if (result.success) {
-                    if (result.data?.signedIn) {
-                      showToast('info', '今日已签到');
-                    } else {
-                      showToast('success', `签到成功！获得 ${result.data?.points} 算力`);
-                      refreshUser();
-                    }
-                  } else {
-                    showToast('error', result.error || '签到失败');
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600/10 rounded-full border border-emerald-500/20 cursor-pointer hover:bg-emerald-600/20 transition-colors"
+                onClick={onSignIn}
+                disabled={hasSignedIn}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
+                  hasSignedIn
+                    ? 'bg-emerald-600/5 border-emerald-500/10 cursor-default'
+                    : 'bg-emerald-600/10 border-emerald-500/20 hover:bg-emerald-600/20'
+                }`}
               >
-                <Gift className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-bold text-emerald-400">签到</span>
+                <Gift className={`w-4 h-4 ${hasSignedIn ? 'text-emerald-600/40' : 'text-emerald-400'}`} />
+                <span className={`text-xs font-bold ${hasSignedIn ? 'text-emerald-600/40' : 'text-emerald-400'}`}>
+                  {hasSignedIn ? '已签到' : '签到'}
+                </span>
               </button>
             )}
             <div
@@ -729,7 +785,9 @@ const WorkspaceView = ({
   quality,
   setQuality,
   showToast,
-  setPreviewImage
+  setPreviewImage,
+  editingImageIndex,
+  setEditingImageIndex
 }: {
   apiKey: string,
   activeMenuItem: MenuItemId,
@@ -746,17 +804,22 @@ const WorkspaceView = ({
   quality: string,
   setQuality: (q: string) => void,
   showToast: (type: 'success' | 'error' | 'info', message: string) => void,
-  setPreviewImage: (img: string | null) => void
+  setPreviewImage: (img: string | null) => void,
+  editingImageIndex: number | null,
+  setEditingImageIndex: (index: number | null) => void
 }) => {
   const { user, refreshUser } = useAuth();
+  const { startGenerating, stopGenerating } = useGeneration();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false); // 防抖保护 ref
   const [result, setResult] = useState<string | null>(null);
   const [generationHistory, setGenerationHistory] = useState<GenerationRecord[]>([]);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [sliderPosition, setSliderPosition] = useState(50);
   const [thumbnailSize, setThumbnailSize] = useState(150);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [showPanoramaViewer, setShowPanoramaViewer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 获取用户订阅信息以确定可用的画质选项
@@ -898,12 +961,18 @@ const WorkspaceView = ({
       'analysis': '材料分析图',
       'board': '设计展板',
       'mood': '情绪材料版',
-      'explode': '空间爆炸图'
+      'explode': '空间爆炸图',
+      'edit': '全能修改'
     };
     return items[id];
   };
 
   const handleGenerate = async () => {
+    // 防抖保护：避免瞬时多次点击重复提交 - 立即锁定
+    if (isGeneratingRef.current) {
+      return;
+    }
+
     if (!apiKey) {
       showToast('error', '请先在设置中配置 API 密钥');
       return;
@@ -944,15 +1013,22 @@ const WorkspaceView = ({
       return;
     }
 
+    // 前置检查通过后立即锁定，防止快速点击
+    isGeneratingRef.current = true;
+    setIsGenerating(true);
+    const taskId = startGenerating(getMenuItemLabel(activeMenuItem));
+
     // 先扣除算力值，再开始生成
     const deductResult = await deductComputePoints(requiredPoints, '生成图片消耗', model, getMenuItemLabel(activeMenuItem));
     if (!deductResult.success) {
       showToast('error', deductResult.error || '算力值不足，扣除失败');
+      isGeneratingRef.current = false;
+      setIsGenerating(false);
+      stopGenerating(taskId);
       return;
     }
     let deducted = true;
     await refreshUser();
-    setIsGenerating(true);
     try {
       const selectedModel = model;
       const modelMap: Record<string, string> = {
@@ -1120,7 +1196,9 @@ const WorkspaceView = ({
         deducted = false;
       }
     } finally {
+      isGeneratingRef.current = false; // 解除防抖保护
       setIsGenerating(false);
+      stopGenerating(taskId);
     }
   };
 
@@ -1359,6 +1437,16 @@ const WorkspaceView = ({
                   className="w-full h-full object-contain"
                   referrerPolicy="no-referrer"
                 />
+                {/* Panorama View Button */}
+                {activeMenuItem === 'panorama' && (
+                  <button
+                    onClick={() => setShowPanoramaViewer(true)}
+                    className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                    全景展示
+                  </button>
+                )}
               </div>
             </div>
           ) : imageUrls.length > 0 ? (
@@ -1431,7 +1519,17 @@ const WorkspaceView = ({
 
           {/* Result Actions */}
           {(result || imageUrls.length > 0) && (
-            <div className="flex justify-end gap-2 mb-4">
+            <div className="flex items-center justify-end gap-2 mb-4">
+              {imageUrls.length > 0 && (
+                <button
+                  onClick={() => setEditingImageIndex(0)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-indigo-500/20 text-indigo-400 text-sm rounded-lg transition-colors"
+                  title="图片编辑器"
+                >
+                  <Pencil className="w-4 h-4" />
+                  图片编辑器
+                </button>
+              )}
               {result && (
                 <button
                   onClick={handleShare}
@@ -1495,7 +1593,7 @@ const WorkspaceView = ({
             </div>
             {generationHistory.length > 0 ? (
               <div className="flex flex-wrap gap-3">
-                {generationHistory.slice(0, 6).map((record, index) => (
+                {generationHistory.map((record, index) => (
                   <motion.div
                     key={record.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -1688,6 +1786,30 @@ const WorkspaceView = ({
             </button>
           </div>
         </aside>
+
+        {/* Panorama Viewer Modal */}
+        <PanoramaViewer
+          imageUrl={result || ''}
+          isOpen={showPanoramaViewer}
+          onClose={() => setShowPanoramaViewer(false)}
+        />
+
+        {/* Image Editor Modal */}
+        {editingImageIndex !== null && imageUrls[editingImageIndex] && (
+          <ImageEditor
+            imageUrl={imageUrls[editingImageIndex]}
+            onSave={(editedImage) => {
+              setImageUrls(prev => {
+                const newImages = [...prev];
+                newImages[editingImageIndex!] = editedImage;
+                return newImages;
+              });
+              setEditingImageIndex(null);
+              showToast('success', '图片编辑已保存');
+            }}
+            onCancel={() => setEditingImageIndex(null)}
+          />
+        )}
       </div>
     </div>
   );
@@ -2532,13 +2654,100 @@ export default function App() {
   const [activeMenuItem, setActiveMenuItem] = useState<MenuItemId>('workspace');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  // 从 localStorage 读取持久化的状态
+  useEffect(() => {
+    try {
+      const savedView = localStorage.getItem('app_view');
+      const savedMenu = localStorage.getItem('app_active_menu');
+      if (savedView) setView(JSON.parse(savedView));
+      if (savedMenu) setActiveMenuItem(JSON.parse(savedMenu));
+    } catch {
+      // 忽略错误
+    }
+  }, []);
+
+  // 持久化状态到 localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_view', JSON.stringify(view));
+    } catch {
+      // 忽略
+    }
+  }, [view]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_active_menu', JSON.stringify(activeMenuItem));
+    } catch {
+      // 忽略
+    }
+  }, [activeMenuItem]);
+
+  // 每日0点重置签到状态 - 从localStorage初始化
+  const getInitialSignedInState = (): boolean => {
+    const today = new Date().toDateString();
+    const lastSignInDate = localStorage.getItem('last_sign_in_date');
+    return lastSignInDate === today;
+  };
+
+  const [hasSignedIn, setHasSignedIn] = useState(getInitialSignedInState);
+
+  // 检查是否需要重置签到状态（跨天）
+  useEffect(() => {
+    if (!user) return;
+
+    const checkAndResetSignIn = () => {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      const msUntilMidnight = midnight.getTime() - now.getTime();
+
+      // 设置定时器，在午夜重置签到状态
+      const timer = setTimeout(() => {
+        setHasSignedIn(false);
+        localStorage.removeItem('last_sign_in_date');
+      }, msUntilMidnight);
+
+      return timer;
+    };
+
+    const timer = checkAndResetSignIn();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [user]);
+
+  // 签到处理函数
+  const handleSignIn = async () => {
+    if (hasSignedIn) {
+      showToast('info', '今日已签到');
+      return;
+    }
+
+    const result = await dailySignIn();
+    if (result.success) {
+      if (result.data?.signedIn) {
+        showToast('info', '今日已签到');
+        setHasSignedIn(true);
+      } else {
+        showToast('success', `签到成功！获得 ${result.data?.points} 算力`);
+        refreshUser();
+        setHasSignedIn(true);
+        // 保存签到日期
+        localStorage.setItem('last_sign_in_date', new Date().toDateString());
+      }
+    } else {
+      showToast('error', result.error || '签到失败');
+    }
+  };
+
   // Workspace settings state
-  const [model, setModel] = useState('🍌全能图片V2');
   const [selectedPreset, setSelectedPreset] = useState(getPresetsForMenu('workspace')[0]?.label || '');
   const [creativity, setCreativity] = useState(45);
   const [structure, setStructure] = useState(82);
   const [aspectRatio, setAspectRatio] = useState('auto');
   const [quality, setQuality] = useState('2K');
+  const [model, setModel] = useState('🍌全能图片V2');
 
   // Gallery state
   const [galleryCategory, setGalleryCategory] = useState<GalleryCategory>('hot');
@@ -2606,6 +2815,10 @@ export default function App() {
     };
   }, [user, refreshUser]);
 
+  // useGeneration 必须在所有条件检查之前调用
+  const { activeTasks } = useGeneration();
+  const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#111317] flex items-center justify-center">
@@ -2639,6 +2852,9 @@ export default function App() {
             setShowComputeModal(true);
           }}
           showToast={showToast}
+          activeTasks={activeTasks}
+          hasSignedIn={hasSignedIn}
+          onSignIn={handleSignIn}
         />
 
         <main className="flex-1 flex flex-col bg-[#111317] overflow-hidden">
@@ -2670,6 +2886,8 @@ export default function App() {
                   setQuality={setQuality}
                   showToast={showToast}
                   setPreviewImage={setPreviewImage}
+                  editingImageIndex={editingImageIndex}
+                  setEditingImageIndex={setEditingImageIndex}
                 />
               )}
               {view === 'gallery' && (
@@ -2684,6 +2902,9 @@ export default function App() {
               )}
               {view === 'admin' && (
                 <AdminPanel showToast={showToast} />
+              )}
+              {view === 'edit' && (
+                <EditWorkspace apiKey={apiKey} showToast={showToast} setPreviewImage={setPreviewImage} />
               )}
             </motion.div>
           </AnimatePresence>

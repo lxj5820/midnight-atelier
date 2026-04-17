@@ -268,6 +268,9 @@ export const MENU_PRESET_MAP: Record<MenuItemId, string[]> = {
 
   // 空间爆炸图 - 无预设
   explode: [],
+
+  // 全能修改 - 无预设
+  edit: [],
 };
 
 // 自定义风格预设（无提示词，无背景图）
