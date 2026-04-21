@@ -379,13 +379,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             <div className="mb-6 relative">
               <div className="aspect-video rounded-xl overflow-hidden bg-[#1c1f26] relative group shadow-xl shadow-black/20">
                 <img src={result} alt="Generated Result" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                <button
-                  onClick={() => { setPanoramaImageUrl(result); setShowPanoramaViewer(true); }}
-                  className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all backdrop-blur-sm"
-                  title="全景查看"
-                >
-                  <Maximize2 className="w-4 h-4" />全景查看
-                </button>
+                {activeMenuItem === 'panorama' && (
+                  <button
+                    onClick={() => { setPanoramaImageUrl(result); setShowPanoramaViewer(true); }}
+                    className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all backdrop-blur-sm"
+                    title="全景查看"
+                  >
+                    <Maximize2 className="w-4 h-4" />全景查看
+                  </button>
+                )}
               </div>
             </div>
           ) : imageUrls.length > 0 ? (
@@ -400,14 +402,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                     <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/50 hover:bg-black/80 rounded-full transition-colors"><X className="w-4 h-4 text-white" /></button></>
                 )}
               </div>
-              {/* 全景查看按钮 */}
-              <button
-                onClick={() => { setPanoramaImageUrl(imageUrls[0]); setShowPanoramaViewer(true); }}
-                className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all backdrop-blur-sm"
-                title="全景查看"
-              >
-                <Maximize2 className="w-4 h-4" />全景查看
-              </button>
+              {activeMenuItem === 'panorama' && (
+                <button
+                  onClick={() => { setPanoramaImageUrl(imageUrls[0]); setShowPanoramaViewer(true); }}
+                  className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all backdrop-blur-sm"
+                  title="全景查看"
+                >
+                  <Maximize2 className="w-4 h-4" />全景查看
+                </button>
+              )}
             </div>
           ) : (
             <div className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 ${isDragging ? 'border-indigo-500 bg-[#1c1f26]' : 'border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]'}`}
