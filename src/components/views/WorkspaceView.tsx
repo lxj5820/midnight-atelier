@@ -14,7 +14,7 @@ import {
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
 } from '../../utils';
-import { getPromptPlaceholder, menuItemsConfig } from '../../menuConfig';
+import { getPromptPlaceholder, menuItemsConfig, extractVariablesFromPrompt } from '../../menuConfig';
 import { getPresetsForMenu } from '../../visualPresetConfig';
 import type { MenuItemId } from '../../menuConfig';
 import type { GenerationRecord } from '../../types';
@@ -294,9 +294,53 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     setResult(record.imageUrl);
     showToast('info', '已加载历史图片和参考图');
   };
-  const handleAddToPrompt = () => {
-    const additions = ['细节丰富', '高精度', '现代风格', '专业渲染'];
-    setPrompt(prev => prev ? `${prev}, ${additions[Math.floor(Math.random() * additions.length)]}` : additions[Math.floor(Math.random() * additions.length)]);
+  const [isPolishing, setIsPolishing] = useState(false);
+
+  const POLISH_SYSTEM_PROMPT = `你是一个专业的 AI 图像提示词润色助手。你的任务是将用户输入的简单提示词润色成专业、详细、结构清晰的提示词。
+
+重要规则：
+1. 只输出润色后的提示词内容，不要输出任何解释、说明、标题、标签或其他内容
+2. 不要使用 markdown 格式，不要使用代码块
+3. 直接输出纯文本的提示词即可`;
+
+  const handlePolishPrompt = async () => {
+    if (isPolishing) return;
+    if (!apiKey) { showToast('error', '请先在设置中配置 API 密钥'); return; }
+    if (!prompt.trim()) { showToast('info', '请先输入提示词内容'); return; }
+
+    setIsPolishing(true);
+    try {
+      const apiUrl = 'https://newapi.asia/v1beta/models/gemini-3.1-flash-lite-preview:generateContent';
+      const requestBody = {
+        contents: [{ parts: [{ text: `请润色并优化以下提示词：${prompt}` }] }],
+        systemInstruction: { parts: [{ text: POLISH_SYSTEM_PROMPT }] },
+        generationConfig: { temperature: 0.7, topP: 0.9, maxOutputTokens: 2048 }
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) throw new Error('API 请求失败');
+      const data = await response.json();
+      const polishedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (polishedText) {
+        // 去除 markdown 代码块
+        const cleanText = polishedText.replace(/```markdown\n?|\n?```/g, '').trim();
+        setPrompt(cleanText);
+        showToast('success', '提示词已润色');
+      }
+    } catch (err) {
+      showToast('error', err instanceof Error && err.message === 'AbortError' ? '润色超时' : '润色失败');
+    } finally {
+      setIsPolishing(false);
+    }
   };
   const handleCopyResult = async () => {
     if (result) {
@@ -531,9 +575,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         aspectRatio={aspectRatio} setAspectRatio={setAspectRatio}
         quality={quality} setQuality={setQuality}
         prompt={prompt} setPrompt={setPrompt}
-        handleAddToPrompt={handleAddToPrompt}
+        placeholder={promptPlaceholder}
+        handlePolishPrompt={handlePolishPrompt}
         handleGenerate={handleGenerate}
         isGenerating={isGenerating}
+        isPolishing={isPolishing}
       />
     </div>
   );

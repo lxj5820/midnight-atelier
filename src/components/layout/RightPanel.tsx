@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, RefreshCw, Zap, Check } from 'lucide-react';
+import { Plus, RefreshCw, Zap, Check, Sparkles } from 'lucide-react';
 import type { VisualPreset } from '../../visualPresetConfig';
 import { Dropdown } from '../ui/Dropdown';
 
@@ -16,9 +16,11 @@ interface RightPanelProps {
   setQuality: (q: string) => void;
   prompt: string;
   setPrompt: (p: string) => void;
-  handleAddToPrompt: () => void;
+  placeholder?: string;
+  handlePolishPrompt: () => void;
   handleGenerate: () => void;
   isGenerating: boolean;
+  isPolishing: boolean;
 }
 
 export const RightPanel: React.FC<RightPanelProps> = ({
@@ -34,9 +36,11 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   setQuality,
   prompt,
   setPrompt,
-  handleAddToPrompt,
+  placeholder = '输入您的建筑构想...',
+  handlePolishPrompt,
   handleGenerate,
   isGenerating,
+  isPolishing,
 }) => {
   return (
     <aside className="w-80 bg-[#1c1f26] border-l border-[#2a2e38] flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0 fixed right-0 top-16 h-[calc(100vh-4rem)] z-30">
@@ -47,6 +51,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           value={model}
           onChange={setModel}
           className="w-full"
+          direction="down"
         />
       </div>
 
@@ -110,18 +115,19 @@ export const RightPanel: React.FC<RightPanelProps> = ({
 
         <div className="bg-[#111317] rounded-xl p-4 mb-4">
           <textarea
-            placeholder="输入您的建筑构想..."
+            placeholder={placeholder}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             className="w-full bg-transparent border-none text-sm text-white resize-none outline-none min-h-[80px]"
           />
           <div className="flex justify-end gap-2 mt-2">
             <button
-              onClick={handleAddToPrompt}
-              className="p-1.5 text-slate-500 hover:text-white transition-colors"
-              title="添加提示词"
+              onClick={handlePolishPrompt}
+              disabled={isPolishing || !prompt.trim()}
+              className="p-1.5 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="润色提示"
             >
-              <Plus className="w-4 h-4" />
+              <Sparkles className={`w-4 h-4 ${isPolishing ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={() => setPrompt('')}

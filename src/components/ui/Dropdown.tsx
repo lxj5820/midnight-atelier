@@ -11,6 +11,7 @@ interface DropdownProps {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  direction?: 'up' | 'down';
 }
 
 export const Dropdown: React.FC<DropdownProps> = ({
@@ -18,6 +19,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
   value,
   onChange,
   className = '',
+  direction = 'up',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -55,7 +57,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 bg-[#1a1a1a] border border-[#3f3f46] rounded-xl shadow-lg shadow-black/50 z-50 min-w-[130px] overflow-hidden">
+        <div className={`absolute ${direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 bg-[#1a1a1a] border border-[#3f3f46] rounded-xl shadow-lg shadow-black/50 z-50 min-w-[130px] overflow-hidden`}>
           <div className="dropdown-scroll max-h-[300px] overflow-y-auto p-1.5 scrollbar-thin scrollbar-thumb-[#4b5563] scrollbar-track-transparent">
             {options.map(option => (
               <div
