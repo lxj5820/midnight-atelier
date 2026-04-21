@@ -67,6 +67,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [showCompareMode, setShowCompareMode] = useState(false);
   const [thumbnailSize, setThumbnailSize] = useState(150);
   const [showPanoramaViewer, setShowPanoramaViewer] = useState(false);
+  const [panoramaImageUrl, setPanoramaImageUrl] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -335,7 +336,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full">
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar mr-80">
         <div className="max-w-5xl mx-auto">
           {/* Current Action Indicator */}
           <div className="mb-4 flex items-center gap-4">
@@ -375,26 +376,38 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               </div>
             </div>
           ) : result ? (
-            <div className="mb-6">
+            <div className="mb-6 relative">
               <div className="aspect-video rounded-xl overflow-hidden bg-[#1c1f26] relative group shadow-xl shadow-black/20">
                 <img src={result} alt="Generated Result" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                {activeMenuItem === 'panorama' && (
-                  <button onClick={() => setShowPanoramaViewer(true)} className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm">
-                    <Maximize2 className="w-4 h-4" />全景展示
-                  </button>
-                )}
+                <button
+                  onClick={() => { setPanoramaImageUrl(result); setShowPanoramaViewer(true); }}
+                  className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all backdrop-blur-sm"
+                  title="全景查看"
+                >
+                  <Maximize2 className="w-4 h-4" />全景查看
+                </button>
               </div>
             </div>
           ) : imageUrls.length > 0 ? (
-            <div className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 ${isDragging ? 'border-indigo-500 bg-[#1c1f26]' : 'border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]'}`}
-              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={handleUpload}>
-              <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/jpeg,image/png,image/webp" className="hidden" />
-              {isUploading ? (
-                <><RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" /><p className="text-slate-500 text-sm">上传中...</p></>
-              ) : (
-                <><img src={imageUrls[0]} alt="参考图" className="w-full h-full object-contain" onClick={handleUpload} />
-                  <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/50 hover:bg-black/80 rounded-full transition-colors"><X className="w-4 h-4 text-white" /></button></>
-              )}
+            <div className="mb-6 relative">
+              <div className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all ${isDragging ? 'border-indigo-500 bg-[#1c1f26]' : 'border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]'}`}
+                onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={handleUpload}>
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/jpeg,image/png,image/webp" className="hidden" />
+                {isUploading ? (
+                  <><RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" /><p className="text-slate-500 text-sm">上传中...</p></>
+                ) : (
+                  <><img src={imageUrls[0]} alt="参考图" className="w-full h-full object-contain" onClick={handleUpload} />
+                    <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/50 hover:bg-black/80 rounded-full transition-colors"><X className="w-4 h-4 text-white" /></button></>
+                )}
+              </div>
+              {/* 全景查看按钮 */}
+              <button
+                onClick={() => { setPanoramaImageUrl(imageUrls[0]); setShowPanoramaViewer(true); }}
+                className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all backdrop-blur-sm"
+                title="全景查看"
+              >
+                <Maximize2 className="w-4 h-4" />全景查看
+              </button>
             </div>
           ) : (
             <div className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 ${isDragging ? 'border-indigo-500 bg-[#1c1f26]' : 'border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]'}`}
@@ -486,9 +499,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         </div>
 
         {/* Panorama Viewer Modal */}
-        {showPanoramaViewer && (
+        {showPanoramaViewer && panoramaImageUrl && (
           <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center"><RefreshCw className="w-8 h-8 animate-spin text-white" /></div>}>
-            <PanoramaViewer imageUrl={result || ''} isOpen={showPanoramaViewer} onClose={() => setShowPanoramaViewer(false)} />
+            <PanoramaViewer imageUrl={panoramaImageUrl} isOpen={showPanoramaViewer} onClose={() => setShowPanoramaViewer(false)} />
           </Suspense>
         )}
 

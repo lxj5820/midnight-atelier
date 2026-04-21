@@ -273,11 +273,11 @@ export const MENU_PRESET_MAP: Record<MenuItemId, string[]> = {
   edit: [],
 };
 
-// 自定义风格预设（无提示词，无背景图）
+// 自定义风格预设
 export const CUSTOM_PRESET: VisualPreset = {
   id: 'custom',
   label: '自定义',
-  bgImage: '',
+  bgImage: 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27480%27 height=%27320%27%3E%3Crect fill=%27%231a1c23%27 width=%27480%27 height=%27320%27/%3E%3Ccircle cx=%27240%27 cy=%27140%27 r=%2730%27 fill=%27none%27 stroke=%27%234a4d57%27 stroke-width=%272%27/%3E%3Cpath d=%27M220 180 L260 180 M240 160 L240 200%27 stroke=%27%234a4d57%27 stroke-width=%272%27/%3E%3Ctext x=%27240%27 y=%27240%27 text-anchor=%27middle%27 fill=%27%236a6d77%27 font-size=%2712%27%3E自定义风格%3C/text%3E%3C/svg%3E',
   prompt: ''
 };
 

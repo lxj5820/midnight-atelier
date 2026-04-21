@@ -5,6 +5,7 @@ import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { getGenerationHistoryAsync, saveGenerationRecord, deleteGenerationRecordFromDB } from '../App.tsx';
 import ImageEditor from './ImageEditor';
+import { Dropdown } from './ui/Dropdown';
 
 interface EditWorkspaceProps {
   apiKey: string;
@@ -368,12 +369,12 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         {/* Model Selection */}
         <div className="mb-6">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">引擎与模型</p>
-          <div className="relative group">
-            <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-[#111317] border border-[#2a2e38] rounded-xl py-3 px-4 text-sm text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all cursor-pointer hover:bg-[#1c1f26] hover:border-slate-600 shadow-inner">
-              {models.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none group-hover:text-indigo-400 transition-colors" />
-          </div>
+          <Dropdown
+            options={models.map(m => ({ value: m, label: m }))}
+            value={model}
+            onChange={setModel}
+            className="w-full"
+          />
         </div>
 
         {/* Reference Image Upload */}
@@ -429,20 +430,27 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             <div className="flex gap-4 mb-3">
               <div className="flex-1">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">图像比例</p>
-                <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="w-full bg-[#111317] border border-[#2a2e38] rounded-lg py-2 px-3 text-xs text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer">
-                  <option value="auto">自动</option>
-                  {model === '🍌全能图片V2' ? (
-                    ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(r => <option key={r} value={r}>{r}</option>)
-                  ) : (
-                    ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => <option key={r} value={r}>{r}</option>)
-                  )}
-                </select>
+                <Dropdown
+                  options={[
+                    { value: 'auto', label: '自动' },
+                    ...(model === '🍌全能图片V2'
+                      ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
+                      : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
+                    )
+                  ]}
+                  value={aspectRatio}
+                  onChange={setAspectRatio}
+                  className="w-full"
+                />
               </div>
               <div className="flex-1">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">画质</p>
-                <select value={quality} onChange={(e) => setQuality(e.target.value)} className="w-full bg-[#111317] border border-[#2a2e38] rounded-lg py-2 px-3 text-xs text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer">
-                  {['1K', '2K', '4K'].map(q => <option key={q} value={q}>{q}</option>)}
-                </select>
+                <Dropdown
+                  options={['1K', '2K', '4K'].map(q => ({ value: q, label: q }))}
+                  value={quality}
+                  onChange={setQuality}
+                  className="w-full"
+                />
               </div>
             </div>
           </div>

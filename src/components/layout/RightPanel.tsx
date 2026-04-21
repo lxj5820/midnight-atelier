@@ -1,6 +1,7 @@
 import React from 'react';
-import { ChevronDown, Check, Plus, RefreshCw, Zap } from 'lucide-react';
+import { Plus, RefreshCw, Zap, Check } from 'lucide-react';
 import type { VisualPreset } from '../../visualPresetConfig';
+import { Dropdown } from '../ui/Dropdown';
 
 interface RightPanelProps {
   model: string;
@@ -38,21 +39,15 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   isGenerating,
 }) => {
   return (
-    <aside className="w-64 bg-[#1c1f26] border-l border-[#2a2e38] flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0">
+    <aside className="w-80 bg-[#1c1f26] border-l border-[#2a2e38] flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0 fixed right-0 top-16 h-[calc(100vh-4rem)] z-30">
       <div className="mb-6">
         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">引擎与模型</p>
-        <div className="relative group">
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-full bg-[#111317] border border-[#2a2e38] rounded-xl py-3 px-4 text-sm text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all cursor-pointer hover:bg-[#1c1f26] hover:border-slate-600 shadow-inner"
-          >
-            {models.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none group-hover:text-indigo-400 transition-colors" />
-        </div>
+        <Dropdown
+          options={models.map(m => ({ value: m, label: m }))}
+          value={model}
+          onChange={setModel}
+          className="w-full"
+        />
       </div>
 
       <div className="mb-6">
@@ -88,34 +83,27 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           <div className="flex gap-4 mb-3">
             <div className="flex-1">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">图像比例</p>
-              <select
+              <Dropdown
+                options={[
+                  { value: 'auto', label: '自动' },
+                  ...(model === '🍌全能图片V2'
+                    ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
+                    : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
+                  )
+                ]}
                 value={aspectRatio}
-                onChange={(e) => setAspectRatio(e.target.value)}
-                className="w-full bg-[#111317] border border-[#2a2e38] rounded-lg py-2 px-3 text-xs text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-              >
-                <option value="auto">自动</option>
-                {model === '🍌全能图片V2' ? (
-                  ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => (
-                    <option key={ratio} value={ratio}>{ratio}</option>
-                  ))
-                ) : (
-                  ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => (
-                    <option key={ratio} value={ratio}>{ratio}</option>
-                  ))
-                )}
-              </select>
+                onChange={setAspectRatio}
+                className="w-full"
+              />
             </div>
             <div className="flex-1">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">画质</p>
-              <select
+              <Dropdown
+                options={['1K', '2K', '4K'].map(q => ({ value: q, label: q }))}
                 value={quality}
-                onChange={(e) => setQuality(e.target.value)}
-                className="w-full bg-[#111317] border border-[#2a2e38] rounded-lg py-2 px-3 text-xs text-white appearance-none outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-              >
-                {['1K', '2K', '4K'].map(q => (
-                  <option key={q} value={q}>{q}</option>
-                ))}
-              </select>
+                onChange={setQuality}
+                className="w-full"
+              />
             </div>
           </div>
         </div>
