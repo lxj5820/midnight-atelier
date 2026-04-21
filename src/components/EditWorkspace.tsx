@@ -1,9 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, ChevronDown, Plus, RefreshCw, Zap, Maximize2, Wand2, Pencil } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useAuth } from '../AuthContext';
+import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
-import { deductComputePoints } from '../api';
 import { getGenerationHistoryAsync, saveGenerationRecord, deleteGenerationRecordFromDB } from '../App.tsx';
 import ImageEditor from './ImageEditor';
 
@@ -25,7 +24,7 @@ interface GenerationRecord {
 }
 
 const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPreviewImage }) => {
-  const { user, refreshUser } = useAuth();
+  const { hasApiKey } = useApiKey();
   const { startGenerating, stopGenerating } = useGeneration();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -132,12 +131,6 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     if (isGeneratingRef.current) { return; }
 
     if (!apiKey) { showToast('error', '请先在设置中配置 API 密钥'); return; }
-    if (!user) { showToast('error', '请先登录'); return; }
-    const requiredPoints = getComputePointsCost(model, quality);
-    if (user.compute_points < requiredPoints) {
-      showToast('error', `算力值不足，需要 ${requiredPoints} 点，当前仅有 ${user.compute_points} 点`);
-      return;
-    }
     if (!prompt.trim()) { showToast('error', '请输入提示词'); return; }
     if (referenceImages.length === 0) { showToast('error', '请上传至少一张参考图'); return; }
 
@@ -145,16 +138,6 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     isGeneratingRef.current = true;
     setIsGenerating(true);
     const taskId = startGenerating('全能修改');
-
-    const deductResult = await deductComputePoints(requiredPoints, '全能修改消耗', model, '全能修改');
-    if (!deductResult.success) {
-      showToast('error', deductResult.error || '算力值不足');
-      isGeneratingRef.current = false;
-      setIsGenerating(false);
-      stopGenerating(taskId);
-      return;
-    }
-    await refreshUser();
 
     // 保存当前提示词和参考图用于后续处理
     const currentPrompt = prompt;
@@ -165,6 +148,21 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     // 异步执行生成，不阻塞 UI
     (async () => {
       try {
+        /**
+         * SECURITY WARNING: 直接在前端调用第三方 API 会暴露 API 密钥！
+         *
+         * 当前实现存在安全漏洞:
+         * 1. API 密钥在前端代码中使用，会暴露在浏览器 Network 面板
+         * 2. 任何能访问浏览器的人都可以获取 API 密钥
+         *
+         * 修复方案:
+         * 1. 在后端服务器创建代理 API (/api/generate)
+         * 2. 将第三方 API 密钥存储在后端服务器
+         * 3. 前端调用后端代理 API，后端再调用第三方 API
+         * 4. 使用 api.ts 中的 generateImageProxy() 函数替代直接调用
+         *
+         * TODO: 部署后端代理后，将以下代码改为使用 generateImageProxy() 函数
+         */
         const modelMap: Record<string, string> = { '🍌全能图片V2': 'gemini-3.1-flash-image-preview', '🍌全能图片PRO': 'gemini-3-pro-image-preview' };
         const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
         const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
@@ -209,7 +207,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         setResult(imageUrl);
         setPendingResult(imageUrl);
         setHistoryRefreshKey(k => k + 1);
-        showToast('success', `生成成功！消耗 ${requiredPoints} 点算力`);
+        showToast('success', '生成成功！');
       } catch (error) {
         console.error('Generation error:', error);
         showToast('error', error instanceof Error ? error.message : '生成失败');
@@ -250,7 +248,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full" style={{ display: 'flex', flexDirection: 'row' }}>
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 mr-80 custom-scrollbar h-full" style={{ flex: 1, maxWidth: 'calc(100vw - 320px)' }}>
+      <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar" style={{ flex: 1, maxWidth: 'calc(100vw - 320px)' }}>
         <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="mb-4 flex items-center gap-4">
@@ -471,7 +469,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
           >
             {isGenerating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
-            {isGenerating ? '生成中...' : `立即生成 (-${getComputePointsCost(model, quality)} 算力)`}
+            {isGenerating ? '生成中...' : '立即生成'}
           </button>
         </div>
       </aside>

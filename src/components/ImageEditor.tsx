@@ -194,9 +194,15 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
 
       FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((bgImg: FabricImage) => {
         if (!isMounted) return;
-        // 获取图片原始尺寸
-        const imgWidth = bgImg.width || img.width;
-        const imgHeight = bgImg.height || img.height;
+        // 获取图片原始尺寸（使用 naturalWidth/naturalHeight 确保正确）
+        const imgWidth = img.naturalWidth || img.width || bgImg.width || 1;
+        const imgHeight = img.naturalHeight || img.height || bgImg.height || 1;
+
+        // 验证尺寸有效性
+        if (imgWidth < 1 || imgHeight < 1) {
+          console.warn('图片尺寸无效，使用默认尺寸');
+          return;
+        }
 
         // 计算容器可用空间（减去 padding）
         const container = containerRef.current;
@@ -230,50 +236,50 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
         bgImageRef.current = bgImg;
         fc.renderAll();
         saveState();
-      });
 
-      // 选择事件
-      fc.on('selection:created', (e: any) => {
-        const obj = e.selected?.[0];
-        if (obj) syncSelectionUI(obj);
-      });
-      fc.on('selection:updated', (e: any) => {
-        const obj = e.selected?.[0];
-        if (obj) syncSelectionUI(obj);
-      });
-      fc.on('selection:cleared', () => {
-        setSelectedObject(null);
-      });
-      fc.on('object:modified', () => {
-        saveState();
-      });
-      fc.on('path:created', () => saveState());
+        // 选择事件
+        fc.on('selection:created', (e: any) => {
+          const obj = e.selected?.[0];
+          if (obj) syncSelectionUI(obj);
+        });
+        fc.on('selection:updated', (e: any) => {
+          const obj = e.selected?.[0];
+          if (obj) syncSelectionUI(obj);
+        });
+        fc.on('selection:cleared', () => {
+          setSelectedObject(null);
+        });
+        fc.on('object:modified', () => {
+          saveState();
+        });
+        fc.on('path:created', () => saveState());
 
-      // 鼠标事件
-      fc.on('mouse:down', (e: any) => {
-        const t = toolRef.current;
-        // 处理橡皮擦（点击对象删除）
-        if (t === 'eraser') {
-          handleEraserPointer(e);
-          return;
-        }
-        // 处理形状绘制
-        if (isShapeTool(t)) {
-          onMouseDown(e);
-        }
-      });
+        // 鼠标事件
+        fc.on('mouse:down', (e: any) => {
+          const t = toolRef.current;
+          // 处理橡皮擦（点击对象删除）
+          if (t === 'eraser') {
+            handleEraserPointer(e);
+            return;
+          }
+          // 处理形状绘制
+          if (isShapeTool(t)) {
+            onMouseDown(e);
+          }
+        });
 
-      fc.on('mouse:move', (e: any) => {
-        // 处理形状绘制
-        if (isShapeTool(toolRef.current)) {
-          onMouseMove(e);
-        }
-      });
+        fc.on('mouse:move', (e: any) => {
+          // 处理形状绘制
+          if (isShapeTool(toolRef.current)) {
+            onMouseMove(e);
+          }
+        });
 
-      fc.on('mouse:up', (e: any) => {
-        if (isShapeTool(toolRef.current)) {
-          onMouseUp(e);
-        }
+        fc.on('mouse:up', (e: any) => {
+          if (isShapeTool(toolRef.current)) {
+            onMouseUp(e);
+          }
+        });
       });
     };
     img.src = imageUrl;
@@ -303,6 +309,8 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     if (!isShapeTool(t)) return;
     const fc = fabricCanvasRef.current;
     if (!fc) return;
+    // 确保 e.e.target 存在，避免 dom_event.ts 错误
+    if (!e.e?.target) return;
     // 如果点到了已有对象（非背景图），让 Fabric 默认处理（选中）
     if (e.target && e.target !== fc.backgroundImage) return;
 
@@ -484,16 +492,26 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
   const addText = (e: React.MouseEvent) => {
     const fc = fabricCanvasRef.current;
     if (!fc) return;
-    // 获取画布元素并计算缩放比例
+
     const canvasEl = fc.getElement();
     const canvasRect = canvasEl.getBoundingClientRect();
-    // 计算鼠标在画布上的位置（考虑缩放）
-    const x = (e.clientX - canvasRect.left) * (canvasEl.width / canvasRect.width);
-    const y = (e.clientY - canvasRect.top) * (canvasEl.height / canvasRect.height);
+
+    // 使用 clientX/clientY 减去 canvas 的 bounding rect 来获取相对于 canvas 的坐标
+    // 因为 canvas 是居中显示的，这样可以得到正确的坐标
+    const x = e.clientX - canvasRect.left;
+    const y = e.clientY - canvasRect.top;
+
+    // 验证点击位置在 canvas 范围内
+    if (x < 0 || x > canvasRect.width || y < 0 || y > canvasRect.height) return;
+
     const text = new IText('新文字', {
-      left: x, top: y,
-      fontFamily: 'sans-serif', fontSize,
-      fill: brushColor, selectable: true, editable: true,
+      left: x,
+      top: y,
+      fontFamily: 'sans-serif',
+      fontSize,
+      fill: brushColor,
+      selectable: true,
+      editable: true,
     });
     fc.add(text);
     fc.setActiveObject(text);
