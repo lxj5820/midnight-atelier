@@ -249,7 +249,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full" style={{ display: 'flex', flexDirection: 'row' }}>
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar" style={{ flex: 1, maxWidth: 'calc(100vw - 320px)' }}>
+      <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar mr-80" style={{ flex: 1, maxWidth: 'calc(100vw - 320px)' }}>
         <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="mb-4 flex items-center gap-4">
@@ -374,6 +374,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             value={model}
             onChange={setModel}
             className="w-full"
+            direction="down"
           />
         </div>
 

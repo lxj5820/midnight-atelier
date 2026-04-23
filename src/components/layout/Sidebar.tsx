@@ -38,10 +38,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-6 mb-4">
         <div className="flex items-center gap-3 mb-1">
           <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center">
-            <Zap className="text-white w-5 h-5 fill-current" />
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="1" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="12" y1="3" x2="12" y2="12" />
+              <line x1="8" y1="12" x2="8" y2="21" />
+              <line x1="16" y1="12" x2="16" y2="21" />
+            </svg>
           </div>
           <div>
-            <h1 className="text-sm font-bold text-white tracking-tight font-headline">午夜工坊</h1>
+            <h1 className="text-sm font-bold text-white tracking-tight font-headline">室内大师</h1>
             <p className="text-[10px] text-slate-500 uppercase tracking-widest">AI 工作空间</p>
           </div>
         </div>

@@ -43,8 +43,9 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   isPolishing,
 }) => {
   return (
-    <aside className="w-80 bg-[#1c1f26] border-l border-[#2a2e38] flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0 fixed right-0 top-16 h-[calc(100vh-4rem)] z-30">
-      <div className="mb-6">
+    <aside className="w-80 bg-[#1c1f26] border-l border-[#2a2e38] flex flex-col shrink-0 fixed right-0 top-16 h-[calc(100vh-4rem)] z-30">
+      {/* Fixed: Model Selection & Preset Title */}
+      <div className="p-4">
         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">引擎与模型</p>
         <Dropdown
           options={models.map(m => ({ value: m, label: m }))}
@@ -53,10 +54,11 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           className="w-full"
           direction="down"
         />
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 mt-6">效果预设</p>
       </div>
 
-      <div className="mb-6">
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">效果预设</p>
+      {/* Scrollable: Presets Grid */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pt-0">
         <div className="grid grid-cols-2 gap-3">
           {presets.map(preset => (
             <button
@@ -80,10 +82,11 @@ export const RightPanel: React.FC<RightPanelProps> = ({
               )}
             </button>
           ))}
-        </div>
+          </div>
       </div>
 
-      <div className="mt-auto pt-6 border-t border-[#2a2e38]">
+      {/* Fixed: Bottom Controls */}
+      <div className="mt-auto pt-6 border-t border-[#2a2e38] p-4">
         <div className="mb-4">
           <div className="flex gap-4 mb-3">
             <div className="flex-1">
