@@ -1,31 +1,26 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, ChevronDown, Plus, RefreshCw, Zap, Maximize2, Wand2, Pencil } from 'lucide-react';
+import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, RefreshCw, Zap, Maximize2, Wand2, Pencil, FileJson } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
-import { getGenerationHistoryAsync, saveGenerationRecord, deleteGenerationRecordFromDB } from '../App.tsx';
+import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64 } from '../utils';
+import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
 import { Dropdown } from './ui/Dropdown';
+import { PromptGenerator } from './PromptGenerator';
+
+const POLISH_SYSTEM_PROMPT = `你是一个专业的 AI 图像提示词润色助手。你的任务是将用户输入的简单提示词润色成专业、详细、结构清晰的提示词。
+1. 只输出润色后的提示词内容，不要输出任何解释、说明、标题、标签或其他内容
+2. 保持原意但丰富细节，增强描述的专业性和准确性
+3. 直接输出纯文本的提示词即可`;
 
 interface EditWorkspaceProps {
   apiKey: string;
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
-  setPreviewImage: (img: string | null) => void;
-}
-
-interface GenerationRecord {
-  id: string;
-  type: string;
-  prompt: string;
-  imageUrl: string;
-  referenceImageUrl?: string;
-  referenceImageUrls?: string[];
-  createdAt: string;
-  resolution?: { width: number; height: number; quality: string; aspectRatio: string };
+  setPreviewImage: (img: PreviewImageData | null) => void;
 }
 
 const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPreviewImage }) => {
-  const { hasApiKey } = useApiKey();
   const { startGenerating, stopGenerating } = useGeneration();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -46,6 +41,47 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPromptGenerator, setShowPromptGenerator] = useState(false);
+  const [isPolishing, setIsPolishing] = useState(false);
+
+  const handlePolishPrompt = async () => {
+    if (isPolishing) return;
+    if (!apiKey) { showToast('error', '请先在设置中配置 API 密钥'); return; }
+    if (!prompt.trim()) { showToast('info', '请先输入提示词内容'); return; }
+
+    setIsPolishing(true);
+    try {
+      const apiUrl = 'https://newapi.asia/v1beta/models/gemini-3.1-flash-lite-preview:generateContent';
+      const requestBody = {
+        contents: [{ parts: [{ text: `请润色并优化以下提示词：${prompt}` }] }],
+        systemInstruction: { parts: [{ text: POLISH_SYSTEM_PROMPT }] },
+        generationConfig: { temperature: 0.7, topP: 0.9, maxOutputTokens: 2048 }
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) throw new Error('API 请求失败');
+      const data = await response.json();
+      const polishedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (polishedText) {
+        const cleanText = polishedText.replace(/```markdown\n?|\n?```/g, '').trim();
+        setPrompt(cleanText);
+        showToast('success', '提示词已润色');
+      }
+    } catch (err) {
+      showToast('error', err instanceof Error && err.message === 'AbortError' ? '润色超时' : '润色失败');
+    } finally {
+      setIsPolishing(false);
+    }
+  };
 
   // 加载历史记录
   useEffect(() => {
@@ -53,37 +89,6 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       setGenerationHistory(history.filter(h => h.type === 'edit'));
     });
   }, [historyRefreshKey]);
-
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        try {
-          const result = reader.result as string;
-          if (!result || !result.includes(',')) { reject(new Error('图片格式转换失败')); return; }
-          resolve(result.split(',')[1]);
-        } catch (e) { reject(new Error('图片数据处理失败')); }
-      };
-      reader.onerror = () => reject(new Error('图片读取失败，请尝试重新上传'));
-      reader.readAsDataURL(blob);
-    });
-  };
-
-  const getClosestAspectRatio = (width: number, height: number): string => {
-    const ratios: Record<string, number> = { '1:1': 1, '4:3': 4/3, '16:9': 16/9, '9:16': 9/16, '3:4': 3/4, '2:3': 2/3, '3:2': 3/2, '4:5': 4/5, '5:4': 5/4, '21:9': 21/9 };
-    const currentRatio = width / height;
-    let closest = '1:1', minDiff = Math.abs(currentRatio - ratios[closest]);
-    for (const [ratio, r] of Object.entries(ratios)) {
-      const diff = Math.abs(currentRatio - r);
-      if (diff < minDiff) { minDiff = diff; closest = ratio; }
-    }
-    return closest;
-  };
-
-  const getComputePointsCost = (m: string, q: string): number => {
-    if (m === '🍌全能图片PRO') return q === '4K' ? 36 : 30;
-    return q === '4K' ? 25 : 15;
-  };
 
   const handleFiles = async (files: File[]) => {
     setIsUploading(true);
@@ -202,7 +207,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           createdAt: new Date().toISOString(),
           resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
         };
-        await saveGenerationRecord(record);
+        await saveGenerationRecordToDB(record);
 
         // 更新状态，触发 UI 刷新
         setResult(imageUrl);
@@ -251,14 +256,13 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar mr-80" style={{ flex: 1, maxWidth: 'calc(100vw - 320px)' }}>
         <div className="max-w-5xl mx-auto">
-          {/* Header */}
-          <div className="mb-4 flex items-center gap-4">
-            <div className="px-4 py-2 bg-indigo-600/10 rounded-xl flex items-center gap-2 border border-indigo-500/20">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="px-3.5 py-2 bg-indigo-500/10 rounded-xl flex items-center gap-2 border border-indigo-500/15">
               <Sparkles className="w-4 h-4 text-indigo-400" />
               <span className="text-sm font-bold text-indigo-400">全能修改</span>
             </div>
             {isGenerating && (
-              <div className="px-3 py-1 bg-indigo-600/20 rounded-full flex items-center gap-2 text-sm text-indigo-400">
+              <div className="px-3 py-1.5 bg-indigo-500/10 rounded-lg flex items-center gap-2 text-xs text-indigo-400 border border-indigo-500/15">
                 <RefreshCw className="w-3 h-3 animate-spin" />
                 <span>后台生成中，可继续操作...</span>
               </div>
@@ -268,21 +272,21 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           {/* Result Area */}
           {(result || pendingResult) ? (
             <div className="mb-6">
-              <div className="aspect-video rounded-xl overflow-hidden bg-[#1c1f26] relative group shadow-xl shadow-black/20">
+              <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-white/[0.04]">
                 <img src={result || pendingResult} alt="生成结果" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
               </div>
             </div>
           ) : isGenerating ? (
-            <div className="aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 border-indigo-500/50">
-              <div className="w-12 h-12 bg-[#111317] rounded-xl flex items-center justify-center mb-4 shadow-lg animate-pulse">
+            <div className="aspect-video rounded-2xl border-2 border-dashed bg-surface-2/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 border-indigo-500/50">
+              <div className="w-12 h-12 bg-surface-1 rounded-xl flex items-center justify-center mb-4 shadow-lg animate-pulse border border-white/[0.06]">
                 <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
               </div>
               <h3 className="text-base font-bold text-white mb-1">正在生成图片...</h3>
               <p className="text-slate-500 text-xs">可切换到其他菜单继续操作</p>
             </div>
           ) : (
-            <div className="aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]">
-              <div className="w-12 h-12 bg-[#111317] rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-105 transition-transform">
+            <div className="upload-zone aspect-video flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 border-white/[0.06]">
+              <div className="w-12 h-12 bg-surface-2 rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-white/[0.06]">
                 <Wand2 className="w-6 h-6 text-indigo-500" />
               </div>
               <h3 className="text-base font-bold text-white mb-1">全能图片修改</h3>
@@ -293,13 +297,13 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           {/* Result Actions */}
           {(result || pendingResult) && (
             <div className="flex justify-end gap-2 mb-4">
-              <button onClick={() => { const img = result || pendingResult; if (img) { setReferenceImages([img]); showToast('info', '已设置为参考图'); } }} className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-[#2a2e38] text-white text-sm rounded-lg transition-colors">
-                <Quote className="w-4 h-4" />引用
+              <button onClick={() => { const img = result || pendingResult; if (img) { setReferenceImages([img]); showToast('info', '已设置为参考图'); } }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-white text-xs font-medium rounded-lg border border-white/[0.06]">
+                <Quote className="w-3.5 h-3.5" />引用
               </button>
-              <button onClick={() => { const img = result || pendingResult; if (img) handleDownload(img); }} className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-[#2a2e38] text-white text-sm rounded-lg transition-colors">
-                <Download className="w-4 h-4" />下载
+              <button onClick={() => { const img = result || pendingResult; if (img) handleDownload(img); }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-white text-xs font-medium rounded-lg border border-white/[0.06]">
+                <Download className="w-3.5 h-3.5" />下载
               </button>
-              <button onClick={() => { setResult(null); setPendingResult(null); }} className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-rose-500/20 text-rose-400 text-sm rounded-lg transition-colors">
+              <button onClick={() => { setResult(null); setPendingResult(null); }} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-white/[0.06] hover:border-rose-500/20 transition-all duration-200">
                 <Trash2 className="w-4 h-4" />清除
               </button>
             </div>
@@ -335,7 +339,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className="rounded-lg overflow-hidden bg-[#1c1f26] relative group cursor-pointer shrink-0"
+                    className="history-card rounded-xl overflow-hidden bg-surface-2 relative group cursor-pointer shrink-0 border border-white/[0.04]"
                     style={{ width: thumbnailSize, height: thumbnailSize }}
                     onClick={() => handleItemClick(record)}
                   >
@@ -347,7 +351,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                       </p>
                       <div className="flex gap-1 mt-1">
                         <button onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrls && record.referenceImageUrls.length > 0) { setReferenceImages(record.referenceImageUrls); showToast('success', `已引用提示词和${record.referenceImageUrls.length}张参考图`); } else if (record.referenceImageUrl) { setReferenceImages([record.referenceImageUrl]); showToast('success', '已引用提示词和参考图'); } else { showToast('info', '已引用提示词'); } }} className="p-1.5 bg-white/10 rounded hover:bg-indigo-500/50 transition-colors" title="复用"><Quote className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage(record.imageUrl); }} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: record.prompt || '生成结果', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
                         <button onClick={(e) => { e.stopPropagation(); handleDownload(record.imageUrl); }} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
                         <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 bg-white/10 rounded hover:bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
                       </div>
@@ -365,10 +369,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       </div>
 
       {/* Right Sidebar */}
-      <aside className="w-80 bg-[#1c1f26] border-l border-[#2a2e38] flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0 fixed right-0 top-16 h-[calc(100vh-4rem)] z-30">
+      <aside className="w-80 bg-surface-2 border-l border-border flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0 fixed right-0 top-14 h-[calc(100vh-3.5rem)] z-30">
         {/* Model Selection */}
         <div className="mb-6">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">引擎与模型</p>
+          <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-3">引擎与模型</p>
           <Dropdown
             options={models.map(m => ({ value: m, label: m }))}
             value={model}
@@ -380,11 +384,11 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
         {/* Reference Image Upload */}
         <div className="mb-6">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">参考图</p>
+          <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-3">参考图</p>
           {referenceImages.length > 0 ? (
             <div className="grid grid-cols-3 gap-2 mb-3">
               {referenceImages.map((img, idx) => (
-                <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-[#111317] relative group">
+                <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-surface-1 relative group">
                   <img src={img} alt={`参考图 ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
@@ -403,7 +407,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             </div>
           ) : null}
           <div
-            className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${isDragging ? 'border-indigo-500 bg-indigo-500/10' : 'border-[#2a2e38] hover:border-indigo-500/50'}`}
+            className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-white/[0.06] hover:border-indigo-500/30'}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -426,11 +430,11 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         </div>
 
         {/* Aspect Ratio & Quality */}
-        <div className="mt-auto pt-6 border-t border-[#2a2e38]">
+        <div className="mt-auto pt-4 border-t border-border">
           <div className="mb-4">
-            <div className="flex gap-4 mb-3">
+            <div className="flex gap-3 mb-3">
               <div className="flex-1">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">图像比例</p>
+                <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2">图像比例</p>
                 <Dropdown
                   options={[
                     { value: 'auto', label: '自动' },
@@ -445,7 +449,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                 />
               </div>
               <div className="flex-1">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">画质</p>
+                <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2">画质</p>
                 <Dropdown
                   options={['1K', '2K', '4K'].map(q => ({ value: q, label: q }))}
                   value={quality}
@@ -457,25 +461,43 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           </div>
 
           {/* Prompt Input */}
-          <div className="bg-[#111317] rounded-xl p-4 mb-4">
+          <div className="bg-surface-1 rounded-xl p-4 mb-4 border border-white/[0.04]">
             <textarea
               placeholder="输入提示词，描述你想要如何修改这张图片..."
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              className="w-full bg-transparent border-none text-sm text-white resize-none outline-none min-h-[80px]"
+              className="w-full bg-transparent border-none text-sm text-white resize-none outline-none min-h-[80px] placeholder:text-slate-600"
             />
-            <div className="flex justify-end gap-2 mt-2">
-              <button onClick={() => setPrompt('')} className="p-1.5 text-slate-500 hover:text-white transition-colors" title="清空">
-                <RefreshCw className="w-4 h-4" />
+            <div className="flex justify-end gap-1.5 mt-2 pt-2 border-t border-white/[0.04]">
+              <button onClick={() => setShowPromptGenerator(true)} className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200" title="提示词生成器">
+                <FileJson className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handlePolishPrompt}
+                disabled={isPolishing || !prompt.trim()}
+                className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                title="润色提示"
+              >
+                <Sparkles className={`w-4 h-4 ${isPolishing ? 'animate-spin' : ''}`} />
+              </button>
+              <button onClick={() => setPrompt('')} className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-200" title="清空">
+                <Trash2 className="w-4 h-4" />
               </button>
             </div>
           </div>
+
+          {/* Prompt Generator Modal */}
+          <PromptGenerator
+            isOpen={showPromptGenerator}
+            onClose={() => setShowPromptGenerator(false)}
+            onApply={(text) => setPrompt(text)}
+          />
 
           {/* Generate Button */}
           <button
             onClick={handleGenerate}
             disabled={isGenerating}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
+            className="btn-primary w-full text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:bg-slate-700 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none"
           >
             {isGenerating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
             {isGenerating ? '生成中...' : '立即生成'}

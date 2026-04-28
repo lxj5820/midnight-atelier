@@ -43,3 +43,12 @@ export interface GalleryItem {
 export type View = 'workspace' | 'gallery' | 'settings' | 'admin' | 'edit';
 
 export type GalleryCategory = 'hot' | 'latest' | 'style';
+
+export interface PreviewImageData {
+  url: string;
+  name?: string;
+  size?: number;
+  prompt?: string;
+  createdAt?: string;
+  author?: string;
+}

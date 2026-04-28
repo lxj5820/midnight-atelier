@@ -3,9 +3,8 @@ import { motion } from 'framer-motion';
 import {
   Sparkles, RefreshCw, ChevronLeft, ChevronRight, Maximize2,
   Upload, X, Share2, Trash2, RotateCcw, Download, Pencil,
-  Plus, Zap, ChevronDown, Check, Layers
+  Layers
 } from 'lucide-react';
-import { useAuth } from '../../AuthContext';
 import { useGeneration } from '../../GenerationContext';
 import { useApiKey } from '../../ApiKeyContext';
 import {
@@ -14,10 +13,12 @@ import {
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
 } from '../../utils';
-import { getPromptPlaceholder, menuItemsConfig, extractVariablesFromPrompt } from '../../menuConfig';
+import {
+  getPromptPlaceholder, menuItemsConfig
+} from '../../menuConfig';
 import { getPresetsForMenu } from '../../visualPresetConfig';
 import type { MenuItemId } from '../../menuConfig';
-import type { GenerationRecord } from '../../types';
+import type { GenerationRecord, PreviewImageData } from '../../types';
 import { RightPanel } from '../layout/RightPanel';
 import { lazy } from 'react';
 
@@ -35,7 +36,7 @@ interface WorkspaceViewProps {
   quality: string;
   setQuality: (q: string) => void;
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
-  setPreviewImage: (img: string | null) => void;
+  setPreviewImage: (img: PreviewImageData | null) => void;
   editingImageIndex: number | null;
   setEditingImageIndex: (index: number | null) => void;
 }
@@ -77,7 +78,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const filteredPresets = getPresetsForMenu(activeMenuItem);
   const promptPlaceholder = getPromptPlaceholder(activeMenuItem);
 
-  // 检查比例支持
   useEffect(() => {
     const proRatios = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', 'auto'];
     if (model === '🍌全能图片PRO' && !proRatios.includes(aspectRatio)) {
@@ -85,19 +85,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     }
   }, [model, aspectRatio, setAspectRatio]);
 
-  // 加载历史记录
   useEffect(() => {
     getGenerationHistoryByTypeAsync(activeMenuItem).then(setGenerationHistory);
   }, [activeMenuItem, historyRefreshKey]);
 
-  // 自动切换预设
   useEffect(() => {
     if (!filteredPresets.find(p => p.label === selectedPreset)) {
       setSelectedPreset(filteredPresets[0]?.label || '');
     }
   }, [activeMenuItem, filteredPresets, selectedPreset, setSelectedPreset]);
 
-  // 粘贴处理
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -331,7 +328,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       const data = await response.json();
       const polishedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (polishedText) {
-        // 去除 markdown 代码块
         const cleanText = polishedText.replace(/```markdown\n?|\n?```/g, '').trim();
         setPrompt(cleanText);
         showToast('success', '提示词已润色');
@@ -380,27 +376,25 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full">
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar mr-80">
+      <div className="flex-1 overflow-y-auto p-5 lg:p-6 custom-scrollbar mr-80">
         <div className="max-w-5xl mx-auto">
-          {/* Current Action Indicator */}
-          <div className="mb-4 flex items-center gap-4">
-            <div className="px-4 py-2 bg-indigo-600/10 rounded-xl flex items-center gap-2 border border-indigo-500/20">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="px-3.5 py-2 bg-indigo-500/10 rounded-xl flex items-center gap-2 border border-indigo-500/15">
               <Sparkles className="w-4 h-4 text-indigo-400" />
               <span className="text-sm font-bold text-indigo-400">{getMenuItemLabel(activeMenuItem)}</span>
             </div>
             {isGenerating && (
-              <div className="flex items-center gap-2 text-sm text-slate-400">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>生成中...</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/15">
+                <RefreshCw className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                <span className="text-xs text-indigo-300 font-medium">生成中...</span>
               </div>
             )}
           </div>
 
-          {/* Result Area */}
           {result && imageUrls.length > 0 && showCompareMode ? (
             <div className="mb-6">
               <div
-                className="aspect-video rounded-xl overflow-hidden bg-[#1c1f26] relative group shadow-xl shadow-black/20 select-none"
+                className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 select-none border border-white/[0.04]"
                 onMouseMove={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setSliderPosition(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)));
@@ -410,23 +404,23 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                 <div className="absolute inset-0 w-full h-full overflow-hidden" style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}>
                   <img src={result} alt="Generated Result" className="absolute inset-0 w-full h-full object-contain" referrerPolicy="no-referrer" />
                 </div>
-                <div className="absolute top-0 bottom-0 w-1 bg-white cursor-ew-resize z-10 shadow-lg" style={{ left: `${sliderPosition}%` }}>
+                <div className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-10 shadow-lg" style={{ left: `${sliderPosition}%` }}>
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center">
-                    <ChevronLeft className="w-4 h-4 text-slate-700" /><ChevronRight className="w-4 h-4 text-slate-700" />
+                    <ChevronLeft className="w-3.5 h-3.5 text-slate-700" /><ChevronRight className="w-3.5 h-3.5 text-slate-700" />
                   </div>
                 </div>
-                <div className="absolute top-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded-full">原图</div>
-                <div className="absolute top-2 right-2 px-2 py-1 bg-indigo-500/80 text-white text-xs rounded-full">生成图</div>
+                <div className="absolute top-3 left-3 px-2.5 py-1 bg-indigo-500/80 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">生成图</div>
+                <div className="absolute top-3 right-3 px-2.5 py-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">原图</div>
               </div>
             </div>
           ) : result ? (
             <div className="mb-6 relative">
-              <div className="aspect-video rounded-xl overflow-hidden bg-[#1c1f26] relative group shadow-xl shadow-black/20">
+              <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-white/[0.04]">
                 <img src={result} alt="Generated Result" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                 {activeMenuItem === 'panorama' && (
                   <button
                     onClick={() => { setPanoramaImageUrl(result); setShowPanoramaViewer(true); }}
-                    className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all backdrop-blur-sm"
+                    className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2.5 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl shadow-lg transition-all backdrop-blur-sm"
                     title="全景查看"
                   >
                     <Maximize2 className="w-4 h-4" />全景查看
@@ -436,20 +430,20 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             </div>
           ) : imageUrls.length > 0 ? (
             <div className="mb-6 relative">
-              <div className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all ${isDragging ? 'border-indigo-500 bg-[#1c1f26]' : 'border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]'}`}
+              <div className={`aspect-video rounded-2xl overflow-hidden bg-surface-2/50 flex flex-col items-center justify-center group cursor-pointer transition-all border-2 border-dashed ${isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-white/[0.06] hover:border-indigo-500/30 hover:bg-surface-2'}`}
                 onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={handleUpload}>
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/jpeg,image/png,image/webp" className="hidden" />
                 {isUploading ? (
                   <><RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" /><p className="text-slate-500 text-sm">上传中...</p></>
                 ) : (
                   <><img src={imageUrls[0]} alt="参考图" className="w-full h-full object-contain" onClick={handleUpload} />
-                    <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/50 hover:bg-black/80 rounded-full transition-colors"><X className="w-4 h-4 text-white" /></button></>
+                    <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/80 rounded-lg transition-colors backdrop-blur-sm"><X className="w-4 h-4 text-white" /></button></>
                 )}
               </div>
               {activeMenuItem === 'panorama' && (
                 <button
                   onClick={() => { setPanoramaImageUrl(imageUrls[0]); setShowPanoramaViewer(true); }}
-                  className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-full shadow-lg transition-all backdrop-blur-sm"
+                  className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2.5 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl shadow-lg transition-all backdrop-blur-sm"
                   title="全景查看"
                 >
                   <Maximize2 className="w-4 h-4" />全景查看
@@ -457,60 +451,60 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               )}
             </div>
           ) : (
-            <div className={`aspect-video rounded-xl border-2 border-dashed bg-[#1c1f26]/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 ${isDragging ? 'border-indigo-500 bg-[#1c1f26]' : 'border-[#2a2e38] hover:border-indigo-500/50 hover:bg-[#1c1f26]'}`}
+            <div className={`upload-zone aspect-video flex flex-col items-center justify-center group cursor-pointer mb-6 ${isDragging ? 'dragging' : 'border-white/[0.06]'}`}
               onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={handleUpload}>
               <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/jpeg,image/png,image/webp" className="hidden" />
-              <div className="w-12 h-12 bg-[#111317] rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-105 transition-transform"><Upload className="w-6 h-6 text-indigo-500" /></div>
-              <h3 className="text-base font-bold text-white mb-1">点击或拖拽图片上传</h3>
-              <p className="text-slate-500 text-xs">支持 JPG, PNG, WEBP</p>
+              <div className="w-14 h-14 bg-surface-2 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-white/[0.06]">
+                <Upload className="w-6 h-6 text-indigo-500" />
+              </div>
+              <h3 className="text-base font-bold text-white mb-1.5">点击或拖拽图片上传</h3>
+              <p className="text-slate-500 text-xs">支持 JPG, PNG, WEBP · 也可 Ctrl+V 粘贴</p>
             </div>
           )}
 
-          {/* Result Actions */}
           {(result || imageUrls.length > 0) && (
-            <div className="flex items-center justify-end gap-2 mb-4">
+            <div className="flex items-center justify-end gap-2 mb-5">
               {imageUrls.length > 0 && (
-                <button onClick={() => setEditingImageIndex(0)} className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-indigo-500/20 text-indigo-400 text-sm rounded-lg transition-colors" title="图片编辑器">
-                  <Pencil className="w-4 h-4" />图片编辑器
+                <button onClick={() => setEditingImageIndex(0)} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-indigo-400 text-xs font-medium rounded-lg border border-white/[0.06]" title="图片编辑器">
+                  <Pencil className="w-3.5 h-3.5" />图片编辑器
                 </button>
               )}
               {result && imageUrls.length > 0 && (
                 <button
                   onClick={() => setShowCompareMode(!showCompareMode)}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm rounded-lg transition-colors ${showCompareMode ? 'bg-indigo-600 text-white' : 'bg-[#1c1f26] hover:bg-[#2a2e38] text-white'}`}
+                  className={`btn-ghost flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border ${showCompareMode ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-surface-2 text-white border-white/[0.06]'}`}
                   title="图片对比模式"
                 >
-                  <Layers className="w-4 h-4" />{showCompareMode ? '关闭对比' : '对比模式'}
+                  <Layers className="w-3.5 h-3.5" />{showCompareMode ? '关闭对比' : '对比模式'}
                 </button>
               )}
               {result && imageUrls.length === 0 && (
-                <><button onClick={handleShare} className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-[#2a2e38] text-white text-sm rounded-lg transition-colors"><Share2 className="w-4 h-4" />分享</button>
-                  <button onClick={handleCopyResult} className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-[#2a2e38] text-white text-sm rounded-lg transition-colors"><Download className="w-4 h-4" />复制链接</button></>
+                <><button onClick={handleShare} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-white text-xs font-medium rounded-lg border border-white/[0.06]"><Share2 className="w-3.5 h-3.5" />分享</button>
+                  <button onClick={handleCopyResult} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-white text-xs font-medium rounded-lg border border-white/[0.06]"><Download className="w-3.5 h-3.5" />复制链接</button></>
               )}
-              <button onClick={handleClearResult} className="flex items-center gap-2 px-4 py-2 bg-[#1c1f26] hover:bg-rose-500/20 text-rose-400 text-sm rounded-lg transition-colors">
-                <Trash2 className="w-4 h-4" />{result ? '清除结果' : '清除参考图'}
+              <button onClick={handleClearResult} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-white/[0.06] hover:border-rose-500/20 transition-all duration-200">
+                <Trash2 className="w-3.5 h-3.5" />{result ? '清除结果' : '清除参考图'}
               </button>
             </div>
           )}
 
-          {/* Recent Generations */}
-          <div className="mt-4">
+          <div className="mt-2">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
-                <h2 className="text-sm font-bold text-white">{getMenuItemLabel(activeMenuItem)} <span className="text-slate-500 font-normal text-xs ml-2">历史记录</span></h2>
-                {generationHistory.length > 0 && <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-xs rounded-full">{generationHistory.length}</span>}
+                <h2 className="text-sm font-bold text-white">{getMenuItemLabel(activeMenuItem)} <span className="text-slate-500 font-normal text-xs ml-1.5">历史记录</span></h2>
+                {generationHistory.length > 0 && <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold rounded-md">{generationHistory.length}</span>}
               </div>
               <div className="flex items-center gap-3">
                 {generationHistory.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-500 text-xs">缩略图</span>
+                    <span className="text-slate-600 text-[10px]">缩略图</span>
                     <input type="range" min="60" max="300" value={thumbnailSize} onChange={(e) => setThumbnailSize(Number(e.target.value))}
-                      className="w-20 h-1 bg-[#2a2e38] rounded-lg appearance-none cursor-pointer accent-indigo-500" />
-                    <span className="text-slate-500 text-xs">{thumbnailSize}px</span>
+                      className="w-16 h-1 bg-surface-3 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+                    <span className="text-slate-600 text-[10px]">{thumbnailSize}px</span>
                   </div>
                 )}
-                {generationHistory.length > 0 && <button onClick={handleClearHistory} className="text-rose-400 text-xs font-medium hover:text-rose-300 transition-colors">清除记录</button>}
-                <button onClick={handleViewAll} className="text-indigo-400 text-xs font-medium hover:text-indigo-300 transition-colors">
+                {generationHistory.length > 0 && <button onClick={handleClearHistory} className="text-rose-400/70 text-[10px] font-medium hover:text-rose-400 transition-colors">清除记录</button>}
+                <button onClick={handleViewAll} className="text-indigo-400/70 text-[10px] font-medium hover:text-indigo-400 transition-colors">
                   {generationHistory.length > 0 ? `查看全部 ${generationHistory.length}` : '暂无记录'}
                 </button>
               </div>
@@ -518,41 +512,44 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             {generationHistory.length > 0 ? (
               <div className="flex flex-wrap gap-3">
                 {generationHistory.map((record, index) => (
-                  <motion.div key={record.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
-                    className="rounded-lg overflow-hidden bg-[#1c1f26] relative group cursor-pointer shrink-0"
+                  <motion.div key={record.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}
+                    className="history-card rounded-xl overflow-hidden bg-surface-2 relative group cursor-pointer shrink-0 border border-white/[0.04]"
                     style={{ width: thumbnailSize, height: thumbnailSize }} onClick={() => handleItemClick(record)}>
                     <img src={record.imageUrl} alt={record.prompt} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" referrerPolicy="no-referrer" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
                       <p className="text-[9px] text-slate-400 mt-0.5">
                         {new Date(record.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         {record.resolution && <span className="ml-1 text-indigo-400">{record.resolution.width > 0 ? `${record.resolution.width}×${record.resolution.height} ` : ''}{record.resolution.quality}</span>}
                       </p>
-                      <div className="flex gap-1 mt-1">
+                      <div className="flex gap-1 mt-1.5">
                         <button onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrl) { setImageUrls([record.referenceImageUrl]); showToast('success', '已复用提示词和参考图'); } else showToast('success', '已复用提示词'); }}
-                          className="p-1.5 bg-white/10 rounded hover:bg-indigo-500/50 transition-colors" title="复用"><RotateCcw className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage(record.imageUrl); }} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDownloadHistory(record); }} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 bg-white/10 rounded hover:bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
+                          className="p-1.5 bg-white/10 rounded-md hover:bg-indigo-500/50 transition-colors" title="复用"><RotateCcw className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: record.prompt || '生成结果', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDownloadHistory(record); }} className="p-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 bg-white/10 rounded-md hover:bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
                       </div>
                     </div>
                   </motion.div>
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-6 rounded-xl"><p className="text-slate-500 text-xs">暂无历史记录</p></div>
+              <div className="flex flex-col items-center justify-center py-10 rounded-xl bg-surface-2/30 border border-white/[0.03]">
+                <div className="w-10 h-10 bg-surface-2 rounded-xl flex items-center justify-center mb-3">
+                  <Layers className="w-5 h-5 text-slate-600" />
+                </div>
+                <p className="text-slate-500 text-xs">暂无历史记录</p>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Panorama Viewer Modal */}
         {showPanoramaViewer && panoramaImageUrl && (
           <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center"><RefreshCw className="w-8 h-8 animate-spin text-white" /></div>}>
             <PanoramaViewer imageUrl={panoramaImageUrl} isOpen={showPanoramaViewer} onClose={() => setShowPanoramaViewer(false)} />
           </Suspense>
         )}
 
-        {/* Image Editor Modal */}
         {editingImageIndex !== null && imageUrls[editingImageIndex] && (
           <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center"><RefreshCw className="w-8 h-8 animate-spin text-white" /></div>}>
             <ImageEditor
@@ -568,7 +565,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         )}
       </div>
 
-      {/* Right Panel */}
       <RightPanel
         model={model} setModel={setModel} models={models}
         presets={filteredPresets} selectedPreset={selectedPreset} setSelectedPreset={setSelectedPreset}
@@ -580,6 +576,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         handleGenerate={handleGenerate}
         isGenerating={isGenerating}
         isPolishing={isPolishing}
+        activeMenuItem={activeMenuItem}
       />
     </div>
   );
