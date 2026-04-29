@@ -25,35 +25,77 @@ function isShapeTool(t: Tool) {
   return t === 'rect' || t === 'circle' || t === 'line' || t === 'arrow';
 }
 
-// 创建箭头（用 Group 包含线和头部）
+// 创建箭头（使用 Line + Polygon 的组合实现，确保完美对齐）
 function createArrow(x1: number, y1: number, x2: number, y2: number, color: string, lw: number): fabric.Group {
-  // 计算边界框
-  const minX = Math.min(x1, x2);
-  const minY = Math.min(y1, y2);
-
-  // 子对象使用相对于 Group 的坐标
-  const line = new fabric.Line([x1 - minX, y1 - minY, x2 - minX, y2 - minY], {
-    stroke: color, strokeWidth: lw,
-    selectable: false, evented: false, strokeLineCap: 'round',
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const angle = Math.atan2(dy, dx);
+  const length = Math.sqrt(dx * dx + dy * dy);
+  
+  if (length < 5) {
+    // 如果长度太短，返回一个点
+    const point = new fabric.Circle({
+      left: x1 - lw / 2,
+      top: y1 - lw / 2,
+      radius: lw / 2,
+      fill: color,
+      stroke: color,
+      strokeWidth: 1,
+      selectable: true,
+    });
+    return new fabric.Group([point], { selectable: true });
+  }
+  
+  const headLength = Math.max(lw * 4, 14);
+  const headWidth = headLength * 0.8;
+  
+  // 计算箭头头部背部的位置（从尖端后退 headLength）
+  const backX = x2 - headLength * Math.cos(angle);
+  const backY = y2 - headLength * Math.sin(angle);
+  
+  // 计算垂直方向的角度（与箭头方向垂直）
+  const perpAngle = angle + Math.PI / 2;
+  
+  // 计算箭头头部两侧的端点（从背部中点向两侧延伸）
+  const halfWidth = headWidth / 2;
+  const backX1 = backX + halfWidth * Math.cos(perpAngle);
+  const backY1 = backY + halfWidth * Math.sin(perpAngle);
+  const backX2 = backX - halfWidth * Math.cos(perpAngle);
+  const backY2 = backY - halfWidth * Math.sin(perpAngle);
+  
+  // 创建箭身（从起点到箭头背部中心点）
+  // 线条稍微延伸超出背部中心，以确保与三角形完美连接
+  // 延伸量为线条宽度的一半，这样可以与 round 端点和 round 连接点平滑过渡
+  const lineExtension = lw / 2;
+  const lineEndX = backX - lineExtension * Math.cos(angle);
+  const lineEndY = backY - lineExtension * Math.sin(angle);
+  
+  const line = new fabric.Line([x1, y1, lineEndX, lineEndY], {
+    stroke: color,
+    strokeWidth: lw,
+    strokeLineCap: 'round',  // 圆形端点
+    selectable: true,
   });
-
-  const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
-  const headSize = Math.max(lw * 4, 14);
-  const head = new fabric.Triangle({
-    left: x2 - minX, top: y2 - minY,
-    width: headSize, height: headSize,
-    fill: color, angle: angle + 90,
-    originX: 'center', originY: 'center',
-    selectable: false, evented: false,
+  
+  // 创建箭头头部（三角形）
+  // 三角形的底边中点与 Line 延伸端点重合
+  const triangle = new fabric.Polygon([
+    { x: backX1, y: backY1 },
+    { x: x2, y: y2 },
+    { x: backX2, y: backY2 },
+  ], {
+    fill: color,
+    stroke: color,
+    strokeWidth: lw,
+    strokeLineJoin: 'round',  // 使用 round 连接，确保线条平滑过渡
+    selectable: true,
   });
-
-  const group = new fabric.Group([line, head], {
-    left: minX, top: minY,
-    selectable: true, evented: true,
-    lockScalingX: true, lockScalingY: true,
-    lockRotation: true, hasControls: false,
+  
+  const group = new fabric.Group([line, triangle], {
+    selectable: true,
+    evented: true,
   });
-
+  
   return group;
 }
 
@@ -424,13 +466,13 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
       ln.set({ x2: pt.x, y2: pt.y });
       ln.setCoords();
     } else if (t === 'arrow') {
-      // 优化：使用临时线段代替实时重建箭头，只在最后创建完整箭头
+      // 箭头工具：使用临时线条预览
       if (shape instanceof fabric.Line) {
-        // 第一次移动，更新线条
+        // 更新线条
         shape.set({ x2: pt.x, y2: pt.y });
         shape.setCoords();
       } else if (shape instanceof fabric.Group) {
-        // 如果已经是箭头组，删除并创建新的（因为坐标变了）
+        // 如果已经是 Group（完整箭头），删除并创建新的
         fc.remove(shape);
         const arrow = createArrow(sx, sy, pt.x, pt.y, strokeColorRef.current, brushSizeRef.current);
         arrow.set({ selectable: false, evented: false });
@@ -459,7 +501,9 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
       const dy = (shape.y2 ?? 0) - (shape.y1 ?? 0);
       tiny = Math.sqrt(dx * dx + dy * dy) < 5;
     } else if (shape instanceof fabric.Group) {
-      tiny = (shape.width ?? 0) < 5 && (shape.height ?? 0) < 5;
+      // 检查 Group 的边界框
+      const bounds = shape.getBoundingRect();
+      tiny = bounds.width < 5 && bounds.height < 5;
     }
 
     if (tiny) { fc.remove(shape); fc.renderAll(); return; }
