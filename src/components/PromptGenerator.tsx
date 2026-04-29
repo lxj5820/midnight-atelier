@@ -174,6 +174,26 @@ function removeCustomButton(fieldKey: string, value: string) {
 }
 
 const PRESETS_KEY = 'promptGeneratorPresets';
+const LAST_STATE_KEY = 'promptGeneratorLastState';
+
+interface LastStateData {
+  selections: Record<string, number>;
+  customInputs: Record<string, string>;
+  enabledSections: string[];
+}
+
+function getLastState(): LastStateData | null {
+  try {
+    const saved = localStorage.getItem(LAST_STATE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastState(state: LastStateData) {
+  localStorage.setItem(LAST_STATE_KEY, JSON.stringify(state));
+}
 
 function getPresets(): PresetData[] {
   try {
@@ -231,16 +251,23 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
       setCustomButtons(getCustomButtons());
       setPresets(getPresets());
 
-      const initial: Record<string, number> = {};
-      for (const [sectionId, section] of Object.entries(CONFIG)) {
-        for (const field of section.fields) {
-          if (field.type === 'select' && field.default !== undefined) {
-            initial[`${sectionId}__${field.key}`] = field.default;
+      const lastState = getLastState();
+      if (lastState) {
+        setSelections(lastState.selections);
+        setCustomInputs(lastState.customInputs);
+        setEnabledSections(new Set(lastState.enabledSections));
+      } else {
+        const initial: Record<string, number> = {};
+        for (const [sectionId, section] of Object.entries(CONFIG)) {
+          for (const field of section.fields) {
+            if (field.type === 'select' && field.default !== undefined) {
+              initial[`${sectionId}__${field.key}`] = field.default;
+            }
           }
         }
+        setSelections(initial);
+        setCustomInputs({});
       }
-      setSelections(initial);
-      setCustomInputs({});
       setShowPresetMenu(false);
       setShowSaveDialog(false);
       setPresetName('');
@@ -290,16 +317,28 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
     const shortLabel = value.length > 10 ? value.substring(0, 10) + '...' : value;
     const added = addCustomButton(baseFieldKey, value, shortLabel);
     if (added) {
-      setCustomButtons(getCustomButtons());
-      // Switch to custom option
-      const fieldOptions = field?.options || [];
-      handleSelect(sectionId, fieldKey, fieldOptions.length - 1);
+      const updatedButtons = getCustomButtons();
+      setCustomButtons(updatedButtons);
+      const customBtnCount = updatedButtons[baseFieldKey]?.length || 0;
+      const builtInCount = (field?.options?.length || 1) - 1;
+      handleSelect(sectionId, fieldKey, builtInCount + customBtnCount - 1);
     }
   };
 
-  const handleDeleteCustomButton = (fieldKey: string, value: string) => {
+  const handleDeleteCustomButton = (sectionId: string, fieldKey: string, value: string) => {
     removeCustomButton(fieldKey, value);
-    setCustomButtons(getCustomButtons());
+    const updatedButtons = getCustomButtons();
+    setCustomButtons(updatedButtons);
+    const field = CONFIG[sectionId]?.fields.find(f => f.key === fieldKey || f.key === fieldKey + '_自定义');
+    if (field) {
+      const fullKey = `${sectionId}__${field.key}`;
+      const currentIdx = selections[fullKey] ?? 0;
+      const builtInCount = (field.options?.length || 1) - 1;
+      const customBtnCount = updatedButtons[fieldKey]?.length || 0;
+      if (currentIdx >= builtInCount && currentIdx >= builtInCount + customBtnCount) {
+        handleSelect(sectionId, field.key, field.default ?? 0);
+      }
+    }
   };
 
   const buildJSON = () => {
@@ -310,24 +349,26 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
       const field = section?.fields.find(f => f.key === fieldKey);
       if (!field || field.type !== 'select') return;
 
-      // Skip if section is disabled (except task which is always enabled)
       if (sectionId !== 'task' && !enabledSections.has(sectionId)) return;
 
       const selectionIndex = selections[`${sectionId}__${fieldKey}`] ?? field.default ?? 0;
       const options = field.options || [];
       const baseFieldKey = fieldKey.replace('_自定义', '');
-
-      // Get section title from CONFIG
       const sectionTitle = section.title;
 
-      // Ensure section object exists
       if (!json[sectionTitle]) {
         json[sectionTitle] = {};
       }
 
-      // Check if selected is a custom button
-      if (selectionIndex >= options.length - 1) {
-        // Custom option selected - use input value
+      const builtInCount = options.length - 1;
+      const customBtns = customButtons[baseFieldKey] || [];
+
+      if (selectionIndex >= builtInCount && selectionIndex < builtInCount + customBtns.length) {
+        const btn = customBtns[selectionIndex - builtInCount];
+        if (btn) {
+          json[sectionTitle][baseFieldKey] = btn.value;
+        }
+      } else if (selectionIndex === options.length - 1) {
         const customValue = customInputs[`${sectionId}__${fieldKey}`];
         if (customValue) {
           json[sectionTitle][baseFieldKey] = customValue;
@@ -407,6 +448,11 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
 
   const handleApply = () => {
     const text = JSON.stringify(json, null, 2);
+    saveLastState({
+      selections: { ...selections },
+      customInputs: { ...customInputs },
+      enabledSections: Array.from(enabledSections),
+    });
     onApply(text);
     onClose();
   };
@@ -422,6 +468,8 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
     }
     setSelections(initial);
     setCustomInputs({});
+    setEnabledSections(new Set(['task', 'scene', 'light', 'camera', 'constraint', 'output']));
+    localStorage.removeItem(LAST_STATE_KEY);
   };
 
   const handleSavePreset = () => {
@@ -640,7 +688,10 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                               {customBtns.map((btn, idx) => (
                                 <button
                                   key={`custom-${idx}`}
-                                  onClick={() => handleSelect(sectionId, field.key, builtInCount + idx)}
+                                  onClick={() => {
+                                    handleSelect(sectionId, field.key, builtInCount + idx);
+                                    handleCustomInput(sectionId, field.key, btn.value);
+                                  }}
                                   className={`px-2 py-0.5 rounded-md text-[11px] transition-all group relative ${
                                     selectedIndex === builtInCount + idx
                                       ? 'bg-indigo-600 text-white'
@@ -651,7 +702,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                                   <span
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleDeleteCustomButton(baseFieldKey, btn.value);
+                                      handleDeleteCustomButton(sectionId, baseFieldKey, btn.value);
                                     }}
                                     className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full items-center justify-center text-white hidden group-hover:flex"
                                   >
@@ -678,7 +729,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                                   type="text"
                                   value={customInputs[key] || ''}
                                   onChange={e => handleCustomInput(sectionId, field.key, e.target.value)}
-                                  placeholder={isCustomBtnSelected ? '' : '请输入自定义内容'}
+                                  placeholder="请输入自定义内容"
                                   className="input-field flex-1 py-1.5 px-2.5 text-xs"
                                 />
                                 {isCustom && (
