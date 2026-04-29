@@ -1,18 +1,16 @@
+import { fabric } from 'fabric';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Brush, Eraser, Type,
   Undo2, Redo2, Save, X, Move, Trash2,
   Square, Circle, Minus, ArrowRight
 } from 'lucide-react';
-import {
-  Canvas, PencilBrush, IText, FabricImage, FabricObject,
-  Rect, Ellipse, Line, Group, Triangle
-} from 'fabric';
 
 interface ImageEditorProps {
   imageUrl: string;
   onSave: (editedImage: string) => void;
   onCancel: () => void;
+  onError?: (message: string) => void;
 }
 
 type Tool = 'select' | 'brush' | 'eraser' | 'rect' | 'circle' | 'line' | 'arrow' | 'text';
@@ -28,20 +26,20 @@ function isShapeTool(t: Tool) {
 }
 
 // 创建箭头（用 Group 包含线和头部）
-function createArrow(x1: number, y1: number, x2: number, y2: number, color: string, lw: number): Group {
+function createArrow(x1: number, y1: number, x2: number, y2: number, color: string, lw: number): fabric.Group {
   // 计算边界框
   const minX = Math.min(x1, x2);
   const minY = Math.min(y1, y2);
 
   // 子对象使用相对于 Group 的坐标
-  const line = new Line([x1 - minX, y1 - minY, x2 - minX, y2 - minY], {
+  const line = new fabric.Line([x1 - minX, y1 - minY, x2 - minX, y2 - minY], {
     stroke: color, strokeWidth: lw,
     selectable: false, evented: false, strokeLineCap: 'round',
   });
 
   const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
   const headSize = Math.max(lw * 4, 14);
-  const head = new Triangle({
+  const head = new fabric.Triangle({
     left: x2 - minX, top: y2 - minY,
     width: headSize, height: headSize,
     fill: color, angle: angle + 90,
@@ -49,7 +47,7 @@ function createArrow(x1: number, y1: number, x2: number, y2: number, color: stri
     selectable: false, evented: false,
   });
 
-  const group = new Group([line, head], {
+  const group = new fabric.Group([line, head], {
     left: minX, top: minY,
     selectable: true, evented: true,
     lockScalingX: true, lockScalingY: true,
@@ -60,7 +58,7 @@ function createArrow(x1: number, y1: number, x2: number, y2: number, color: stri
 }
 
 // 获取直线端点
-function getLineEndpoints(line: Line): { x1: number; y1: number; x2: number; y2: number } {
+function getLineEndpoints(line: fabric.Line): { x1: number; y1: number; x2: number; y2: number } {
   return { x1: line.x1 || 0, y1: line.y1 || 0, x2: line.x2 || 0, y2: line.y2 || 0 };
 }
 
@@ -81,11 +79,11 @@ function isPointNearLineSegment(
   return Math.sqrt((x - projX) ** 2 + (y - projY) ** 2) <= tolerance;
 }
 
-const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel }) => {
+const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, onError }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricCanvasRef = useRef<Canvas | null>(null);
+  const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const bgImageRef = useRef<FabricImage | null>(null);
+  const bgImageRef = useRef<fabric.Image | null>(null);
 
   // 阻止 fabric.js superdrag bug
   useEffect(() => {
@@ -107,7 +105,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
   const [fontSize, setFontSize] = useState(24);
 
   // 选中对象的属性状态
-  const [selectedObject, setSelectedObject] = useState<FabricObject | null>(null);
+  const [selectedObject, setSelectedObject] = useState<fabric.Object | null>(null);
   const [selFill, setSelFill] = useState('');
   const [selStroke, setSelStroke] = useState('#ff0000');
   const [selLineWidth, setSelLineWidth] = useState(3);
@@ -133,17 +131,25 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
   // 绘制临时状态
   const isDrawingShape = useRef(false);
   const startPt = useRef<{ x: number; y: number } | null>(null);
-  const previewShape = useRef<FabricObject | Group | null>(null);
+  const previewShape = useRef<fabric.Object | fabric.Group | null>(null);
 
   // ── 撤销/恢复：只序列化 objects，不含 backgroundImage ──
   const saveState = useCallback(() => {
     const fc = fabricCanvasRef.current;
     if (!fc) return;
-    // 临时移除背景以序列化
-    const bg = fc.backgroundImage;
-    fc.backgroundImage = undefined as any;
-    const json = JSON.stringify(fc.toJSON());
-    fc.backgroundImage = bg;
+    
+    // 安全地序列化 canvas 对象，不影响背景图
+    let json: string;
+    try {
+      // 临时移除背景以序列化
+      const bg = fc.backgroundImage;
+      fc.backgroundImage = undefined as any;
+      json = JSON.stringify(fc.toJSON());
+      fc.backgroundImage = bg;
+    } catch (err) {
+      console.error('保存状态失败:', err);
+      return;
+    }
 
     const last = historyStack.current[historyStack.current.length - 1];
     if (last === json) return;
@@ -184,23 +190,55 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     }
     oldCanvasEl.innerHTML = '';
 
+    // 判断是否为 base64 图片（不需要 CORS）
+    const isBase64 = imageUrl.startsWith('data:');
+    
     const img = new window.Image();
-    img.crossOrigin = 'anonymous';
+    if (!isBase64) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onerror = () => {
+      console.error('图片加载失败');
+      onError?.('图片加载失败，请检查图片格式是否正确');
+      setTimeout(() => onCancel(), 100);
+    };
     img.onload = async () => {
       if (!isMounted) return;
       // 等待之前的 dispose 完成
       if (disposePromise) await disposePromise;
       if (!isMounted || !canvasRef.current) return;
 
-      FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((bgImg: FabricImage) => {
+      try {
+        // 使用 fabric.util.loadImage 加载图片（兼容 fabric.js v5.x）
+        // loadImage 接受回调函数作为第二个参数
+        const fabricImageEl = await new Promise<HTMLImageElement>((resolve, reject) => {
+          fabric.util.loadImage(imageUrl, (img: HTMLImageElement | HTMLCanvasElement) => {
+            if (!img) {
+              reject(new Error('图片加载失败'));
+            } else {
+              // 设置 crossOrigin 属性（用于跨域图片）
+              if (!isBase64 && img instanceof HTMLImageElement) {
+                img.crossOrigin = 'anonymous';
+              }
+              resolve(img as HTMLImageElement);
+            }
+          });
+        });
+        
         if (!isMounted) return;
+        
+        const bgImg = new fabric.Image(fabricImageEl);
+        
         // 获取图片原始尺寸（使用 naturalWidth/naturalHeight 确保正确）
         const imgWidth = img.naturalWidth || img.width || bgImg.width || 1;
         const imgHeight = img.naturalHeight || img.height || bgImg.height || 1;
 
         // 验证尺寸有效性
         if (imgWidth < 1 || imgHeight < 1) {
-          console.warn('图片尺寸无效，使用默认尺寸');
+          console.warn('图片尺寸无效');
+          onError?.('图片尺寸无效，无法加载');
+          // 自动关闭编辑器
+          setTimeout(() => onCancel(), 100);
           return;
         }
 
@@ -215,13 +253,13 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
         const displayHeight = Math.round(imgHeight * scale);
 
         // 设置画布显示尺寸（缩放后的）
-        const fc = new Canvas(canvasRef.current, {
+        const fc = new fabric.Canvas(canvasRef.current, {
           width: displayWidth,
           height: displayHeight,
           preserveObjectStacking: true,
         });
         fabricCanvasRef.current = fc;
-        FabricObject.prototype.strokeUniform = true;
+        fabric.Object.prototype.strokeUniform = true;
 
         // 设置背景图，使用原始图片的缩放版本
         bgImg.set({
@@ -280,7 +318,11 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
             onMouseUp(e);
           }
         });
-      });
+      } catch (err) {
+        console.error('FabricImage 加载失败:', err);
+        onError?.('图片加载失败，可能是跨域问题或图片格式不支持');
+        setTimeout(() => onCancel(), 100);
+      }
     };
     img.src = imageUrl;
 
@@ -294,7 +336,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     };
   }, [imageUrl]);
 
-  function syncSelectionUI(obj: FabricObject) {
+  function syncSelectionUI(obj: fabric.Object) {
     setSelectedObject(obj);
     const fill = typeof obj.fill === 'string' ? obj.fill : '';
     setSelFill(fill === 'transparent' ? '' : fill);
@@ -322,27 +364,30 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     const lw = brushSizeRef.current;
     const fill = fillColorRef.current || 'transparent';
 
-    let shape: FabricObject | Group;
+    let shape: fabric.Object | fabric.Group;
     if (t === 'rect') {
-      shape = new Rect({
+      shape = new fabric.Rect({
         left: pt.x, top: pt.y, width: 0, height: 0,
         fill, stroke: color, strokeWidth: lw,
         selectable: false, evented: false,
       });
     } else if (t === 'circle') {
-      shape = new Ellipse({
+      shape = new fabric.Ellipse({
         left: pt.x, top: pt.y, rx: 0, ry: 0,
         fill, stroke: color, strokeWidth: lw,
         selectable: false, evented: false,
       });
     } else if (t === 'line') {
-      shape = new Line([pt.x, pt.y, pt.x, pt.y], {
+      shape = new fabric.Line([pt.x, pt.y, pt.x, pt.y], {
         stroke: color, strokeWidth: lw,
         selectable: false, evented: false, strokeLineCap: 'round',
       });
     } else {
-      shape = createArrow(pt.x, pt.y, pt.x, pt.y, color, lw);
-      shape.set({ selectable: false, evented: false });
+      // 优化：先创建临时线条，在鼠标移动时更新，只在结束时创建完整箭头
+      shape = new fabric.Line([pt.x, pt.y, pt.x, pt.y], {
+        stroke: color, strokeWidth: lw,
+        selectable: false, evented: false, strokeLineCap: 'round',
+      });
     }
 
     fc.add(shape);
@@ -361,29 +406,37 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     if (!shape) return;
 
     if (t === 'rect') {
-      const r = shape as Rect;
+      const r = shape as fabric.Rect;
       r.set({
         left: Math.min(sx, pt.x), top: Math.min(sy, pt.y),
         width: Math.abs(pt.x - sx), height: Math.abs(pt.y - sy),
       });
       r.setCoords();
     } else if (t === 'circle') {
-      const el = shape as Ellipse;
+      const el = shape as fabric.Ellipse;
       el.set({
         left: Math.min(sx, pt.x), top: Math.min(sy, pt.y),
         rx: Math.abs(pt.x - sx) / 2, ry: Math.abs(pt.y - sy) / 2,
       });
       el.setCoords();
     } else if (t === 'line') {
-      const ln = shape as Line;
+      const ln = shape as fabric.Line;
       ln.set({ x2: pt.x, y2: pt.y });
       ln.setCoords();
     } else if (t === 'arrow') {
-      fc.remove(shape);
-      const arrow = createArrow(sx, sy, pt.x, pt.y, strokeColorRef.current, brushSizeRef.current);
-      arrow.set({ selectable: false, evented: false });
-      fc.add(arrow);
-      previewShape.current = arrow;
+      // 优化：使用临时线段代替实时重建箭头，只在最后创建完整箭头
+      if (shape instanceof fabric.Line) {
+        // 第一次移动，更新线条
+        shape.set({ x2: pt.x, y2: pt.y });
+        shape.setCoords();
+      } else if (shape instanceof fabric.Group) {
+        // 如果已经是箭头组，删除并创建新的（因为坐标变了）
+        fc.remove(shape);
+        const arrow = createArrow(sx, sy, pt.x, pt.y, strokeColorRef.current, brushSizeRef.current);
+        arrow.set({ selectable: false, evented: false });
+        fc.add(arrow);
+        previewShape.current = arrow;
+      }
     }
     fc.renderAll();
   }
@@ -393,25 +446,40 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     const fc = fabricCanvasRef.current;
     isDrawingShape.current = false;
     startPt.current = null;
-    const shape = previewShape.current;
+    let shape = previewShape.current;
     previewShape.current = null;
     if (!fc || !shape) return;
 
     // 移除过小的误点图形
     let tiny = false;
-    if (shape instanceof Rect) tiny = (shape.width ?? 0) < 4 && (shape.height ?? 0) < 4;
-    else if (shape instanceof Ellipse) tiny = (shape.rx ?? 0) < 2 && (shape.ry ?? 0) < 2;
-    else if (shape instanceof Line) {
+    if (shape instanceof fabric.Rect) tiny = (shape.width ?? 0) < 4 && (shape.height ?? 0) < 4;
+    else if (shape instanceof fabric.Ellipse) tiny = (shape.rx ?? 0) < 2 && (shape.ry ?? 0) < 2;
+    else if (shape instanceof fabric.Line) {
       const dx = (shape.x2 ?? 0) - (shape.x1 ?? 0);
       const dy = (shape.y2 ?? 0) - (shape.y1 ?? 0);
       tiny = Math.sqrt(dx * dx + dy * dy) < 5;
-    } else if (shape instanceof Group) {
+    } else if (shape instanceof fabric.Group) {
       tiny = (shape.width ?? 0) < 5 && (shape.height ?? 0) < 5;
     }
 
     if (tiny) { fc.remove(shape); fc.renderAll(); return; }
 
-    shape.set({ selectable: true, evented: true });
+    // 如果是箭头工具的临时线条，转换为完整箭头
+    const t = toolRef.current;
+    if (t === 'arrow' && shape instanceof fabric.Line) {
+      const x1 = shape.x1 ?? 0;
+      const y1 = shape.y1 ?? 0;
+      const x2 = shape.x2 ?? 0;
+      const y2 = shape.y2 ?? 0;
+      fc.remove(shape); // 移除临时线条
+      
+      // 创建完整箭头
+      shape = createArrow(x1, y1, x2, y2, strokeColorRef.current, brushSizeRef.current);
+      shape.set({ selectable: true, evented: true });
+      fc.add(shape);
+    } else {
+      shape.set({ selectable: true, evented: true });
+    }
 
     fc.setActiveObject(shape);
     fc.renderAll();
@@ -427,20 +495,10 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     if (target && target !== fc.backgroundImage) {
       fc.remove(target);
       fc.renderAll();
-      // 直接调用 saveState，不依赖 useCallback 的缓存版本
-      const bg = fc.backgroundImage;
-      fc.backgroundImage = undefined as any;
-      const json = JSON.stringify(fc.toJSON());
-      fc.backgroundImage = bg;
-      const last = historyStack.current[historyStack.current.length - 1];
-      if (last !== json) {
-        historyStack.current.push(json);
-        redoStack.current = [];
-        setCanUndo(historyStack.current.length > 1);
-        setCanRedo(false);
-      }
+      // 使用 saveState 函数，它包含错误处理
+      saveState();
     }
-  }, []);
+  }, [saveState]);
 
   // ── 工具切换 ──
   useEffect(() => {
@@ -449,7 +507,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
 
     if (tool === 'brush') {
       fc.isDrawingMode = true;
-      const brush = new PencilBrush(fc);
+      const brush = new fabric.PencilBrush(fc);
       brush.color = brushColor;
       brush.width = brushSize;
       fc.freeDrawingBrush = brush;
@@ -466,7 +524,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     }
 
     const selectable = tool === 'select';
-    fc.forEachObject((obj: FabricObject) => {
+    fc.forEachObject((obj: fabric.Object) => {
       obj.selectable = selectable;
       obj.evented = selectable || tool === 'eraser';
       obj.hoverCursor = selectable ? 'move' : (isShapeTool(tool) ? 'crosshair' : (tool === 'eraser' ? 'pointer' : 'default'));
@@ -496,15 +554,16 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     const canvasEl = fc.getElement();
     const canvasRect = canvasEl.getBoundingClientRect();
 
-    // 使用 clientX/clientY 减去 canvas 的 bounding rect 来获取相对于 canvas 的坐标
-    // 因为 canvas 是居中显示的，这样可以得到正确的坐标
-    const x = e.clientX - canvasRect.left;
-    const y = e.clientY - canvasRect.top;
+    // 使用 getPointer 获取相对于 canvas 的坐标
+    // 这会自动考虑 canvas 的位置和缩放
+    const pointer = fc.getPointer(e.nativeEvent);
+    const x = pointer.x;
+    const y = pointer.y;
 
     // 验证点击位置在 canvas 范围内
-    if (x < 0 || x > canvasRect.width || y < 0 || y > canvasRect.height) return;
+    if (x < 0 || x > fc.width || y < 0 || y > fc.height) return;
 
-    const text = new IText('新文字', {
+    const text = new fabric.IText('新文字', {
       left: x,
       top: y,
       fontFamily: 'sans-serif',

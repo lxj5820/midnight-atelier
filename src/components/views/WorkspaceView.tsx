@@ -560,6 +560,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                 showToast('success', '图片编辑已保存');
               }}
               onCancel={() => setEditingImageIndex(null)}
+              onError={(message) => {
+                setEditingImageIndex(null);
+                showToast('error', message);
+              }}
             />
           </Suspense>
         )}

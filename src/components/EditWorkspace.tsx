@@ -518,6 +518,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             showToast('success', '图片编辑已保存');
           }}
           onCancel={() => setEditingImageIndex(null)}
+          onError={(message) => {
+            setEditingImageIndex(null);
+            showToast('error', message);
+          }}
         />
       )}
     </div>
