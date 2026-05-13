@@ -10,6 +10,7 @@ import {
   Heart,
   ExternalLink,
 } from 'lucide-react';
+import { downloadImage } from '../utils/download';
 
 interface ImagePreviewModalProps {
   imageUrl: string;
@@ -59,17 +60,11 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   }, [prompt]);
 
   const handleDownload = async () => {
+    const filename = `image-${Date.now()}.png`;
     try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = imageName || `image-${Date.now()}.png`;
-      link.click();
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      // ignore
+      await downloadImage(imageUrl, filename);
+    } catch (error) {
+      console.error('Failed to download image:', error);
     }
   };
 
@@ -146,8 +141,8 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
           alt={displayName}
           className="max-w-[90%] max-h-[90%] object-contain rounded-lg"
           referrerPolicy="no-referrer"
-          crossOrigin="anonymous"
           onLoad={() => setImageLoaded(true)}
+          onError={() => setImageLoaded(true)}
           draggable={false}
           onClick={(e) => e.stopPropagation()}
         />

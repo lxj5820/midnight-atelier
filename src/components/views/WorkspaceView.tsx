@@ -13,6 +13,7 @@ import {
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
 } from '../../utils';
+import { downloadImage } from '../../utils/download';
 import {
   getPromptPlaceholder, menuItemsConfig
 } from '../../menuConfig';
@@ -74,13 +75,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const models = ['🍌全能图片V2', '🍌全能图片PRO'];
+  const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
   const filteredPresets = getPresetsForMenu(activeMenuItem);
   const promptPlaceholder = getPromptPlaceholder(activeMenuItem);
 
   useEffect(() => {
     const proRatios = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', 'auto'];
-    if (model === '🍌全能图片PRO' && !proRatios.includes(aspectRatio)) {
+    if ((model === '🍌全能图片PRO' || model === 'GPT Image 2') && !proRatios.includes(aspectRatio)) {
       setAspectRatio('1:1');
     }
   }, [model, aspectRatio, setAspectRatio]);
@@ -159,6 +160,139 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     const taskId = startGenerating(getMenuItemLabel(activeMenuItem));
 
     try {
+      if (model === 'GPT Image 2') {
+        const sizeMap: Record<string, string> = {
+          '1:1': '1024x1024', '2:3': '768x1024', '3:2': '1024x683',
+          '3:4': '768x1024', '4:3': '1024x768', '4:5': '819x1024',
+          '5:4': '1024x819', '9:16': '576x1024', '16:9': '1024x576',
+          '21:9': '1024x439', 'auto': '1024x1024'
+        };
+        const imageSize = sizeMap[aspectRatio] || '1024x1024';
+
+        let gptApiUrl: string;
+        let gptRequestBody: any;
+
+        if (imageUrls.length > 0) {
+          gptApiUrl = 'https://newapi.asia/v1/images/edits';
+          const formData = new FormData();
+          formData.append('model', 'gpt-image-2-all');
+          formData.append('prompt', finalPrompt);
+          formData.append('size', imageSize);
+          formData.append('quality', quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low');
+
+          for (let i = 0; i < imageUrls.length; i++) {
+            const imgResponse = await fetch(imageUrls[i]);
+            const blob = await imgResponse.blob();
+            const fileName = i === 0 ? 'image.png' : `image_${i}.png`;
+            formData.append('image', blob, fileName);
+          }
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 800000);
+          const response = await fetch(gptApiUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}` },
+            body: formData,
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            const status = response.status;
+            let errorMsg;
+            if (status === 401 || status === 403) errorMsg = 'API 密钥无效或余额不足';
+            else if (status === 429) errorMsg = '请求过于频繁，请稍后再试';
+            else if (status >= 500) errorMsg = `服务器繁忙 (${status})`;
+            else errorMsg = err.error?.message || `请求失败 (${status})`;
+            throw new Error(errorMsg);
+          }
+
+          const data = await response.json();
+          if (data.error) throw new Error(data.error.message || 'API 返回错误');
+          if (!data.data || data.data.length === 0) throw new Error('未收到有效响应');
+
+          let imageUrl = '';
+          const imgData = data.data[0];
+          if (imgData.b64_json) {
+            imageUrl = `data:image/png;base64,${imgData.b64_json}`;
+          } else if (imgData.url) {
+            imageUrl = imgData.url;
+          }
+          if (!imageUrl) throw new Error('响应中未找到图片');
+
+          setResult(imageUrl);
+          setImageUrls([]);
+          const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
+          const record: GenerationRecord = {
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: activeMenuItem, prompt, imageUrl,
+            referenceImageUrl: imageUrls[0] || undefined,
+            createdAt: new Date().toISOString(),
+            resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
+          };
+          await dbOperations.save(record);
+          setHistoryRefreshKey(k => k + 1);
+          showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+        } else {
+          gptApiUrl = 'https://newapi.asia/v1/images/generations';
+          gptRequestBody = {
+            model: 'gpt-image-2-all',
+            prompt: finalPrompt,
+            size: imageSize,
+            quality: quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low',
+            response_format: 'b64_json'
+          };
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 800000);
+          const response = await fetch(gptApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify(gptRequestBody),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            const status = response.status;
+            let errorMsg;
+            if (status === 401 || status === 403) errorMsg = 'API 密钥无效或余额不足';
+            else if (status === 429) errorMsg = '请求过于频繁，请稍后再试';
+            else if (status >= 500) errorMsg = `服务器繁忙 (${status})`;
+            else errorMsg = err.error?.message || `请求失败 (${status})`;
+            throw new Error(errorMsg);
+          }
+
+          const data = await response.json();
+          if (data.error) throw new Error(data.error.message || 'API 返回错误');
+          if (!data.data || data.data.length === 0) throw new Error('未收到有效响应');
+
+          let imageUrl = '';
+          const imgData = data.data[0];
+          if (imgData.b64_json) {
+            imageUrl = `data:image/png;base64,${imgData.b64_json}`;
+          } else if (imgData.url) {
+            imageUrl = imgData.url;
+          }
+          if (!imageUrl) throw new Error('响应中未找到图片');
+
+          setResult(imageUrl);
+          setImageUrls([]);
+          const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
+          const record: GenerationRecord = {
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: activeMenuItem, prompt, imageUrl,
+            referenceImageUrl: imageUrls[0] || undefined,
+            createdAt: new Date().toISOString(),
+            resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
+          };
+          await dbOperations.save(record);
+          setHistoryRefreshKey(k => k + 1);
+          showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+        }
+      } else {
       const modelMap: Record<string, string> = {
         '🍌全能图片V2': 'gemini-3.1-flash-image-preview',
         '🍌全能图片PRO': 'gemini-3-pro-image-preview'
@@ -242,6 +376,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       await dbOperations.save(record);
       setHistoryRefreshKey(k => k + 1);
       showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+      }
     } catch (error) {
       console.error('Generation error:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
@@ -270,13 +405,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   };
   const handleDownloadHistory = async (record: GenerationRecord) => {
     try {
-      const response = await fetch(record.imageUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${record.type}-${record.id}.png`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      await downloadImage(record.imageUrl, `${record.type}-${record.id}.png`);
       showToast('success', '图片下载开始');
     } catch { showToast('error', '下载失败'); }
   };

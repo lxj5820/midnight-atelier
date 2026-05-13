@@ -1,0 +1,51 @@
+export function getImageProxyUrl(url: string): string {
+  if (url.startsWith('data:')) return url;
+  const base = window.location.origin;
+  return `${base}/api/image-proxy?url=${encodeURIComponent(url)}`;
+}
+
+export async function downloadImage(url: string, filename: string) {
+  if (!filename.includes('.')) {
+    filename += '.png';
+  }
+
+  if (url.startsWith('data:')) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return;
+  }
+
+  try {
+    const proxyUrl = getImageProxyUrl(url);
+    const response = await fetch(proxyUrl);
+    if (!response.ok) throw new Error('Proxy failed');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  } catch {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  }
+}

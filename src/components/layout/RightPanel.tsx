@@ -55,7 +55,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       <div className="p-4 pb-3">
         <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2.5">引擎与模型</p>
         <Dropdown
-          options={models.map(m => ({ value: m, label: m }))}
+          options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <><img src="/gpt-icon.png" alt="GPT" className="w-4 h-4 inline-block" /> Image 2</> : m }))}
           value={model}
           onChange={setModel}
           className="w-full"
@@ -112,7 +112,9 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   { value: 'auto', label: '自动' },
                   ...(model === '🍌全能图片V2'
                     ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
-                    : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
+                    : model === 'GPT Image 2'
+                      ? ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
+                      : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
                   )
                 ]}
                 value={aspectRatio}

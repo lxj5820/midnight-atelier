@@ -3,6 +3,7 @@ import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, RefreshCw, Zap, 
 import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
+import { downloadImage } from '../utils/download';
 import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64 } from '../utils';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
@@ -37,7 +38,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   const [aspectRatio, setAspectRatio] = useState('auto');
   const [quality, setQuality] = useState('2K');
   const [model, setModel] = useState('🍌全能图片V2');
-  const models = ['🍌全能图片V2', '🍌全能图片PRO'];
+  const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
   const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -154,21 +155,63 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     // 异步执行生成，不阻塞 UI
     (async () => {
       try {
-        /**
-         * SECURITY WARNING: 直接在前端调用第三方 API 会暴露 API 密钥！
-         *
-         * 当前实现存在安全漏洞:
-         * 1. API 密钥在前端代码中使用，会暴露在浏览器 Network 面板
-         * 2. 任何能访问浏览器的人都可以获取 API 密钥
-         *
-         * 修复方案:
-         * 1. 在后端服务器创建代理 API (/api/generate)
-         * 2. 将第三方 API 密钥存储在后端服务器
-         * 3. 前端调用后端代理 API，后端再调用第三方 API
-         * 4. 使用 api.ts 中的 generateImageProxy() 函数替代直接调用
-         *
-         * TODO: 部署后端代理后，将以下代码改为使用 generateImageProxy() 函数
-         */
+        if (model === 'GPT Image 2') {
+          const sizeMap: Record<string, string> = {
+            '1:1': '1024x1024', '2:3': '768x1024', '3:2': '1024x683',
+            '3:4': '768x1024', '4:3': '1024x768', '4:5': '819x1024',
+            '5:4': '1024x819', '9:16': '576x1024', '16:9': '1024x576',
+            '21:9': '1024x439', 'auto': '1024x1024'
+          };
+          const imageSize = sizeMap[currentAspectRatio] || '1024x1024';
+          const gptApiUrl = 'https://newapi.asia/v1/images/edits';
+          const formData = new FormData();
+          formData.append('model', 'gpt-image-2-all');
+          formData.append('prompt', currentPrompt);
+          formData.append('size', imageSize);
+          formData.append('quality', currentQuality === '4K' ? 'high' : currentQuality === '2K' ? 'medium' : 'low');
+
+          for (let i = 0; i < currentRefImages.length; i++) {
+            const imgResponse = await fetch(currentRefImages[i]);
+            const blob = await imgResponse.blob();
+            const fileName = i === 0 ? 'image.png' : `image_${i}.png`;
+            formData.append('image', blob, fileName);
+          }
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 800000);
+          const response = await fetch(gptApiUrl, { method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}` }, body: formData, signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error?.message || `请求失败 (${response.status})`); }
+          const data = await response.json();
+          if (data.error) throw new Error(data.error.message || 'API 返回错误');
+          if (!data.data || data.data.length === 0) throw new Error('未收到有效响应');
+
+          let imageUrl = '';
+          const imgData = data.data[0];
+          if (imgData.b64_json) {
+            imageUrl = `data:image/png;base64,${imgData.b64_json}`;
+          } else if (imgData.url) {
+            imageUrl = imgData.url;
+          }
+          if (!imageUrl) throw new Error('响应中未找到图片');
+
+          const record: GenerationRecord = {
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'edit',
+            prompt: currentPrompt,
+            imageUrl: imageUrl,
+            referenceImageUrl: currentRefImages[0],
+            referenceImageUrls: currentRefImages,
+            createdAt: new Date().toISOString(),
+            resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
+          };
+          await saveGenerationRecordToDB(record);
+          setResult(imageUrl);
+          setPendingResult(imageUrl);
+          setHistoryRefreshKey(k => k + 1);
+          showToast('success', '生成成功！');
+        } else {
         const modelMap: Record<string, string> = { '🍌全能图片V2': 'gemini-3.1-flash-image-preview', '🍌全能图片PRO': 'gemini-3-pro-image-preview' };
         const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
         const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
@@ -214,6 +257,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         setPendingResult(imageUrl);
         setHistoryRefreshKey(k => k + 1);
         showToast('success', '生成成功！');
+        }
       } catch (error) {
         console.error('Generation error:', error);
         showToast('error', error instanceof Error ? error.message : '生成失败');
@@ -225,7 +269,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     })();
   };
 
-  const handleDownload = (url: string) => { const link = document.createElement('a'); link.href = url; link.download = `edit-${Date.now()}.png`; link.click(); };
+  const handleDownload = async (url: string) => { await downloadImage(url, `edit-${Date.now()}.png`); };
   const handleClearResult = () => { setResult(null); setReferenceImages([]); };
   const handleClearHistory = async () => {
     for (const record of generationHistory) {
@@ -374,7 +418,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         <div className="mb-6">
           <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-3">引擎与模型</p>
           <Dropdown
-            options={models.map(m => ({ value: m, label: m }))}
+            options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <><img src="/gpt-icon.png" alt="GPT" className="w-4 h-4 inline-block" /> Image 2</> : m }))}
             value={model}
             onChange={setModel}
             className="w-full"
@@ -440,7 +484,9 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                     { value: 'auto', label: '自动' },
                     ...(model === '🍌全能图片V2'
                       ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
-                      : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
+                      : model === 'GPT Image 2'
+                        ? ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
+                        : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
                     )
                   ]}
                   value={aspectRatio}
