@@ -21,6 +21,8 @@ interface GalleryViewProps {
 const GITHUB_API_URL = 'https://api.github.com/repos/lxj5820/Interior-Masters-Gallery/contents/image';
 
 const GAP = 8;
+const MAX_ANIMATION_DELAY = 0.5;
+const PRELOAD_MARGIN = '400px';
 
 function useColumnCount() {
   const [count, setCount] = useState(4);
@@ -57,6 +59,201 @@ const SkeletonCard = () => (
     <div className="shimmer" style={{ aspectRatio: `${0.7 + Math.random() * 0.8}` }} />
   </div>
 );
+
+const LazyGalleryCard: React.FC<{
+  image: GalleryImage;
+  isHovered: boolean;
+  onHoverChange: (sha: string | null) => void;
+  onImageLoad: (name: string, w: number, h: number) => void;
+  onOpenPreview: (image: GalleryImage) => void;
+  onDownload: (url: string, name: string) => void;
+  isLoaded: boolean;
+  hasPrompt: boolean;
+  animationDelay: number;
+  formatFileSize: (bytes: number) => string;
+}> = React.memo(({
+  image,
+  isHovered,
+  onHoverChange,
+  onImageLoad,
+  onOpenPreview,
+  onDownload,
+  isLoaded,
+  hasPrompt,
+  animationDelay,
+  formatFileSize,
+}) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [fadeIn, setFadeIn] = useState(false);
+
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: PRELOAD_MARGIN }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.target as HTMLImageElement;
+    onImageLoad(image.name, img.naturalWidth, img.naturalHeight);
+    requestAnimationFrame(() => setFadeIn(true));
+  }, [image.name, onImageLoad]);
+
+  const handleError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    setHasError(true);
+    (e.target as HTMLImageElement).style.display = 'none';
+  }, []);
+
+  return (
+    <motion.div
+      ref={cardRef}
+      initial={{ opacity: 0, y: 20, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{
+        delay: Math.min(animationDelay, MAX_ANIMATION_DELAY),
+        duration: 0.35,
+        ease: [0.25, 0.46, 0.45, 0.94],
+      }}
+      className="relative group cursor-pointer rounded-lg overflow-hidden bg-surface-2 border border-white/[0.04] hover:border-indigo-500/25 transition-all duration-300"
+      style={{
+        boxShadow: isHovered
+          ? '0 8px 40px rgba(99, 102, 241, 0.12), 0 2px 12px rgba(0, 0, 0, 0.4)'
+          : '0 2px 8px rgba(0, 0, 0, 0.2)',
+      }}
+      onMouseEnter={() => onHoverChange(image.sha)}
+      onMouseLeave={() => onHoverChange(null)}
+      onClick={() => onOpenPreview(image)}
+    >
+      {(!isLoaded || hasError) && (
+        <div
+          className="flex items-center justify-center bg-surface-2 shimmer"
+          style={{
+            aspectRatio: image.aspectRatio ? `${1 / image.aspectRatio}` : '1',
+          }}
+        >
+          {isVisible && !hasError && (
+            <div className="flex flex-col items-center gap-2 opacity-40">
+              <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {isVisible && !hasError && (
+        <img
+          src={image.download_url}
+          alt={image.name}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-auto block transition-all duration-500 ease-out group-hover:scale-[1.04]"
+          style={{
+            opacity: fadeIn ? 1 : 0,
+            position: isLoaded ? 'relative' : 'absolute',
+            inset: 0,
+          }}
+          referrerPolicy="no-referrer"
+          crossOrigin="anonymous"
+          onLoad={handleLoad}
+          onError={handleError}
+        />
+      )}
+
+      <div
+        className="absolute inset-0 transition-opacity duration-300 pointer-events-none"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          background:
+            'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 40%, transparent 60%)',
+        }}
+      />
+
+      {hasPrompt && (
+        <div
+          className="absolute top-3 left-3 transition-all duration-300"
+          style={{
+            opacity: isHovered ? 1 : 0,
+            transform: isHovered
+              ? 'translateY(0)'
+              : 'translateY(-8px)',
+          }}
+        >
+          <span className="px-2 py-1 bg-indigo-500/60 backdrop-blur-sm text-white text-[10px] font-medium rounded-md">
+            含提示词
+          </span>
+        </div>
+      )}
+
+      <div
+        className="absolute top-3 right-3 flex gap-1.5 transition-all duration-300"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          transform: isHovered
+            ? 'translateY(0)'
+            : 'translateY(-8px)',
+        }}
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenPreview(image);
+          }}
+          className="p-2 bg-black/40 hover:bg-indigo-500/60 backdrop-blur-sm rounded-xl transition-all duration-200"
+          title="放大查看"
+        >
+          <Maximize2 className="w-3.5 h-3.5 text-white" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload(image.download_url, image.name);
+          }}
+          className="p-2 bg-black/40 hover:bg-indigo-500/60 backdrop-blur-sm rounded-xl transition-all duration-200"
+          title="下载"
+        >
+          <Download className="w-3.5 h-3.5 text-white" />
+        </button>
+      </div>
+
+      <div
+        className="absolute bottom-0 left-0 right-0 p-3.5 transition-all duration-300"
+        style={{
+          opacity: isHovered ? 1 : 0,
+          transform: isHovered
+            ? 'translateY(0)'
+            : 'translateY(8px)',
+        }}
+      >
+        <p className="text-xs text-white font-semibold truncate mb-0.5">
+          {image.name.replace(/\.[^.]+$/, '')}
+        </p>
+        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+          <span>{formatFileSize(image.size)}</span>
+          {hasPrompt && (
+            <>
+              <span className="w-0.5 h-0.5 bg-slate-500 rounded-full" />
+              <span className="text-indigo-400">含提示词</span>
+            </>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
+LazyGalleryCard.displayName = 'LazyGalleryCard';
 
 const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage }) => {
   const [images, setImages] = useState<GalleryImage[]>([]);
@@ -133,13 +330,13 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
     }
   }, [promptCache]);
 
-  const handleImageLoad = (name: string, naturalWidth: number, naturalHeight: number) => {
+  const handleImageLoad = useCallback((name: string, naturalWidth: number, naturalHeight: number) => {
     const ratio = naturalHeight / naturalWidth;
     setImages(prev =>
       prev.map(img => (img.name === name ? { ...img, aspectRatio: ratio } : img))
     );
     setImageLoadedMap(prev => ({ ...prev, [name]: true }));
-  };
+  }, []);
 
   const handleOpenPreview = useCallback((image: GalleryImage) => {
     const previewData: PreviewImageData = {
@@ -159,20 +356,24 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
     }
   }, [fetchPrompt, setPreviewImage]);
 
-  const handleDownload = async (url: string, name: string) => {
+  const handleDownload = useCallback(async (url: string, name: string) => {
     try {
       await downloadImage(url, name);
       showToast('success', '下载成功');
     } catch {
       showToast('error', '下载失败');
     }
-  };
+  }, [showToast]);
 
-  const formatFileSize = (bytes: number) => {
+  const handleHoverChange = useCallback((sha: string | null) => {
+    setHoveredImage(sha);
+  }, []);
+
+  const formatFileSize = useCallback((bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+  }, []);
 
   const columns = useMemo(
     () => distributeToColumns(images, columnCount),
@@ -291,150 +492,21 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
             >
               {columns.map((col, colIdx) => (
                 <div key={colIdx} className="flex-1 flex flex-col gap-2">
-                  {col.map((image, imgIdx) => {
-                    const globalIdx = colIdx + imgIdx * columnCount;
-                    const isHovered = hoveredImage === image.sha;
-                    const isLoaded = imageLoadedMap[image.name];
-                    const hasPrompt = !!image.promptUrl;
-
-                    return (
-                      <motion.div
-                        key={image.sha}
-                        initial={{ opacity: 0, y: 30, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{
-                          delay: globalIdx * 0.04,
-                          duration: 0.4,
-                          ease: [0.25, 0.46, 0.45, 0.94],
-                        }}
-                        className="relative group cursor-pointer rounded-lg overflow-hidden bg-surface-2 border border-white/[0.04] hover:border-indigo-500/25 transition-all duration-300"
-                        style={{
-                          boxShadow: isHovered
-                            ? '0 8px 40px rgba(99, 102, 241, 0.12), 0 2px 12px rgba(0, 0, 0, 0.4)'
-                            : '0 2px 8px rgba(0, 0, 0, 0.2)',
-                        }}
-                        onMouseEnter={() => setHoveredImage(image.sha)}
-                        onMouseLeave={() => setHoveredImage(null)}
-                        onClick={() => handleOpenPreview(image)}
-                      >
-                        {!isLoaded && (
-                          <div
-                            className="flex items-center justify-center bg-surface-2 shimmer"
-                            style={{
-                              aspectRatio: image.aspectRatio
-                                ? `${1 / image.aspectRatio}`
-                                : '1',
-                            }}
-                          >
-                            <div className="flex flex-col items-center gap-2 opacity-40">
-                              <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
-                            </div>
-                          </div>
-                        )}
-
-                        <img
-                          src={image.download_url}
-                          alt={image.name}
-                          className="w-full h-auto block transition-transform duration-700 ease-out group-hover:scale-[1.04]"
-                          style={{
-                            display: isLoaded ? 'block' : 'none',
-                          }}
-                          referrerPolicy="no-referrer"
-                          crossOrigin="anonymous"
-                          onLoad={(e) => {
-                            const img = e.target as HTMLImageElement;
-                            handleImageLoad(
-                              image.name,
-                              img.naturalWidth,
-                              img.naturalHeight
-                            );
-                          }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-
-                        <div
-                          className="absolute inset-0 transition-opacity duration-300 pointer-events-none"
-                          style={{
-                            opacity: isHovered ? 1 : 0,
-                            background:
-                              'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 40%, transparent 60%)',
-                          }}
-                        />
-
-                        {hasPrompt && (
-                          <div
-                            className="absolute top-3 left-3 transition-all duration-300"
-                            style={{
-                              opacity: isHovered ? 1 : 0,
-                              transform: isHovered
-                                ? 'translateY(0)'
-                                : 'translateY(-8px)',
-                            }}
-                          >
-                            <span className="px-2 py-1 bg-indigo-500/60 backdrop-blur-sm text-white text-[10px] font-medium rounded-md">
-                              含提示词
-                            </span>
-                          </div>
-                        )}
-
-                        <div
-                          className="absolute top-3 right-3 flex gap-1.5 transition-all duration-300"
-                          style={{
-                            opacity: isHovered ? 1 : 0,
-                            transform: isHovered
-                              ? 'translateY(0)'
-                              : 'translateY(-8px)',
-                          }}
-                        >
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenPreview(image);
-                            }}
-                            className="p-2 bg-black/40 hover:bg-indigo-500/60 backdrop-blur-sm rounded-xl transition-all duration-200"
-                            title="放大查看"
-                          >
-                            <Maximize2 className="w-3.5 h-3.5 text-white" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownload(image.download_url, image.name);
-                            }}
-                            className="p-2 bg-black/40 hover:bg-indigo-500/60 backdrop-blur-sm rounded-xl transition-all duration-200"
-                            title="下载"
-                          >
-                            <Download className="w-3.5 h-3.5 text-white" />
-                          </button>
-                        </div>
-
-                        <div
-                          className="absolute bottom-0 left-0 right-0 p-3.5 transition-all duration-300"
-                          style={{
-                            opacity: isHovered ? 1 : 0,
-                            transform: isHovered
-                              ? 'translateY(0)'
-                              : 'translateY(8px)',
-                          }}
-                        >
-                          <p className="text-xs text-white font-semibold truncate mb-0.5">
-                            {image.name.replace(/\.[^.]+$/, '')}
-                          </p>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                            <span>{formatFileSize(image.size)}</span>
-                            {hasPrompt && (
-                              <>
-                                <span className="w-0.5 h-0.5 bg-slate-500 rounded-full" />
-                                <span className="text-indigo-400">含提示词</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
+                  {col.map((image, imgIdx) => (
+                    <LazyGalleryCard
+                      key={image.sha}
+                      image={image}
+                      isHovered={hoveredImage === image.sha}
+                      onHoverChange={handleHoverChange}
+                      onImageLoad={handleImageLoad}
+                      onOpenPreview={handleOpenPreview}
+                      onDownload={handleDownload}
+                      isLoaded={!!imageLoadedMap[image.name]}
+                      hasPrompt={!!image.promptUrl}
+                      animationDelay={imgIdx * 0.05}
+                      formatFileSize={formatFileSize}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
