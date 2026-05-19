@@ -144,8 +144,8 @@ const Sidebar = ({
             <Key className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-white truncate">个人中心</p>
-            <p className="text-[10px] text-slate-500 truncate">API 配置与资料</p>
+            <p className="text-xs font-bold text-white truncate">API配置</p>
+            <p className="text-[10px] text-slate-500 truncate">设置API与资料</p>
           </div>
           <MoreVertical className="w-3 h-3 text-slate-500" />
         </div>
@@ -332,6 +332,14 @@ const SettingsView = ({
               </div>
             </div>
             <div className="flex gap-3">
+              <a
+                href="https://chaxun.wlai.vip/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary flex-1 text-white py-2.5 rounded-xl font-bold text-center"
+              >
+                用量查询
+              </a>
               <button
                 onClick={handleSaveApiKey}
                 className="btn-primary flex-1 text-white py-2.5 rounded-xl font-bold"
@@ -365,6 +373,57 @@ const SettingsView = ({
               <p>4. 点击"保存 API Key"按钮保存配置</p>
               <p>5. 回到工作区即可开始使用 AI 生成功能</p>
               <p>6. 您的 API Key 仅存储在本地浏览器中，不会上传到任何服务器</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-500/15 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold font-headline text-white">价格总览</h2>
+          </div>
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                    <th className="text-left p-4 text-xs font-bold text-slate-400 tracking-wider w-32">模型</th>
+                    <th className="text-center p-4 text-xs font-bold text-slate-400 tracking-wider border-l border-white/[0.06]">1K</th>
+                    <th className="text-center p-4 text-xs font-bold text-slate-400 tracking-wider border-l border-white/[0.06]">2K</th>
+                    <th className="text-center p-4 text-xs font-bold text-slate-400 tracking-wider border-l border-white/[0.06]">4K</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                    <td className="p-4">
+                      <span className="text-sm font-bold text-white">全能图片V2</span>
+                    </td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.25</td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.25</td>
+                    <td className="text-center p-4 text-sm font-bold text-indigo-400 tabular-nums border-l border-white/[0.06]">$0.45</td>
+                  </tr>
+                  <tr className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                    <td className="p-4">
+                      <span className="text-sm font-bold text-white">全能图片PRO</span>
+                    </td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.50</td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.50</td>
+                    <td className="text-center p-4 text-sm font-bold text-indigo-400 tabular-nums border-l border-white/[0.06]">$0.88</td>
+                  </tr>
+                  <tr className="hover:bg-white/[0.02] transition-colors">
+                    <td className="p-4">
+                      <span className="text-sm font-bold text-white">GPT Image 2</span>
+                    </td>
+                    <td className="text-center p-4 text-sm font-bold text-indigo-400 tabular-nums border-l border-white/[0.06]">$0.12</td>
+                    <td className="text-center p-4 text-sm font-bold text-slate-600 tabular-nums border-l border-white/[0.06]">—</td>
+                    <td className="text-center p-4 text-sm font-bold text-slate-600 tabular-nums border-l border-white/[0.06]">—</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>

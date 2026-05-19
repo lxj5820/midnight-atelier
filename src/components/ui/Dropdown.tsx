@@ -56,28 +56,30 @@ export const Dropdown: React.FC<DropdownProps> = ({
         />
       </button>
 
-      {isOpen && (
-        <div className={`absolute ${direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 right-0 bg-surface-2 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden`}>
-          <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-1.5">
-            {options.map(option => (
-              <div
-                key={option.value}
-                onClick={() => handleSelect(option.value)}
-                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg cursor-pointer transition-all duration-150 ${
-                  option.value === value
-                    ? 'bg-indigo-500/15 text-indigo-400'
-                    : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
-                }`}
-              >
-                <span className="pr-2 truncate flex items-center gap-1.5">{option.label}</span>
-                {option.value === value && (
-                  <Check className="w-3 h-3 text-indigo-400 flex-shrink-0" />
-                )}
-              </div>
-            ))}
-          </div>
+      <div
+        className={`absolute ${direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 right-0 bg-surface-2 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden transition-all duration-150 ${
+          isOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible pointer-events-none translate-y-1'
+        }`}
+      >
+        <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-1.5">
+          {options.map(option => (
+            <div
+              key={option.value}
+              onClick={() => handleSelect(option.value)}
+              className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg cursor-pointer transition-all duration-150 ${
+                option.value === value
+                  ? 'bg-indigo-500/15 text-indigo-400'
+                  : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
+              }`}
+            >
+              <span className="pr-2 truncate flex items-center gap-1.5">{option.label}</span>
+              {option.value === value && (
+                <Check className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+              )}
+            </div>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 };

@@ -4,6 +4,7 @@ import type { VisualPreset } from '../../visualPresetConfig';
 import type { MenuItemId } from '../../menuConfig';
 import { Dropdown } from '../ui/Dropdown';
 import { PromptGenerator } from '../PromptGenerator';
+import { getPrice } from '../../utils/cost';
 
 interface RightPanelProps {
   model: string;
@@ -176,7 +177,13 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           {isGenerating ? (
             <RefreshCw className="w-4 h-4 animate-spin" />
           ) : (
-            <Zap className="w-4 h-4 fill-current" />
+            <>
+              <Zap className="w-4 h-4 fill-current" />
+              {(() => {
+                const price = getPrice(model, quality);
+                return price !== null ? <span className="opacity-70">{price < 0.1 ? price.toFixed(2) : price}</span> : null;
+              })()}
+            </>
           )}
           {isGenerating ? '生成中...' : '立即生成'}
         </button>
