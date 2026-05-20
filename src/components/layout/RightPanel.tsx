@@ -85,8 +85,13 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   <img
                     src={preset.bgImage}
                     alt={preset.label}
-                    className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300"
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300 bg-[#1a1c23]"
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
                   <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white uppercase tracking-wider z-[2] drop-shadow-lg">
                     {preset.label}
@@ -179,10 +184,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           ) : (
             <>
               <Zap className="w-4 h-4 fill-current" />
-              {(() => {
-                const price = getPrice(model, quality);
-                return price !== null ? <span className="opacity-70">{price < 0.1 ? price.toFixed(2) : price}</span> : null;
-              })()}
+              {getPrice(model, quality) !== null ? <span className="opacity-70">{getPrice(model, quality) < 0.1 ? getPrice(model, quality).toFixed(2) : getPrice(model, quality)}</span> : null}
             </>
           )}
           {isGenerating ? '生成中...' : '立即生成'}

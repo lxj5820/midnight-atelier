@@ -404,7 +404,7 @@ const SettingsView = ({
                     </td>
                     <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.25</td>
                     <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.25</td>
-                    <td className="text-center p-4 text-sm font-bold text-indigo-400 tabular-nums border-l border-white/[0.06]">$0.45</td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.45</td>
                   </tr>
                   <tr className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
                     <td className="p-4">
@@ -412,13 +412,13 @@ const SettingsView = ({
                     </td>
                     <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.50</td>
                     <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.50</td>
-                    <td className="text-center p-4 text-sm font-bold text-indigo-400 tabular-nums border-l border-white/[0.06]">$0.88</td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.88</td>
                   </tr>
                   <tr className="hover:bg-white/[0.02] transition-colors">
                     <td className="p-4">
-                      <span className="text-sm font-bold text-white">GPT Image 2</span>
+                      <span className="text-sm font-bold text-white">Image 2</span>
                     </td>
-                    <td className="text-center p-4 text-sm font-bold text-indigo-400 tabular-nums border-l border-white/[0.06]">$0.12</td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.12</td>
                     <td className="text-center p-4 text-sm font-bold text-slate-600 tabular-nums border-l border-white/[0.06]">—</td>
                     <td className="text-center p-4 text-sm font-bold text-slate-600 tabular-nums border-l border-white/[0.06]">—</td>
                   </tr>
