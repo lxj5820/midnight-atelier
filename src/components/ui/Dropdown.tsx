@@ -4,6 +4,7 @@ import { ChevronDown, Check } from 'lucide-react';
 interface DropdownOption {
   value: string;
   label: React.ReactNode;
+  icon?: React.ReactNode;
 }
 
 interface DropdownProps {
@@ -50,7 +51,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
         className="w-full bg-surface-1 border border-white/[0.06] rounded-xl py-2.5 px-4 text-sm text-white cursor-pointer flex justify-between items-center transition-all duration-200 hover:bg-surface-3 hover:border-white/[0.1] focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/10"
         style={{ outline: 'none' }}
       >
-        <span className="truncate flex items-center gap-1.5">{selectedOption?.label || '请选择'}</span>
+        <span className="truncate flex items-center gap-2">{selectedOption?.icon}{selectedOption?.label || '请选择'}</span>
         <ChevronDown
           className={`w-4 h-4 text-slate-500 transition-transform duration-200 flex-shrink-0 ml-2 ${isOpen ? 'rotate-180' : ''}`}
         />
@@ -72,7 +73,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
                   : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
               }`}
             >
-              <span className="pr-2 truncate flex items-center gap-1.5">{option.label}</span>
+              <span className="pr-2 truncate flex items-center gap-2">{option.icon}{option.label}</span>
               {option.value === value && (
                 <Check className="w-3 h-3 text-indigo-400 flex-shrink-0" />
               )}

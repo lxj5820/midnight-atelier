@@ -6,6 +6,79 @@ import { Dropdown } from '../ui/Dropdown';
 import { PromptGenerator } from '../PromptGenerator';
 import { getPrice } from '../../utils/cost';
 
+const ASPECT_RATIO_ICONS: Record<string, React.ReactNode> = {
+  "1:1": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="4" y="0" width="16" height="16" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "16:9": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="3" y="3" width="18" height="10" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "9:16": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="7.5" y="0" width="9" height="16" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "4:3": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="3" y="1.5" width="18" height="13" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "3:4": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="6" y="0" width="12" height="16" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "21:9": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="3" y="4" width="18" height="8" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "3:2": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="3" y="2" width="18" height="12" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "2:3": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="8" y="0" width="8" height="16" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "1:4": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="10" y="0" width="4" height="16" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "4:1": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="3" y="5" width="18" height="6" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "1:8": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="11" y="0" width="2" height="16" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "8:1": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="3" y="6" width="18" height="4" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "4:5": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="7" y="0" width="10" height="16" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+  "5:4": (
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+      <rect x="4.5" y="2" width="15" height="12" rx="2" stroke="#CCCCCC" strokeWidth="1"/>
+    </svg>
+  ),
+};
+
 interface RightPanelProps {
   model: string;
   setModel: (m: string) => void;
@@ -117,10 +190,10 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 options={[
                   { value: 'auto', label: '自动' },
                   ...(model === '🍌全能图片V2'
-                    ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
+                    ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
                     : model === 'GPT Image 2'
-                      ? ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
-                      : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
+                      ? ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
+                      : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
                   )
                 ]}
                 value={aspectRatio}
