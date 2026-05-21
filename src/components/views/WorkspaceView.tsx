@@ -40,6 +40,7 @@ interface WorkspaceViewProps {
   setPreviewImage: (img: PreviewImageData | null) => void;
   editingImageIndex: number | null;
   setEditingImageIndex: (index: number | null) => void;
+  onNavigateSettings?: () => void;
 }
 
 const getMenuItemLabel = (id: MenuItemId): string => {
@@ -55,9 +56,9 @@ const getMenuItemLabel = (id: MenuItemId): string => {
 export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   activeMenuItem, model, setModel, selectedPreset, setSelectedPreset,
   aspectRatio, setAspectRatio, quality, setQuality, showToast,
-  setPreviewImage, editingImageIndex, setEditingImageIndex
+  setPreviewImage, editingImageIndex, setEditingImageIndex, onNavigateSettings
 }) => {
-  const { apiKey } = useApiKey();
+  const { apiKey, hasApiKey } = useApiKey();
   const { startGenerating, stopGenerating } = useGeneration();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -710,6 +711,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         isGenerating={isGenerating}
         isPolishing={isPolishing}
         activeMenuItem={activeMenuItem}
+        hasApiKey={hasApiKey}
+        onNavigateSettings={onNavigateSettings}
       />
     </div>
   );

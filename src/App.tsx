@@ -559,6 +559,7 @@ export default function App() {
                     setPreviewImage={setPreviewImage}
                     editingImageIndex={editingImageIndex}
                     setEditingImageIndex={setEditingImageIndex}
+                    onNavigateSettings={() => setView('settings')}
                   />
                 </Suspense>
               )}
@@ -573,7 +574,7 @@ export default function App() {
               )}
               {view === 'edit' && (
                 <Suspense fallback={<LoadingSpinner className="h-full" />}>
-                  <EditWorkspace apiKey={apiKey} showToast={showToast} setPreviewImage={setPreviewImage} />
+                  <EditWorkspace apiKey={apiKey} showToast={showToast} setPreviewImage={setPreviewImage} onNavigateSettings={() => setView('settings')} />
                 </Suspense>
               )}
             </motion.div>

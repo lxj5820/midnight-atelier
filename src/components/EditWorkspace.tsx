@@ -19,9 +19,11 @@ interface EditWorkspaceProps {
   apiKey: string;
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
   setPreviewImage: (img: PreviewImageData | null) => void;
+  onNavigateSettings?: () => void;
 }
 
-const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPreviewImage }) => {
+const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPreviewImage, onNavigateSettings }) => {
+  const { hasApiKey } = useApiKey();
   const { startGenerating, stopGenerating } = useGeneration();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -541,12 +543,30 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
           {/* Generate Button */}
           <button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="btn-primary w-full text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:bg-slate-700 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none"
+            onClick={!hasApiKey && onNavigateSettings ? onNavigateSettings : handleGenerate}
+            disabled={isGenerating && hasApiKey}
+            className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
+              !hasApiKey
+                ? 'bg-gradient-to-br from-[#3f3a2e] to-[#2e2a22] text-amber-200/80 hover:text-amber-200 border border-amber-500/15 hover:border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.06)] hover:shadow-[0_0_20px_rgba(245,158,11,0.10)] cursor-pointer'
+                : 'btn-primary text-white disabled:bg-slate-700 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none'
+            }`}
           >
-            {isGenerating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
-            {isGenerating ? '生成中...' : '立即生成'}
+            {!hasApiKey ? (
+              <>
+                <Zap className="w-4 h-4 fill-current" />
+                请配置API
+              </>
+            ) : isGenerating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                生成中...
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4 fill-current" />
+                立即生成
+              </>
+            )}
           </button>
         </div>
       </aside>
