@@ -252,7 +252,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           </div>
         </div>
         <button
-          onClick={!hasApiKey && onNavigateSettings ? onNavigateSettings : handleGenerate}
+          onClick={() => !hasApiKey && onNavigateSettings ? onNavigateSettings() : handleGenerate()}
           disabled={isGenerating && hasApiKey}
           className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
             !hasApiKey
