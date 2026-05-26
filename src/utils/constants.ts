@@ -21,7 +21,7 @@ export const COMPUTE_POINTS = {
 } as const;
 
 // API 超时时间 (ms)
-export const API_TIMEOUT_MS = 800000;
+export const API_TIMEOUT_MS = 600000;
 
 // 最大文件大小 (bytes)
 export const MAX_FILE_SIZE = 20 * 1024 * 1024;

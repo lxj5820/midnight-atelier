@@ -180,7 +180,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           }
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 800000);
+          const timeoutId = setTimeout(() => controller.abort(), 600000);
           const response = await fetch(gptApiUrl, { method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}` }, body: formData, signal: controller.signal });
           clearTimeout(timeoutId);
 
@@ -229,7 +229,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
         const requestBody = { contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(currentAspectRatio !== 'auto' && { aspectRatio: currentAspectRatio }), imageSize: currentQuality } } };
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 800000);
+        const timeoutId = setTimeout(() => controller.abort(), 600000);
 
         const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify(requestBody), signal: controller.signal });
         clearTimeout(timeoutId);

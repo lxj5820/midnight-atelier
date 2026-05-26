@@ -189,7 +189,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           }
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 800000);
+          const timeoutId = setTimeout(() => controller.abort(), 600000);
           const response = await fetch(gptApiUrl, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${apiKey}` },
@@ -246,7 +246,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           };
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 800000);
+          const timeoutId = setTimeout(() => controller.abort(), 600000);
           const response = await fetch(gptApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -333,7 +333,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 800000);
+      const timeoutId = setTimeout(() => controller.abort(), 600000);
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -382,7 +382,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       console.error('Generation error:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
       const isTimeout = errorMessage === 'signal is aborted without reason' || errorMessage.includes('aborted');
-      if (isTimeout) showToast('error', '请求超时（2分钟），可能是网络问题');
+      if (isTimeout) showToast('error', '请求超时（10分钟），可能是网络问题');
       else showToast('error', `生成失败: ${errorMessage}`);
     } finally {
       isGeneratingRef.current = false;
