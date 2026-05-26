@@ -13,6 +13,7 @@ import {
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
 } from '../../utils';
+import { API_TIMEOUT_MS } from '../../utils/constants';
 import { downloadImage } from '../../utils/download';
 import {
   getPromptPlaceholder, menuItemsConfig
@@ -86,6 +87,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       setAspectRatio('1:1');
     }
   }, [model, aspectRatio, setAspectRatio]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isGenerating) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isGenerating]);
 
   useEffect(() => {
     getGenerationHistoryByTypeAsync(activeMenuItem).then(setGenerationHistory);
@@ -189,7 +202,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           }
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 600000);
+          const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
           const response = await fetch(gptApiUrl, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${apiKey}` },
@@ -246,7 +259,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           };
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 600000);
+          const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
           const response = await fetch(gptApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -333,7 +346,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 600000);
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
