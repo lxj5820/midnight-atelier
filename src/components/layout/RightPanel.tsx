@@ -164,6 +164,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                     alt={preset.label}
                     loading="lazy"
                     decoding="async"
+                    width={320}
+                    height={180}
                     className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300 bg-[#1a1c23]"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
