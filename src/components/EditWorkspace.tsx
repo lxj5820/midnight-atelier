@@ -42,6 +42,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   const [aspectRatio, setAspectRatio] = useState('auto');
   const [quality, setQuality] = useState('2K');
   const [model, setModel] = useState('🍌全能图片V2');
+  const price = getPrice(model, quality);
   const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
   const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
 
@@ -578,7 +579,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             ) : (
               <>
                 <Zap className="w-4 h-4 fill-current" />
-                {getPrice(model, quality) !== null ? <span className="opacity-70">{getPrice(model, quality) < 0.1 ? getPrice(model, quality).toFixed(2) : getPrice(model, quality)}</span> : null}
+                {price !== null ? <span className="opacity-70">{price < 0.1 ? price.toFixed(2) : price}</span> : null}
                 立即生成
               </>
             )}
