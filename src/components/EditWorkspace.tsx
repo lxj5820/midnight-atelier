@@ -6,6 +6,7 @@ import { useGeneration } from '../GenerationContext';
 import { downloadImage } from '../utils/download';
 import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64 } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
+import { getPrice } from '../utils/cost';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
 import { Dropdown } from './ui/Dropdown';
@@ -577,6 +578,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             ) : (
               <>
                 <Zap className="w-4 h-4 fill-current" />
+                {getPrice(model, quality) !== null ? <span className="opacity-70">{getPrice(model, quality) < 0.1 ? getPrice(model, quality).toFixed(2) : getPrice(model, quality)}</span> : null}
                 立即生成
               </>
             )}
