@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, ZoomIn, ZoomOut, RotateCcw, Compass, Play, Pause } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import * as THREE from 'three';
 
 interface PanoramaViewerProps {
@@ -11,7 +11,6 @@ interface PanoramaViewerProps {
 
 const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ imageUrl, isOpen, onClose }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const threejsRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -70,9 +69,9 @@ const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ imageUrl, isOpen, onClo
 
   // Initialize Three.js scene
   useEffect(() => {
-    if (!isOpen || !threejsRef.current) return;
+    if (!isOpen || !containerRef.current) return;
 
-    const container = threejsRef.current;
+    const container = containerRef.current;
     const width = container.clientWidth;
     const height = container.clientHeight;
 
@@ -421,6 +420,7 @@ const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ imageUrl, isOpen, onClo
 
           {/* Three.js Canvas Container */}
           <div
+            ref={containerRef}
             className="flex-1 relative overflow-hidden bg-black"
             style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
             onMouseDown={handleMouseDown}
@@ -430,9 +430,7 @@ const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ imageUrl, isOpen, onClo
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            ref={containerRef}
           >
-            <div ref={threejsRef} className="absolute inset-0" />
             {/* Loading overlay */}
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">

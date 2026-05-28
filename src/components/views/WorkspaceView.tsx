@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import {
   Sparkles, RefreshCw, ChevronLeft, ChevronRight, Maximize2,
   Upload, X, Share2, Trash2, RotateCcw, Download, Pencil,

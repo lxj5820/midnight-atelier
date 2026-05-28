@@ -114,6 +114,7 @@ const LazyGalleryCard: React.FC<{
 
   const handleError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     setHasError(true);
+    (e.target as HTMLImageElement).style.display = 'none';
   }, []);
 
   return (

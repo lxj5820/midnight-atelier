@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Check, X, Info } from 'lucide-react';
 import type { ToastMessage } from '../../types';
 import { TOAST_AUTO_DISMISS_MS } from '../../utils/constants';

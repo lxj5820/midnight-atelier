@@ -125,7 +125,6 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onNavigateSettings,
 }) => {
   const [showPromptGenerator, setShowPromptGenerator] = useState(false);
-  const [failedPresets, setFailedPresets] = useState<Set<string>>(new Set());
 
   const showGeneratorButton = activeMenuItem && ['effects', 'style', 'edit'].includes(activeMenuItem);
 
@@ -134,7 +133,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       <div className="p-4 pb-3">
         <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2.5">引擎与模型</p>
         <Dropdown
-          options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <span className="flex items-center gap-1.5"><img src="/gpt-icon.png" alt="GPT" className="w-4 h-4 inline-block" /> Image 2</span> : m }))}
+          options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <><img src="/gpt-icon.png" alt="GPT" className="w-4 h-4 inline-block" /> Image 2</> : m }))}
           value={model}
           onChange={setModel}
           className="w-full"
@@ -169,8 +168,9 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                     height={180}
                     className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300 bg-[#1a1c23]"
                     referrerPolicy="no-referrer"
-                    style={failedPresets.has(preset.id) ? { display: 'none' } : undefined}
-                    onError={() => setFailedPresets(prev => new Set(prev).add(preset.id))}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
                   <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white uppercase tracking-wider z-[2] drop-shadow-lg">
                     {preset.label}
