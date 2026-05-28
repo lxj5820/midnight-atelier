@@ -230,7 +230,9 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
         resolve();
       });
     }
-    oldCanvasEl.innerHTML = '';
+    while (oldCanvasEl.firstChild) {
+      oldCanvasEl.removeChild(oldCanvasEl.firstChild);
+    }
 
     // 判断是否为 base64 图片（不需要 CORS）
     const isBase64 = imageUrl.startsWith('data:');
@@ -373,7 +375,9 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
       fabricCanvasRef.current?.dispose();
       fabricCanvasRef.current = null;
       if (canvasRef.current) {
-        canvasRef.current.innerHTML = '';
+        while (canvasRef.current.firstChild) {
+          canvasRef.current.removeChild(canvasRef.current.firstChild);
+        }
       }
     };
   }, [imageUrl]);
