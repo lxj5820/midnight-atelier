@@ -122,7 +122,7 @@ function isPointNearLineSegment(
 }
 
 const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, onError }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const bgImageRef = useRef<fabric.Image | null>(null);
@@ -216,13 +216,11 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
 
   // ── 初始化 ──
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasWrapperRef.current) return;
 
     let isMounted = true;
     let disposePromise: Promise<void> | null = null;
 
-    // 清理旧 canvas
-    const oldCanvasEl = canvasRef.current;
     if (fabricCanvasRef.current) {
       disposePromise = new Promise(resolve => {
         fabricCanvasRef.current!.dispose();
@@ -230,7 +228,6 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
         resolve();
       });
     }
-    oldCanvasEl.innerHTML = '';
 
     // 判断是否为 base64 图片（不需要 CORS）
     const isBase64 = imageUrl.startsWith('data:');
@@ -248,7 +245,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
       if (!isMounted) return;
       // 等待之前的 dispose 完成
       if (disposePromise) await disposePromise;
-      if (!isMounted || !canvasRef.current) return;
+      if (!isMounted || !canvasWrapperRef.current) return;
 
       try {
         // 使用 fabric.util.loadImage 加载图片（兼容 fabric.js v5.x）
@@ -295,7 +292,10 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
         const displayHeight = Math.round(imgHeight * scale);
 
         // 设置画布显示尺寸（缩放后的）
-        const fc = new fabric.Canvas(canvasRef.current, {
+        const canvasEl = document.createElement('canvas');
+        canvasWrapperRef.current.appendChild(canvasEl);
+
+        const fc = new fabric.Canvas(canvasEl, {
           width: displayWidth,
           height: displayHeight,
           preserveObjectStacking: true,
@@ -372,8 +372,8 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
       isMounted = false;
       fabricCanvasRef.current?.dispose();
       fabricCanvasRef.current = null;
-      if (canvasRef.current) {
-        canvasRef.current.innerHTML = '';
+      if (canvasWrapperRef.current) {
+        canvasWrapperRef.current.innerHTML = '';
       }
     };
   }, [imageUrl]);
@@ -846,7 +846,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
             onClick={(e) => { if (tool === 'text') addText(e); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => e.preventDefault()}>
-            <canvas ref={canvasRef} className="max-w-full max-h-full" />
+            <div ref={canvasWrapperRef} className="max-w-full max-h-full" />
           </div>
 
           {/* Right Panel */}
