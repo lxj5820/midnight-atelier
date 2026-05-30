@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv, Plugin} from 'vite';
+import { formDataToPayload, getJSONHeaders, getOptionsHeaders, isOSSConfigured, UploadError, uploadPayloadToOSS } from './api/oss-upload-core';
 
 function imageProxyPlugin(): Plugin {
   return {
@@ -59,10 +60,9 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
     configureServer(server) {
       server.middlewares.use('/api/oss-upload', async (req, res) => {
         if (req.method === 'OPTIONS') {
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-          res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-          res.setHeader('Access-Control-Max-Age', '86400');
+          for (const [key, value] of Object.entries(getOptionsHeaders())) {
+            res.setHeader(key, value);
+          }
           res.statusCode = 204;
           res.end();
           return;
@@ -74,87 +74,53 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
           return;
         }
 
-        if (!env.OSS_ACCESS_KEY_ID || !env.OSS_ACCESS_KEY_SECRET || !env.OSS_BUCKET || !env.OSS_REGION) {
+        if (!isOSSConfigured(env)) {
           res.statusCode = 503;
-          res.setHeader('Content-Type', 'application/json');
+          for (const [key, value] of Object.entries(getJSONHeaders())) {
+            res.setHeader(key, value);
+          }
           res.end(JSON.stringify({ error: 'OSS not configured' }));
           return;
         }
 
         try {
+          const contentType = req.headers['content-type'] || '';
           const chunks: Buffer[] = [];
           for await (const chunk of req) {
-            chunks.push(chunk);
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
           }
+
+          const rawBody = Buffer.concat(chunks);
           let body;
-          try {
-            body = JSON.parse(Buffer.concat(chunks).toString());
-          } catch {
-            res.statusCode = 400;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'Invalid JSON' }));
-            return;
-          }
-          const { image, url, type, id } = body;
-
-          let buffer: Buffer;
-          let contentType = 'image/png';
-          const filename = `${id || Date.now()}.png`;
-          const date = new Date().toISOString().split('T')[0];
-          const key = `atelier/${type || 'default'}/${date}/${filename}`;
-
-          if (image && image.startsWith('data:')) {
-            const matches = image.match(/^data:(.+?);base64,(.+)$/);
-            if (!matches) {
-              res.statusCode = 400;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'Invalid base64 data URL' }));
-              return;
-            }
-            contentType = matches[1];
-            buffer = Buffer.from(matches[2], 'base64');
-          } else if (url) {
-            const response = await fetch(url);
-            if (!response.ok) {
-              res.statusCode = 400;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'Failed to fetch image from URL' }));
-              return;
-            }
-            contentType = response.headers.get('content-type') || 'image/png';
-            buffer = Buffer.from(await response.arrayBuffer());
+          if (contentType.includes('multipart/form-data')) {
+            const request = new Request('http://localhost/api/oss-upload', {
+              method: 'POST',
+              headers: { 'Content-Type': contentType },
+              body: rawBody,
+            });
+            body = await formDataToPayload(await request.formData());
           } else {
-            res.statusCode = 400;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'No image data provided' }));
-            return;
+            try {
+              body = JSON.parse(rawBody.toString());
+            } catch {
+              throw new UploadError(400, 'Invalid JSON');
+            }
           }
 
-          const OSS = (await import('ali-oss')).default;
-          const client = new OSS({
-            region: env.OSS_REGION,
-            accessKeyId: env.OSS_ACCESS_KEY_ID,
-            accessKeySecret: env.OSS_ACCESS_KEY_SECRET,
-            bucket: env.OSS_BUCKET,
-          });
+          const ossUrl = await uploadPayloadToOSS(body, env);
 
-          await client.put(key, buffer, {
-            headers: { 'Content-Type': contentType },
-          });
-
-          const ossUrl = env.OSS_PUBLIC_URL
-            ? `${env.OSS_PUBLIC_URL.replace(/\/+$/, '')}/${key}`
-            : `https://${env.OSS_BUCKET}.${env.OSS_REGION}.aliyuncs.com/${key}`;
-
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('Access-Control-Allow-Origin', '*');
+          for (const [key, value] of Object.entries(getJSONHeaders())) {
+            res.setHeader(key, value);
+          }
           res.statusCode = 200;
           res.end(JSON.stringify({ url: ossUrl }));
         } catch (error) {
           console.error('OSS upload error:', error);
-          res.statusCode = 500;
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: 'Upload failed' }));
+          res.statusCode = error instanceof UploadError ? error.statusCode : 500;
+          for (const [key, value] of Object.entries(getJSONHeaders())) {
+            res.setHeader(key, value);
+          }
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Upload failed' }));
         }
       });
     },

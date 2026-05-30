@@ -1,16 +1,18 @@
 import type { Handler } from '@netlify/functions';
-import OSS from 'ali-oss';
+import {
+  formDataToPayload,
+  getJSONHeaders,
+  getOptionsHeaders,
+  isOSSConfigured,
+  UploadError,
+  uploadPayloadToOSS,
+} from '../../api/oss-upload-core';
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Max-Age': '86400',
-      },
+      headers: getOptionsHeaders(),
     };
   }
 
@@ -20,67 +22,45 @@ export const handler: Handler = async (event) => {
 
   const { OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET, OSS_REGION, OSS_PUBLIC_URL } = process.env;
 
-  if (!OSS_ACCESS_KEY_ID || !OSS_ACCESS_KEY_SECRET || !OSS_BUCKET || !OSS_REGION) {
-    return { statusCode: 503, body: JSON.stringify({ error: 'OSS not configured' }) };
+  const env = { OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET, OSS_REGION, OSS_PUBLIC_URL };
+  if (!isOSSConfigured(env)) {
+    return { statusCode: 503, headers: getJSONHeaders(), body: JSON.stringify({ error: 'OSS not configured' }) };
   }
 
   try {
-    let body;
-    try {
-      body = JSON.parse(event.body || '{}');
-    } catch {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
-    }
-
-    const { image, url, type, id } = body;
-
-    let buffer: Buffer;
-    let contentType = 'image/png';
-    const filename = `${id || Date.now()}.png`;
-    const date = new Date().toISOString().split('T')[0];
-    const key = `atelier/${type || 'default'}/${date}/${filename}`;
-
-    if (image && image.startsWith('data:')) {
-      const matches = image.match(/^data:(.+?);base64,(.+)$/);
-      if (!matches) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid base64 data URL' }) };
-      }
-      contentType = matches[1];
-      buffer = Buffer.from(matches[2], 'base64');
-    } else if (url) {
-      const response = await fetch(url);
-      if (!response.ok) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'Failed to fetch image from URL' }) };
-      }
-      contentType = response.headers.get('content-type') || 'image/png';
-      buffer = Buffer.from(await response.arrayBuffer());
-    } else {
-      return { statusCode: 400, body: JSON.stringify({ error: 'No image data provided' }) };
-    }
-
-    const client = new OSS({
-      region: OSS_REGION,
-      accessKeyId: OSS_ACCESS_KEY_ID,
-      accessKeySecret: OSS_ACCESS_KEY_SECRET,
-      bucket: OSS_BUCKET,
-      secure: true,
-    });
-
-    await client.put(key, buffer, {
-      headers: { 'Content-Type': contentType },
-    });
-
-    const ossUrl = OSS_PUBLIC_URL
-      ? `${OSS_PUBLIC_URL.replace(/\/+$/, '')}/${key}`
-      : `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${key}`;
+    const payload = await readPayload(event);
+    const ossUrl = await uploadPayloadToOSS(payload, env);
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: getJSONHeaders(),
       body: JSON.stringify({ url: ossUrl }),
     };
   } catch (error) {
     console.error('OSS upload error:', error);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Upload failed' }) };
+    const statusCode = error instanceof UploadError ? error.statusCode : 500;
+    const message = error instanceof Error ? error.message : 'Upload failed';
+    return { statusCode, headers: getJSONHeaders(), body: JSON.stringify({ error: message }) };
   }
 };
+
+async function readPayload(event: Parameters<Handler>[0]) {
+  const contentType = event.headers['content-type'] || event.headers['Content-Type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    const body = event.isBase64Encoded
+      ? Buffer.from(event.body || '', 'base64')
+      : Buffer.from(event.body || '');
+    const request = new Request('http://localhost/api/oss-upload', {
+      method: 'POST',
+      headers: { 'Content-Type': contentType },
+      body,
+    });
+    return formDataToPayload(await request.formData());
+  }
+
+  try {
+    return JSON.parse(event.body || '{}');
+  } catch {
+    throw new UploadError(400, 'Invalid JSON');
+  }
+}
