@@ -128,6 +128,16 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
   const bgImageRef = useRef<fabric.Image | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const handler = (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); };
+    document.addEventListener('dragover', handler, true);
+    document.addEventListener('drop', handler, true);
+    return () => {
+      document.removeEventListener('dragover', handler, true);
+      document.removeEventListener('drop', handler, true);
+    };
+  }, []);
+
   const [isDragOver, setIsDragOver] = useState(false);
 
   // UI 状态
