@@ -12,6 +12,7 @@ import {
   getComputePointsCost, getResolution,
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
+  saveImageToOSS, getOSSThumbnailUrl, isOSSUrl,
 } from '../../utils';
 import { API_TIMEOUT_MS } from '../../utils/constants';
 import { downloadImage } from '../../utils/download';
@@ -235,12 +236,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           }
           if (!imageUrl) throw new Error('响应中未找到图片');
 
-          setResult(imageUrl);
+          const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const finalImageUrl = await saveImageToOSS(imageUrl, activeMenuItem, recordId);
+
+          setResult(finalImageUrl);
           setImageUrls([]);
           const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
           const record: GenerationRecord = {
-            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            type: activeMenuItem, prompt, imageUrl,
+            id: recordId,
+            type: activeMenuItem, prompt, imageUrl: finalImageUrl,
             referenceImageUrl: imageUrls[0] || undefined,
             createdAt: new Date().toISOString(),
             resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
@@ -292,12 +296,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           }
           if (!imageUrl) throw new Error('响应中未找到图片');
 
-          setResult(imageUrl);
+          const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const finalImageUrl = await saveImageToOSS(imageUrl, activeMenuItem, recordId);
+
+          setResult(finalImageUrl);
           setImageUrls([]);
           const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
           const record: GenerationRecord = {
-            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            type: activeMenuItem, prompt, imageUrl,
+            id: recordId,
+            type: activeMenuItem, prompt, imageUrl: finalImageUrl,
             referenceImageUrl: imageUrls[0] || undefined,
             createdAt: new Date().toISOString(),
             resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
@@ -377,12 +384,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       }
       if (!imageUrl) throw new Error('响应中未找到图片');
 
-      setResult(imageUrl);
+      const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const finalImageUrl = await saveImageToOSS(imageUrl, activeMenuItem, recordId);
+
+      setResult(finalImageUrl);
       setImageUrls([]);
       const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
       const record: GenerationRecord = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        type: activeMenuItem, prompt, imageUrl,
+        id: recordId,
+        type: activeMenuItem, prompt, imageUrl: finalImageUrl,
         referenceImageUrl: imageUrls[0] || undefined,
         createdAt: new Date().toISOString(),
         resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
@@ -658,7 +668,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   <motion.div key={record.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}
                     className="history-card rounded-xl overflow-hidden bg-surface-2 relative group cursor-pointer shrink-0 border border-white/[0.04]"
                     style={{ width: thumbnailSize, height: thumbnailSize }} onClick={() => handleItemClick(record)}>
-                    <img src={record.imageUrl} alt={record.prompt} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" referrerPolicy="no-referrer" />
+                    <img
+                      src={isOSSUrl(record.imageUrl) ? getOSSThumbnailUrl(record.imageUrl, thumbnailSize * 2) : record.imageUrl}
+                      alt={record.prompt}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      referrerPolicy="no-referrer"
+                      loading="lazy"
+                    />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
                       <p className="text-[9px] text-slate-400 mt-0.5">

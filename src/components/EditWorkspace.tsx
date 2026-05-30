@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { downloadImage } from '../utils/download';
-import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64 } from '../utils';
+import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, saveImageToOSS, getOSSThumbnailUrl, isOSSUrl } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
 import { getPrice } from '../utils/cost';
 import type { GenerationRecord, PreviewImageData } from '../types';
@@ -213,19 +213,22 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           }
           if (!imageUrl) throw new Error('响应中未找到图片');
 
+          const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const finalImageUrl = await saveImageToOSS(imageUrl, 'edit', recordId);
+
           const record: GenerationRecord = {
-            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: recordId,
             type: 'edit',
             prompt: currentPrompt,
-            imageUrl: imageUrl,
+            imageUrl: finalImageUrl,
             referenceImageUrl: currentRefImages[0],
             referenceImageUrls: currentRefImages,
             createdAt: new Date().toISOString(),
             resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
           };
           await saveGenerationRecordToDB(record);
-          setResult(imageUrl);
-          setPendingResult(imageUrl);
+          setResult(finalImageUrl);
+          setPendingResult(finalImageUrl);
           setHistoryRefreshKey(k => k + 1);
           showToast('success', '生成成功！');
         } else {
@@ -256,12 +259,14 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         for (const part of resultParts) { if (part.inlineData) { imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`; break; } }
         if (!imageUrl) throw new Error('响应中未找到图片');
 
-        // 保存到历史记录
+        const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const finalImageUrl = await saveImageToOSS(imageUrl, 'edit', recordId);
+
         const record: GenerationRecord = {
-          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: recordId,
           type: 'edit',
           prompt: currentPrompt,
-          imageUrl: imageUrl,
+          imageUrl: finalImageUrl,
           referenceImageUrl: currentRefImages[0],
           referenceImageUrls: currentRefImages,
           createdAt: new Date().toISOString(),
@@ -269,9 +274,8 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         };
         await saveGenerationRecordToDB(record);
 
-        // 更新状态，触发 UI 刷新
-        setResult(imageUrl);
-        setPendingResult(imageUrl);
+        setResult(finalImageUrl);
+        setPendingResult(finalImageUrl);
         setHistoryRefreshKey(k => k + 1);
         showToast('success', '生成成功！');
         }
@@ -404,7 +408,13 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                     style={{ width: thumbnailSize, height: thumbnailSize }}
                     onClick={() => handleItemClick(record)}
                   >
-                    <img src={record.imageUrl} alt={record.prompt} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" referrerPolicy="no-referrer" />
+                    <img
+                      src={isOSSUrl(record.imageUrl) ? getOSSThumbnailUrl(record.imageUrl, thumbnailSize * 2) : record.imageUrl}
+                      alt={record.prompt}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      referrerPolicy="no-referrer"
+                      loading="lazy"
+                    />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
                       <p className="text-[9px] text-slate-400 mt-0.5">
