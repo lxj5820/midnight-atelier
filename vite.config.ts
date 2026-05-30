@@ -2,7 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv, Plugin} from 'vite';
-import { formDataToPayload, getJSONHeaders, getOptionsHeaders, isOSSConfigured, UploadError, uploadPayloadToOSS } from './api/oss-upload-core';
+import { createSignedUpload, formDataToPayload, getJSONHeaders, getOptionsHeaders, isOSSConfigured, UploadError, uploadPayloadToOSS } from './api/oss-upload-core';
 
 function imageProxyPlugin(): Plugin {
   return {
@@ -105,6 +105,16 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
             } catch {
               throw new UploadError(400, 'Invalid JSON');
             }
+          }
+
+          if (body.action === 'sign') {
+            const signedUpload = createSignedUpload(body, env);
+            for (const [key, value] of Object.entries(getJSONHeaders())) {
+              res.setHeader(key, value);
+            }
+            res.statusCode = 200;
+            res.end(JSON.stringify(signedUpload));
+            return;
           }
 
           const ossUrl = await uploadPayloadToOSS(body, env);

@@ -3,8 +3,15 @@ export async function uploadImageToOSS(
   type: string,
   id: string
 ): Promise<string | null> {
+  const blob = await dataUrlToBlob(imageDataUrl);
+
   try {
-    const blob = await dataUrlToBlob(imageDataUrl);
+    return await uploadBlobDirectlyToOSS(blob, type, id);
+  } catch (err) {
+    console.warn('Direct OSS upload failed, trying server upload fallback', err);
+  }
+
+  try {
     const formData = new FormData();
     formData.append('file', blob, `${id}.${extensionFromMime(blob.type)}`);
     formData.append('type', type);
@@ -21,7 +28,7 @@ export async function uploadImageToOSS(
     const data = await response.json();
     return data.url || null;
   } catch (err) {
-    console.warn('OSS upload failed, falling back to base64 storage', err);
+    console.warn('OSS upload failed', err);
     return null;
   }
 }
@@ -44,7 +51,7 @@ export async function uploadUrlToOSS(
     const data = await response.json();
     return data.url || null;
   } catch (err) {
-    console.warn('OSS upload failed, falling back to direct URL', err);
+    console.warn('OSS upload failed', err);
     return null;
   }
 }
@@ -58,11 +65,13 @@ export async function saveImageToOSS(
 
   if (imageUrl.startsWith('data:')) {
     const ossUrl = await uploadImageToOSS(imageUrl, type, id);
-    return ossUrl || imageUrl;
+    if (ossUrl) return ossUrl;
+    throw new Error('图片已生成，但上传到 OSS 失败');
   }
   if (imageUrl.startsWith('http')) {
     const ossUrl = await uploadUrlToOSS(imageUrl, type, id);
-    return ossUrl || imageUrl;
+    if (ossUrl) return ossUrl;
+    throw new Error('图片已生成，但上传到 OSS 失败');
   }
   return imageUrl;
 }
@@ -83,6 +92,36 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
     throw new Error('Invalid image data URL');
   }
   return response.blob();
+}
+
+async function uploadBlobDirectlyToOSS(blob: Blob, type: string, id: string): Promise<string> {
+  const contentType = blob.type || 'image/png';
+  const signResponse = await fetch('/api/oss-upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'sign', type, id, contentType }),
+  });
+
+  if (!signResponse.ok) {
+    throw new Error(`Failed to sign upload: ${await readResponseMessage(signResponse)}`);
+  }
+
+  const signedUpload = await signResponse.json();
+  if (!signedUpload.uploadUrl || !signedUpload.url) {
+    throw new Error('Invalid signed upload response');
+  }
+
+  const uploadResponse = await fetch(signedUpload.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': signedUpload.contentType || contentType },
+    body: blob,
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`Failed to upload to OSS: ${uploadResponse.status} ${uploadResponse.statusText}`);
+  }
+
+  return signedUpload.url;
 }
 
 function extensionFromMime(mime: string): string {

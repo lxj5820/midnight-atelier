@@ -9,10 +9,12 @@ export interface OssUploadEnv {
 }
 
 interface UploadPayload {
+  action?: string;
   image?: string;
   url?: string;
   type?: string;
   id?: string;
+  contentType?: string;
   file?: {
     buffer: Buffer;
     contentType: string;
@@ -82,22 +84,59 @@ export async function uploadPayloadToOSS(payload: UploadPayload, env: OssUploadE
   }
 
   const prepared = await prepareUpload(payload);
-  const date = new Date().toISOString().split('T')[0];
-  const filename = `${prepared.id}${extensionFromContentType(prepared.contentType)}`;
-  const key = `atelier/${prepared.type}/${date}/${filename}`;
+  const key = createObjectKey(prepared.type, prepared.id, prepared.contentType);
+  const client = createOSSClient(env);
 
-  const client = new OSS({
+  await client.put(key, prepared.buffer, {
+    headers: { 'Content-Type': prepared.contentType },
+  });
+
+  return getPublicObjectUrl(key, env);
+}
+
+export function createSignedUpload(payload: UploadPayload, env: OssUploadEnv): { uploadUrl: string; url: string; key: string; contentType: string } {
+  if (!isOSSConfigured(env)) {
+    throw new UploadError(503, 'OSS not configured');
+  }
+
+  const contentType = payload.contentType || 'image/png';
+  validateImageContentType(contentType);
+
+  const type = sanitizePathPart(payload.type || 'default');
+  const id = sanitizePathPart(payload.id || String(Date.now()));
+  const key = createObjectKey(type, id, contentType);
+  const client = createOSSClient(env);
+  const uploadUrl = client.signatureUrl(key, {
+    expires: 900,
+    method: 'PUT',
+    'Content-Type': contentType,
+  });
+
+  return {
+    uploadUrl,
+    url: getPublicObjectUrl(key, env),
+    key,
+    contentType,
+  };
+}
+
+function createOSSClient(env: OssUploadEnv): OSS {
+  return new OSS({
     region: env.OSS_REGION!,
     accessKeyId: env.OSS_ACCESS_KEY_ID!,
     accessKeySecret: env.OSS_ACCESS_KEY_SECRET!,
     bucket: env.OSS_BUCKET!,
     secure: true,
   });
+}
 
-  await client.put(key, prepared.buffer, {
-    headers: { 'Content-Type': prepared.contentType },
-  });
+function createObjectKey(type: string, id: string, contentType: string): string {
+  const date = new Date().toISOString().split('T')[0];
+  const filename = `${id}${extensionFromContentType(contentType)}`;
+  return `atelier/${type}/${date}/${filename}`;
+}
 
+function getPublicObjectUrl(key: string, env: OssUploadEnv): string {
   return env.OSS_PUBLIC_URL
     ? `${env.OSS_PUBLIC_URL.replace(/\/+$/, '')}/${key}`
     : `https://${env.OSS_BUCKET}.${env.OSS_REGION}.aliyuncs.com/${key}`;

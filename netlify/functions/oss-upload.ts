@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import {
+  createSignedUpload,
   formDataToPayload,
   getJSONHeaders,
   getOptionsHeaders,
@@ -29,6 +30,14 @@ export const handler: Handler = async (event) => {
 
   try {
     const payload = await readPayload(event);
+    if (payload.action === 'sign') {
+      return {
+        statusCode: 200,
+        headers: getJSONHeaders(),
+        body: JSON.stringify(createSignedUpload(payload, env)),
+      };
+    }
+
     const ossUrl = await uploadPayloadToOSS(payload, env);
 
     return {

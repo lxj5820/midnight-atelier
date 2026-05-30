@@ -1,4 +1,4 @@
-import { formDataToPayload, getJSONHeaders, getOptionsHeaders, isOSSConfigured, UploadError, uploadPayloadToOSS } from './oss-upload-core';
+import { createSignedUpload, formDataToPayload, getJSONHeaders, getOptionsHeaders, isOSSConfigured, UploadError, uploadPayloadToOSS } from './oss-upload-core';
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') {
@@ -21,6 +21,14 @@ export default async function handler(req: any, res: any) {
 
   try {
     const payload = await readPayload(req);
+    if (payload.action === 'sign') {
+      const signedUpload = createSignedUpload(payload, env);
+      for (const [key, value] of Object.entries(getJSONHeaders())) {
+        res.setHeader(key, value);
+      }
+      return res.status(200).json(signedUpload);
+    }
+
     const ossUrl = await uploadPayloadToOSS(payload, env);
 
     for (const [key, value] of Object.entries(getJSONHeaders())) {
