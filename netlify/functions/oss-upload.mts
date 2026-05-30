@@ -63,6 +63,7 @@ export const handler: Handler = async (event) => {
       accessKeyId: OSS_ACCESS_KEY_ID,
       accessKeySecret: OSS_ACCESS_KEY_SECRET,
       bucket: OSS_BUCKET,
+      secure: true,
     });
 
     await client.put(key, buffer, {
