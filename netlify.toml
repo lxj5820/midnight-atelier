@@ -6,6 +6,9 @@
 [functions]
   node_bundler = "esbuild"
 
+[functions."oss-upload"]
+  maxDuration = 30
+
 [[redirects]]
   from = "/api/oss-upload"
   to = "/.netlify/functions/oss-upload"

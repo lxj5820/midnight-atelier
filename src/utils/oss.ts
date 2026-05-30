@@ -9,11 +9,14 @@ export async function uploadImageToOSS(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image: imageDataUrl, type, id }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn(`OSS upload failed with status ${response.status}`);
+      return null;
+    }
     const data = await response.json();
     return data.url || null;
-  } catch {
-    console.warn('OSS upload failed, falling back to base64 storage');
+  } catch (err) {
+    console.warn('OSS upload failed, falling back to base64 storage', err);
     return null;
   }
 }
@@ -29,11 +32,14 @@ export async function uploadUrlToOSS(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, type, id }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn(`OSS upload failed with status ${response.status}`);
+      return null;
+    }
     const data = await response.json();
     return data.url || null;
-  } catch {
-    console.warn('OSS upload failed, falling back to direct URL');
+  } catch (err) {
+    console.warn('OSS upload failed, falling back to direct URL', err);
     return null;
   }
 }

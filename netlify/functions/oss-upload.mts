@@ -1,4 +1,5 @@
 import type { Handler } from '@netlify/functions';
+import OSS from 'ali-oss';
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -57,7 +58,6 @@ export const handler: Handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'No image data provided' }) };
     }
 
-    const OSS = (await import('ali-oss')).default;
     const client = new OSS({
       region: OSS_REGION,
       accessKeyId: OSS_ACCESS_KEY_ID,
