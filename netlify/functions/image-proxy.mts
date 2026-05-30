@@ -24,8 +24,9 @@ export const handler: Handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing url parameter' }) };
   }
 
+  let parsedUrl: URL;
   try {
-    const parsedUrl = new URL(imageUrl);
+    parsedUrl = new URL(imageUrl);
     if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Invalid URL protocol' }) };
     }
@@ -37,7 +38,7 @@ export const handler: Handler = async (event) => {
     const response = await fetch(imageUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': new URL(imageUrl).origin + '/',
+        'Referer': parsedUrl.origin + '/',
       },
     });
 
