@@ -86,7 +86,15 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
           for await (const chunk of req) {
             chunks.push(chunk);
           }
-          const body = JSON.parse(Buffer.concat(chunks).toString());
+          let body;
+          try {
+            body = JSON.parse(Buffer.concat(chunks).toString());
+          } catch {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            return;
+          }
           const { image, url, type, id } = body;
 
           let buffer: Buffer;
