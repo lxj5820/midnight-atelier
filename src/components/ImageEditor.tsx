@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Brush, Eraser, Type,
   Undo2, Redo2, Save, X, Move, Trash2,
-  Square, Circle, Minus, ArrowRight
+  Square, Circle, Minus, ArrowRight, ImagePlus
 } from 'lucide-react';
 
 interface ImageEditorProps {
@@ -126,17 +126,9 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const bgImageRef = useRef<fabric.Image | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // 阻止 fabric.js superdrag bug
-  useEffect(() => {
-    const handler = (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); };
-    document.addEventListener('dragover', handler, true);
-    document.addEventListener('drop', handler, true);
-    return () => {
-      document.removeEventListener('dragover', handler, true);
-      document.removeEventListener('drop', handler, true);
-    };
-  }, []);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // UI 状态
   const [tool, setTool] = useState<Tool>('select');
@@ -640,6 +632,102 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
     }
   }, [saveState]);
 
+  const addImageToCanvas = useCallback((file: File) => {
+    const fc = fabricCanvasRef.current;
+    if (!fc) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (!dataUrl) return;
+      fabric.Image.fromURL(dataUrl, (img) => {
+        const maxDim = Math.min(fc.width! * 0.6, fc.height! * 0.6);
+        const scale = Math.min(1, maxDim / Math.max(img.width || 1, img.height || 1));
+        img.set({
+          left: (fc.width! - (img.width || 0) * scale) / 2,
+          top: (fc.height! - (img.height || 0) * scale) / 2,
+          scaleX: scale,
+          scaleY: scale,
+          selectable: true,
+          evented: true,
+        });
+        fc.add(img);
+        fc.setActiveObject(img);
+        fc.renderAll();
+        saveState();
+      });
+    };
+    reader.readAsDataURL(file);
+  }, [saveState]);
+
+  const handleCanvasDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleCanvasDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleCanvasDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      files.forEach(f => addImageToCanvas(f));
+      return;
+    }
+
+    const html = e.dataTransfer.getData('text/html');
+    if (html) {
+      const match = html.match(/<img[^>]+src="([^"]+)"/);
+      if (match && match[1]) {
+        const src = match[1];
+        const fc = fabricCanvasRef.current;
+        if (!fc) return;
+        fabric.Image.fromURL(src, (img) => {
+          if (!img.width || !img.height) return;
+          const maxDim = Math.min(fc.width! * 0.6, fc.height! * 0.6);
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          img.set({
+            left: (fc.width! - img.width * scale) / 2,
+            top: (fc.height! - img.height * scale) / 2,
+            scaleX: scale,
+            scaleY: scale,
+            selectable: true,
+            evented: true,
+          });
+          fc.add(img);
+          fc.setActiveObject(img);
+          fc.renderAll();
+          saveState();
+        }, { crossOrigin: 'anonymous' });
+      }
+    }
+  }, [addImageToCanvas, saveState]);
+
+  const handleImageImport = useCallback(() => {
+    imageInputRef.current?.click();
+  }, []);
+
+  const handleImageFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).filter(f => f.type.startsWith('image/')).forEach(f => addImageToCanvas(f));
+    e.target.value = '';
+  }, [addImageToCanvas]);
+
   // ── 撤销 ──
   const handleUndo = useCallback(async () => {
     if (historyStack.current.length <= 1) return;
@@ -756,6 +844,10 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
           setTool(newTool);
           return;
         }
+        if (e.key === '9') {
+          handleImageImport();
+          return;
+        }
       }
 
       // 方向键: 微调选中对象位置
@@ -810,7 +902,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
               {tool === 'text' ? '点击画布添加文字'
                 : tool === 'eraser' ? '点击对象删除（不影响底图）'
                 : isShapeTool(tool) ? '拖拽绘制图形，松开确认'
-                : '选择工具: 方向键微调 | Del删除 | Ctrl+Z撤销 | Ctrl+S保存'}
+                : '拖入图片到画布 | 方向键微调 | Del删除 | Ctrl+Z撤销 | Ctrl+S保存'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -833,6 +925,12 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
                 <span className="absolute bottom-0.5 right-0.5 text-[8px] opacity-50">{key}</span>
               </button>
             ))}
+            <div className="w-8 border-t border-[#2a2e38] my-1" />
+            <button onClick={handleImageImport} title="导入图片 (9)"
+              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:bg-[#2a2e38] hover:text-white">
+              <ImagePlus className="w-5 h-5" />
+              <span className="absolute bottom-0.5 right-0.5 text-[8px] opacity-50">9</span>
+            </button>
             <div className="flex-1" />
             <button onClick={handleUndo} disabled={!canUndo} title="撤销 (Ctrl+Z)"
               className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:bg-[#2a2e38] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
@@ -846,11 +944,22 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
 
           {/* Canvas */}
           <div ref={containerRef}
-            className="flex-1 relative bg-[#111317] overflow-hidden flex items-center justify-center"
+            className={`flex-1 relative bg-[#111317] overflow-hidden flex items-center justify-center transition-colors ${isDragOver ? 'ring-2 ring-indigo-500 ring-inset bg-indigo-500/5' : ''}`}
             onClick={(e) => { if (tool === 'text') addText(e); }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => e.preventDefault()}>
+            onDragOver={handleCanvasDragOver}
+            onDragLeave={handleCanvasDragLeave}
+            onDrop={handleCanvasDrop}>
             <canvas ref={canvasRef} className="max-w-full max-h-full" />
+            {isDragOver && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                <div className="bg-indigo-600/20 border-2 border-dashed border-indigo-400 rounded-2xl px-8 py-6 flex flex-col items-center gap-2 backdrop-blur-sm">
+                  <ImagePlus className="w-10 h-10 text-indigo-400" />
+                  <p className="text-indigo-300 font-bold text-sm">释放以添加图片</p>
+                  <p className="text-indigo-400/60 text-xs">图片将添加到画布中</p>
+                </div>
+              </div>
+            )}
+            <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageFileSelect} />
           </div>
 
           {/* Right Panel */}
