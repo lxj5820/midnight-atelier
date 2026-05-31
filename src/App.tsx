@@ -418,9 +418,9 @@ const SettingsView = ({
                     <td className="p-4">
                       <span className="text-sm font-bold text-white">Image 2</span>
                     </td>
-                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.12</td>
-                    <td className="text-center p-4 text-sm font-bold text-slate-600 tabular-nums border-l border-white/[0.06]">—</td>
-                    <td className="text-center p-4 text-sm font-bold text-slate-600 tabular-nums border-l border-white/[0.06]">—</td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.04</td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.06</td>
+                    <td className="text-center p-4 text-sm font-bold text-white/80 tabular-nums border-l border-white/[0.06]">$0.10</td>
                   </tr>
                 </tbody>
               </table>
