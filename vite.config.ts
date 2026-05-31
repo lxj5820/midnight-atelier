@@ -91,6 +91,7 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
           }
 
           const rawBody = Buffer.concat(chunks);
+          console.log('[OSS Server] Received upload request, content-type:', contentType, 'body size:', rawBody.length);
           let body;
           if (contentType.includes('multipart/form-data')) {
             const request = new Request('http://localhost/api/oss-upload', {
@@ -106,6 +107,7 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
               throw new UploadError(400, 'Invalid JSON');
             }
           }
+          console.log('[OSS Server] Parsed body, action:', body.action, 'type:', body.type, 'id:', body.id, 'hasFile:', !!body.file, 'hasImage:', !!body.image, 'hasUrl:', !!body.url);
 
           if (body.action === 'sign') {
             const signedUpload = createSignedUpload(body, env);
@@ -118,6 +120,7 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
           }
 
           const ossUrl = await uploadPayloadToOSS(body, env);
+          console.log('[OSS Server] Upload success, url:', ossUrl);
 
           for (const [key, value] of Object.entries(getJSONHeaders())) {
             res.setHeader(key, value);

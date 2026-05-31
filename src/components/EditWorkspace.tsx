@@ -173,19 +173,19 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     (async () => {
       try {
         if (model === 'GPT Image 2') {
-          const sizeMap: Record<string, string> = {
-            '1:1': '1024x1024', '2:3': '768x1024', '3:2': '1024x683',
-            '3:4': '768x1024', '4:3': '1024x768', '4:5': '819x1024',
-            '5:4': '1024x819', '9:16': '576x1024', '16:9': '1024x576',
-            '21:9': '1024x439', 'auto': '1024x1024'
+          const gptImage2SizeMap: Record<string, Record<string, string>> = {
+            '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720', 'auto': 'auto' },
+            '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152', 'auto': 'auto' },
+            '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160', 'auto': 'auto' }
           };
-          const imageSize = sizeMap[currentAspectRatio] || '1024x1024';
+          const imageSize = gptImage2SizeMap[currentQuality]?.[currentAspectRatio] || 'auto';
           const gptApiUrl = 'https://newapi.asia/v1/images/edits';
           const formData = new FormData();
-          formData.append('model', 'gpt-image-2-all');
+          formData.append('model', 'gpt-image-2');
           formData.append('prompt', currentPrompt);
           formData.append('size', imageSize);
           formData.append('quality', currentQuality === '4K' ? 'high' : currentQuality === '2K' ? 'medium' : 'low');
+          formData.append('n', '1');
 
           for (let i = 0; i < currentRefImages.length; i++) {
             const imgResponse = await fetch(currentRefImages[i]);
@@ -202,14 +202,16 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error?.message || `请求失败 (${response.status})`); }
           const data = await response.json();
           if (data.error) throw new Error(data.error.message || 'API 返回错误');
-          if (!data.data || data.data.length === 0) throw new Error('未收到有效响应');
-
           let imageUrl = '';
-          const imgData = data.data[0];
-          if (imgData.b64_json) {
-            imageUrl = `data:image/png;base64,${imgData.b64_json}`;
-          } else if (imgData.url) {
-            imageUrl = imgData.url;
+          if (data.data?.b64_json) {
+            imageUrl = `data:image/png;base64,${data.data.b64_json}`;
+          } else if (Array.isArray(data.data) && data.data.length > 0) {
+            const imgData = data.data[0];
+            if (imgData.b64_json) imageUrl = `data:image/png;base64,${imgData.b64_json}`;
+            else if (imgData.url) imageUrl = imgData.url;
+          } else if (data.choices && data.choices.length > 0) {
+            const content = data.choices[0].message?.content;
+            if (content) imageUrl = content.startsWith('data:') ? content : `data:image/png;base64,${content}`;
           }
           if (!imageUrl) throw new Error('响应中未找到图片');
 
@@ -512,7 +514,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                     ...(model === '🍌全能图片V2'
                       ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
                       : model === 'GPT Image 2'
-                        ? ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
+                        ? ['1:1', '2:3', '3:2', '9:16', '16:9'].map(r => ({ value: r, label: r }))
                         : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
                     )
                   ]}
