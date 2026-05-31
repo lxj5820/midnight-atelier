@@ -228,23 +228,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
           const data = await response.json();
           if (data.error) throw new Error(data.error.message || 'API 返回错误');
-          console.log('[GPT Image 2] API response keys:', Object.keys(data), 'data.data type:', Array.isArray(data.data) ? 'array' : typeof data.data, 'data.data length:', data.data?.length);
           let imageUrl = '';
           if (data.data?.b64_json) {
             imageUrl = `data:image/png;base64,${data.data.b64_json}`;
-            console.log('[GPT Image 2] Using data.data.b64_json path');
           } else if (Array.isArray(data.data) && data.data.length > 0) {
             const imgData = data.data[0];
-            console.log('[GPT Image 2] data[0] keys:', Object.keys(imgData), 'has b64_json:', !!imgData.b64_json, 'has url:', !!imgData.url);
             if (imgData.b64_json) imageUrl = `data:image/png;base64,${imgData.b64_json}`;
             else if (imgData.url) imageUrl = imgData.url;
           } else if (data.choices && data.choices.length > 0) {
             const content = data.choices[0].message?.content;
             if (content) imageUrl = content.startsWith('data:') ? content : `data:image/png;base64,${content}`;
-            console.log('[GPT Image 2] Using choices path, content length:', content?.length);
           }
           if (!imageUrl) throw new Error('响应中未找到图片');
-          console.log('[GPT Image 2] imageUrl starts with:', imageUrl.substring(0, 50));
 
           const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           const finalImageUrl = await saveImageToOSS(imageUrl, activeMenuItem, recordId);
@@ -296,13 +291,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
           const data = await response.json();
           if (data.error) throw new Error(data.error.message || 'API 返回错误');
-          console.log('[GPT Image 2 gen] API response keys:', Object.keys(data), 'data.data type:', Array.isArray(data.data) ? 'array' : typeof data.data, 'data.data length:', data.data?.length);
           let imageUrl = '';
           if (data.data?.b64_json) {
             imageUrl = `data:image/png;base64,${data.data.b64_json}`;
           } else if (Array.isArray(data.data) && data.data.length > 0) {
             const imgData = data.data[0];
-            console.log('[GPT Image 2 gen] data[0] keys:', Object.keys(imgData), 'has b64_json:', !!imgData.b64_json, 'has url:', !!imgData.url);
             if (imgData.b64_json) imageUrl = `data:image/png;base64,${imgData.b64_json}`;
             else if (imgData.url) imageUrl = imgData.url;
           } else if (data.choices && data.choices.length > 0) {
@@ -310,7 +303,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             if (content) imageUrl = content.startsWith('data:') ? content : `data:image/png;base64,${content}`;
           }
           if (!imageUrl) throw new Error('响应中未找到图片');
-          console.log('[GPT Image 2 gen] imageUrl starts with:', imageUrl.substring(0, 50));
 
           const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           const finalImageUrl = await saveImageToOSS(imageUrl, activeMenuItem, recordId);

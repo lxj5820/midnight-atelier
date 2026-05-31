@@ -11,19 +11,16 @@ export async function uploadImageToOSS(
     formData.append('type', type);
     formData.append('id', id);
 
-    console.log('[OSS] Uploading via server, blob size:', blob.size, 'type:', blob.type);
     const response = await fetch('/api/oss-upload', {
       method: 'POST',
       body: formData,
     });
-    console.log('[OSS] Server response status:', response.status);
     if (!response.ok) {
       const msg = await readResponseMessage(response);
       console.warn(`OSS upload failed with status ${response.status}: ${msg}`);
       return null;
     }
     const data = await response.json();
-    console.log('[OSS] Upload result:', data.url);
     return data.url || null;
   } catch (err) {
     console.warn('OSS upload failed', err);
