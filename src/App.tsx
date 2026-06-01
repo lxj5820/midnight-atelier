@@ -246,7 +246,7 @@ const TopBar = ({
         </div>
 
         <span className="text-xs font-bold text-slate-500">
-          V3.0
+          V3.1
         </span>
       </div>
     </header>

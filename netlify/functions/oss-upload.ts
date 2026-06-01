@@ -68,8 +68,12 @@ async function readPayload(event: Parameters<Handler>[0]) {
   }
 
   try {
-    return JSON.parse(event.body || '{}');
-  } catch {
+    const rawBody = event.isBase64Encoded
+      ? Buffer.from(event.body || '', 'base64').toString('utf-8')
+      : event.body || '{}';
+    return JSON.parse(rawBody);
+  } catch (e) {
+    console.error('JSON parse error, isBase64Encoded:', event.isBase64Encoded, 'body length:', event.body?.length);
     throw new UploadError(400, 'Invalid JSON');
   }
 }
