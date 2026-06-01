@@ -3,17 +3,11 @@ export async function uploadImageToOSS(
   type: string,
   id: string
 ): Promise<string | null> {
-  const blob = await dataUrlToBlob(imageDataUrl);
-
   try {
-    const formData = new FormData();
-    formData.append('file', blob, `${id}.${extensionFromMime(blob.type)}`);
-    formData.append('type', type);
-    formData.append('id', id);
-
     const response = await fetch('/api/oss-upload', {
       method: 'POST',
-      body: formData,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: imageDataUrl, type, id }),
     });
     if (!response.ok) {
       const msg = await readResponseMessage(response);
@@ -79,31 +73,6 @@ export function getOSSThumbnailUrl(url: string, width: number = 300): string {
 
 export function isOSSUrl(url: string): boolean {
   return !!url && url.includes('aliyuncs.com');
-}
-
-async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  const response = await fetch(dataUrl);
-  if (!response.ok) {
-    throw new Error('Invalid image data URL');
-  }
-  return response.blob();
-}
-
-function extensionFromMime(mime: string): string {
-  switch (mime.toLowerCase()) {
-    case 'image/jpeg':
-    case 'image/jpg':
-      return 'jpg';
-    case 'image/webp':
-      return 'webp';
-    case 'image/gif':
-      return 'gif';
-    case 'image/avif':
-      return 'avif';
-    case 'image/png':
-    default:
-      return 'png';
-  }
 }
 
 async function readResponseMessage(response: Response): Promise<string> {
