@@ -1,16 +1,14 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, RefreshCw, Zap, Maximize2, Wand2, Pencil, FileJson } from 'lucide-react';
+import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, RefreshCw, Maximize2, Wand2, Pencil } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { downloadImage } from '../utils/download';
 import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, saveImageToOSS, getOSSThumbnailUrl, isOSSUrl } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
-import { getPrice } from '../utils/cost';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
-import { Dropdown } from './ui/Dropdown';
-import { PromptGenerator } from './PromptGenerator';
+import { RightPanel } from './layout/RightPanel';
 
 const POLISH_SYSTEM_PROMPT = `你是一个专业的 AI 图像提示词润色助手。你的任务是将用户输入的简单提示词润色成专业、详细、结构清晰的提示词。
 1. 只输出润色后的提示词内容，不要输出任何解释、说明、标题、标签或其他内容
@@ -42,12 +40,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   const [aspectRatio, setAspectRatio] = useState('auto');
   const [quality, setQuality] = useState('2K');
   const [model, setModel] = useState('🍌全能图片V2');
-  const price = getPrice(model, quality);
   const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
   const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showPromptGenerator, setShowPromptGenerator] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
 
   const handlePolishPrompt = async () => {
@@ -114,7 +110,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       for (const file of files) {
         const base64 = await blobToBase64(file);
         const base64Url = `data:${file.type};base64,${base64}`;
-        setReferenceImages(prev => [...prev, base64Url]);
+        // 上传到 OSS，使用 URL 替代 base64
+        const ossId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const ossUrl = await saveImageToOSS(base64Url, 'edit', ossId);
+        setReferenceImages(prev => [...prev, ossUrl]);
       }
       showToast('success', `已添加 ${files.length} 张参考图`);
     } catch (error) {
@@ -318,6 +317,54 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     showToast('info', '已删除');
   };
 
+  const referenceImageContent = (
+    <div className="mb-6 mt-2">
+      <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-3">参考图</p>
+      {referenceImages.length > 0 ? (
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {referenceImages.map((img, idx) => (
+            <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-surface-1 relative group">
+              <img src={img} alt={`参考图 ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => setEditingImageIndex(idx)}
+                  className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                  title="编辑"
+                >
+                  <Pencil className="w-3 h-3 text-white" />
+                </button>
+                <button onClick={() => removeRefImage(idx)} className="p-1.5 bg-white/20 hover:bg-rose-500/50 rounded-lg transition-colors" title="删除">
+                  <X className="w-3 h-3 text-white" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div
+        className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-white/[0.06] hover:border-indigo-500/30'}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={handleUpload}
+      >
+        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
+        {isUploading ? (
+          <div className="flex items-center justify-center gap-2 text-indigo-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-xs">上传中...</span>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1 text-slate-400">
+            <Upload className="w-5 h-5" />
+            <span className="text-xs">{referenceImages.length > 0 ? '添加更多' : '点击或拖拽上传'}</span>
+            <span className="text-[10px] text-slate-500">支持 Ctrl+V 粘贴</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full" style={{ display: 'flex', flexDirection: 'row' }}>
       {/* Main Content Area */}
@@ -442,174 +489,49 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       </div>
 
       {/* Right Sidebar */}
-      <aside className="w-80 bg-surface-2 border-l border-border flex flex-col p-4 overflow-y-auto custom-scrollbar shrink-0 fixed right-0 top-14 h-[calc(100vh-3.5rem)] z-30">
-        {/* Model Selection */}
-        <div className="mb-6">
-          <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-3">引擎与模型</p>
-          <Dropdown
-            options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <><img src="/gpt-icon.png" alt="GPT" className="w-4 h-4 inline-block" /> Image 2</> : m }))}
-            value={model}
-            onChange={setModel}
-            className="w-full"
-            direction="down"
-          />
-        </div>
-
-        {/* Reference Image Upload */}
-        <div className="mb-6">
-          <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-3">参考图</p>
-          {referenceImages.length > 0 ? (
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {referenceImages.map((img, idx) => (
-                <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-surface-1 relative group">
-                  <img src={img} alt={`参考图 ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => setEditingImageIndex(idx)}
-                      className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                      title="编辑"
-                    >
-                      <Pencil className="w-3 h-3 text-white" />
-                    </button>
-                    <button onClick={() => removeRefImage(idx)} className="p-1.5 bg-white/20 hover:bg-rose-500/50 rounded-lg transition-colors" title="删除">
-                      <X className="w-3 h-3 text-white" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <div
-            className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-white/[0.06] hover:border-indigo-500/30'}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={handleUpload}
-          >
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
-            {isUploading ? (
-              <div className="flex items-center justify-center gap-2 text-indigo-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs">上传中...</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-1 text-slate-400">
-                <Upload className="w-5 h-5" />
-                <span className="text-xs">{referenceImages.length > 0 ? '添加更多' : '点击或拖拽上传'}</span>
-                <span className="text-[10px] text-slate-500">支持 Ctrl+V 粘贴</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Aspect Ratio & Quality */}
-        <div className="mt-auto pt-4 border-t border-border">
-          <div className="mb-4">
-            <div className="flex gap-3 mb-3">
-              <div className="flex-1">
-                <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2">图像比例</p>
-                <Dropdown
-                  options={[
-                    { value: 'auto', label: '自动' },
-                    ...(model === '🍌全能图片V2'
-                      ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
-                      : model === 'GPT Image 2'
-                        ? ['1:1', '2:3', '3:2', '9:16', '16:9'].map(r => ({ value: r, label: r }))
-                        : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => ({ value: r, label: r }))
-                    )
-                  ]}
-                  value={aspectRatio}
-                  onChange={setAspectRatio}
-                  className="w-full"
-                />
-              </div>
-              <div className="flex-1">
-                <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2">画质</p>
-                <Dropdown
-                  options={['1K', '2K', '4K'].map(q => ({ value: q, label: q }))}
-                  value={quality}
-                  onChange={setQuality}
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Prompt Input */}
-          <div className="bg-surface-1 rounded-xl p-4 mb-4 border border-white/[0.04]">
-            <textarea
-              placeholder="输入提示词，描述你想要如何修改这张图片..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className="w-full bg-transparent border-none text-sm text-white resize-none outline-none min-h-[80px] placeholder:text-slate-600"
-            />
-            <div className="flex justify-end gap-1.5 mt-2 pt-2 border-t border-white/[0.04]">
-              <button onClick={() => setShowPromptGenerator(true)} className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200" title="提示词生成器">
-                <FileJson className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handlePolishPrompt}
-                disabled={isPolishing || !prompt.trim()}
-                className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500"
-                title="润色提示"
-              >
-                <Sparkles className={`w-4 h-4 ${isPolishing ? 'animate-spin' : ''}`} />
-              </button>
-              <button onClick={() => setPrompt('')} className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-200" title="清空">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Prompt Generator Modal */}
-          <PromptGenerator
-            isOpen={showPromptGenerator}
-            onClose={() => setShowPromptGenerator(false)}
-            onApply={(text) => setPrompt(text)}
-          />
-
-          {/* Generate Button */}
-          <button
-            onClick={() => !hasApiKey && onNavigateSettings ? onNavigateSettings() : handleGenerate()}
-            disabled={isGenerating && hasApiKey}
-            className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-              !hasApiKey
-                ? 'bg-gradient-to-br from-[#3f3a2e] to-[#2e2a22] text-amber-200/80 hover:text-amber-200 border border-amber-500/15 hover:border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.06)] hover:shadow-[0_0_20px_rgba(245,158,11,0.10)] cursor-pointer'
-                : 'btn-primary text-white disabled:bg-slate-700 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none'
-            }`}
-          >
-            {!hasApiKey ? (
-              <>
-                <Zap className="w-4 h-4 fill-current" />
-                请配置API
-              </>
-            ) : isGenerating ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                生成中...
-              </>
-            ) : (
-              <>
-                <Zap className="w-4 h-4 fill-current" />
-                {price !== null ? <span className="opacity-70">{price < 0.1 ? price.toFixed(2) : price}</span> : null}
-                立即生成
-              </>
-            )}
-          </button>
-        </div>
-      </aside>
+      <RightPanel
+        model={model}
+        setModel={setModel}
+        models={models}
+        presets={[]}
+        selectedPreset=""
+        setSelectedPreset={() => {}}
+        aspectRatio={aspectRatio}
+        setAspectRatio={setAspectRatio}
+        quality={quality}
+        setQuality={setQuality}
+        prompt={prompt}
+        setPrompt={setPrompt}
+        placeholder="输入提示词，描述你想要如何修改这张图片..."
+        handlePolishPrompt={handlePolishPrompt}
+        handleGenerate={handleGenerate}
+        isGenerating={isGenerating}
+        isPolishing={isPolishing}
+        activeMenuItem="edit"
+        hasApiKey={hasApiKey}
+        onNavigateSettings={onNavigateSettings}
+        extraContent={referenceImageContent}
+      />
       {/* Image Editor Modal */}
       {editingImageIndex !== null && referenceImages[editingImageIndex] && (
         <ImageEditor
           imageUrl={referenceImages[editingImageIndex]}
-          onSave={(editedImage) => {
-            setReferenceImages(prev => {
-              const newImages = [...prev];
-              newImages[editingImageIndex!] = editedImage;
-              return newImages;
-            });
-            setEditingImageIndex(null);
-            showToast('success', '图片编辑已保存');
+          onSave={async (editedImage) => {
+            try {
+              // 编辑后图片是 base64，上传到 OSS
+              const ossId = `edit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              const ossUrl = await saveImageToOSS(editedImage, 'edit', ossId);
+              setReferenceImages(prev => {
+                const newImages = [...prev];
+                newImages[editingImageIndex!] = ossUrl;
+                return newImages;
+              });
+              setEditingImageIndex(null);
+              showToast('success', '图片编辑已保存');
+            } catch (err) {
+              setEditingImageIndex(null);
+              showToast('error', '编辑图片上传失败');
+            }
           }}
           onCancel={() => setEditingImageIndex(null)}
           onError={(message) => {

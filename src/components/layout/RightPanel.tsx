@@ -100,6 +100,7 @@ interface RightPanelProps {
   activeMenuItem?: MenuItemId;
   hasApiKey: boolean;
   onNavigateSettings?: () => void;
+  extraContent?: React.ReactNode;
 }
 
 export const RightPanel: React.FC<RightPanelProps> = ({
@@ -123,6 +124,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   activeMenuItem,
   hasApiKey,
   onNavigateSettings,
+  extraContent,
 }) => {
   const [showPromptGenerator, setShowPromptGenerator] = useState(false);
 
@@ -144,8 +146,9 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         )}
       </div>
 
-      {presets.length > 0 && (
+      {(presets.length > 0 || extraContent) && (
         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pt-0">
+          {presets.length > 0 && (
           <div className="grid grid-cols-2 gap-2.5">
             {presets.map(preset => {
               const isSelected = selectedPreset === preset.label;
@@ -184,6 +187,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
               );
             })}
           </div>
+          )}
+          {extraContent}
         </div>
       )}
 

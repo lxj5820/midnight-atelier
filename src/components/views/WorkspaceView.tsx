@@ -127,7 +127,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             try {
               const base64 = await blobToBase64(file);
               const base64Url = `data:${file.type};base64,${base64}`;
-              setImageUrls([base64Url]);
               if (aspectRatio === 'auto') {
                 const dims = await getImageDimensions(base64Url);
                 if (dims) {
@@ -135,9 +134,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   setAspectRatio(closest);
                   showToast('success', `已自动选择比例 ${closest}`);
                 }
-              } else {
-                showToast('success', '图片已粘贴');
               }
+              // 上传到 OSS，使用 URL 替代 base64
+              const ossId = `paste-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              const ossUrl = await saveImageToOSS(base64Url, activeMenuItem, ossId);
+              setImageUrls([ossUrl]);
+              if (aspectRatio !== 'auto') showToast('success', '图片已粘贴');
             } catch (error) {
               showToast('error', `粘贴失败: ${error instanceof Error ? error.message : '未知错误'}`);
             } finally {
@@ -156,7 +158,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     };
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [showToast, aspectRatio]);
+  }, [showToast, aspectRatio, activeMenuItem]);
 
   const handleGenerate = async () => {
     if (isGeneratingRef.current) return;
@@ -525,11 +527,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     try {
       const base64 = await blobToBase64(file);
       const base64Url = `data:${file.type};base64,${base64}`;
-      setImageUrls([base64Url]);
+      // 先用 base64 预览和检测尺寸
       if (aspectRatio === 'auto') {
         const dims = await getImageDimensions(base64Url);
         if (dims) { setAspectRatio(getClosestAspectRatio(dims.width, dims.height)); showToast('success', '已自动选择比例'); }
-      } else showToast('success', '参考图片已添加');
+      }
+      // 上传到 OSS，使用 URL 替代 base64
+      const ossId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const ossUrl = await saveImageToOSS(base64Url, activeMenuItem, ossId);
+      setImageUrls([ossUrl]);
+      if (aspectRatio !== 'auto') showToast('success', '参考图片已添加');
     } catch (error) {
       showToast('error', `上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally { setIsUploading(false); }
@@ -721,10 +728,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center"><RefreshCw className="w-8 h-8 animate-spin text-white" /></div>}>
             <ImageEditor
               imageUrl={imageUrls[editingImageIndex]}
-              onSave={(editedImage) => {
-                setImageUrls(prev => { const newImages = [...prev]; newImages[editingImageIndex!] = editedImage; return newImages; });
-                setEditingImageIndex(null);
-                showToast('success', '图片编辑已保存');
+              onSave={async (editedImage) => {
+                try {
+                  // 编辑后图片是 base64，上传到 OSS
+                  const ossId = `edit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                  const ossUrl = await saveImageToOSS(editedImage, activeMenuItem, ossId);
+                  setImageUrls(prev => { const newImages = [...prev]; newImages[editingImageIndex!] = ossUrl; return newImages; });
+                  setEditingImageIndex(null);
+                  showToast('success', '图片编辑已保存');
+                } catch (err) {
+                  setEditingImageIndex(null);
+                  showToast('error', '编辑图片上传失败');
+                }
               }}
               onCancel={() => setEditingImageIndex(null)}
               onError={(message) => {
