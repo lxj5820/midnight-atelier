@@ -11,6 +11,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { downloadImage } from '../utils/download';
+import { useCachedImageUrl } from '../hooks/useCachedImage';
 
 interface ImagePreviewModalProps {
   imageUrl: string;
@@ -48,6 +49,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const displayUrl = useCachedImageUrl(imageUrl);
   const [showMore, setShowMore] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -137,7 +139,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: imageLoaded ? 1 : 0, scale: imageLoaded ? 1 : 0.95 }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          src={imageUrl}
+          src={displayUrl || ''}
           alt={displayName}
           className="max-w-[90%] max-h-[90%] object-contain rounded-lg"
           referrerPolicy="no-referrer"

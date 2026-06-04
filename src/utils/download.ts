@@ -1,3 +1,5 @@
+import { isCacheKey, getCachedImageBlob } from './imageCache';
+
 export function getImageProxyUrl(url: string): string {
   if (url.startsWith('data:')) return url;
   const base = window.location.origin;
@@ -7,6 +9,22 @@ export function getImageProxyUrl(url: string): string {
 export async function downloadImage(url: string, filename: string) {
   if (!filename.includes('.')) {
     filename += '.png';
+  }
+
+  // 从缓存获取
+  if (isCacheKey(url)) {
+    const blob = await getCachedImageBlob(url);
+    if (blob) {
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
   }
 
   if (url.startsWith('data:')) {

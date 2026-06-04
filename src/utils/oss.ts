@@ -76,6 +76,16 @@ export function isOSSUrl(url: string): boolean {
   return !!url && url.includes('aliyuncs.com');
 }
 
+/**
+ * Fetch an image, using the image proxy for OSS URLs to avoid CORS issues.
+ */
+export function fetchImage(url: string): Promise<Response> {
+  if (isOSSUrl(url)) {
+    return fetch(`/api/image-proxy?url=${encodeURIComponent(url)}`);
+  }
+  return fetch(url);
+}
+
 function compressImageDataUrl(dataUrl: string, maxBytes = 4 * 1024 * 1024): Promise<string> {
   const base64Part = dataUrl.split(',')[1] || '';
   const estimatedBytes = Math.ceil(base64Part.length * 0.75);

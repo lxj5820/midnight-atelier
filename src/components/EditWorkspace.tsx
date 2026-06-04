@@ -4,11 +4,36 @@ import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { downloadImage } from '../utils/download';
-import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, saveImageToOSS, getOSSThumbnailUrl, isOSSUrl } from '../utils';
+import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
 import { RightPanel } from './layout/RightPanel';
+import { useCachedImageUrl } from '../hooks/useCachedImage';
+
+// 参考图缩略图 - 解析缓存 key
+const RefImageThumb: React.FC<{ cacheKey: string; alt: string }> = ({ cacheKey, alt }) => {
+  const displayUrl = useCachedImageUrl(cacheKey);
+  return <img src={displayUrl || ''} alt={alt} className="w-full h-full object-cover" referrerPolicy="no-referrer" />;
+};
+
+// 历史缩略图组件
+const EditHistoryThumbnail: React.FC<{ cacheKey: string; alt: string; className?: string }> = ({ cacheKey, alt, className }) => {
+  const displayUrl = useCachedImageUrl(cacheKey);
+  return <img src={displayUrl || ''} alt={alt} className={className} referrerPolicy="no-referrer" loading="lazy" />;
+};
+
+// 缓存图片编辑器包装
+const CachedEditImageEditor: React.FC<{
+  cacheKey: string;
+  onSave: (editedImage: string) => void;
+  onCancel: () => void;
+  onError: (message: string) => void;
+}> = ({ cacheKey, onSave, onCancel, onError }) => {
+  const displayUrl = useCachedImageUrl(cacheKey);
+  if (!displayUrl) return null;
+  return <ImageEditor imageUrl={displayUrl} onSave={onSave} onCancel={onCancel} onError={onError} />;
+};
 
 const POLISH_SYSTEM_PROMPT = `你是一个专业的 AI 图像提示词润色助手。你的任务是将用户输入的简单提示词润色成专业、详细、结构清晰的提示词。
 1. 只输出润色后的提示词内容，不要输出任何解释、说明、标题、标签或其他内容
@@ -45,6 +70,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isPolishing, setIsPolishing] = useState(false);
+
+  // 解析缓存 key 为可显示的 blob URL
+  const displayResult = useCachedImageUrl(result);
+  const displayPendingResult = useCachedImageUrl(pendingResult);
 
   const handlePolishPrompt = async () => {
     if (isPolishing) return;
@@ -110,10 +139,8 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       for (const file of files) {
         const base64 = await blobToBase64(file);
         const base64Url = `data:${file.type};base64,${base64}`;
-        // 上传到 OSS，使用 URL 替代 base64
-        const ossId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const ossUrl = await saveImageToOSS(base64Url, 'edit', ossId);
-        setReferenceImages(prev => [...prev, ossUrl]);
+        const cacheKey = await cacheImage(base64Url);
+        setReferenceImages(prev => [...prev, cacheKey]);
       }
       showToast('success', `已添加 ${files.length} 张参考图`);
     } catch (error) {
@@ -187,8 +214,8 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           formData.append('n', '1');
 
           for (let i = 0; i < currentRefImages.length; i++) {
-            const imgResponse = await fetch(currentRefImages[i]);
-            const blob = await imgResponse.blob();
+            const blob = await getCachedImageBlob(currentRefImages[i]);
+            if (!blob) continue;
             const fileName = i === 0 ? 'image.png' : `image_${i}.png`;
             formData.append('image', blob, fileName);
           }
@@ -215,21 +242,21 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           if (!imageUrl) throw new Error('响应中未找到图片');
 
           const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const finalImageUrl = await saveImageToOSS(imageUrl, 'edit', recordId);
+          const resultCacheKey = await cacheImage(imageUrl, recordId);
 
           const record: GenerationRecord = {
             id: recordId,
             type: 'edit',
             prompt: currentPrompt,
-            imageUrl: finalImageUrl,
+            imageUrl: resultCacheKey,
             referenceImageUrl: currentRefImages[0],
             referenceImageUrls: currentRefImages,
             createdAt: new Date().toISOString(),
             resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
           };
           await saveGenerationRecordToDB(record);
-          setResult(finalImageUrl);
-          setPendingResult(finalImageUrl);
+          setResult(resultCacheKey);
+          setPendingResult(resultCacheKey);
           setHistoryRefreshKey(k => k + 1);
           showToast('success', '生成成功！');
         } else {
@@ -239,8 +266,8 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
         const parts: any[] = [];
         for (const imgUrl of currentRefImages) {
-          const imgResponse = await fetch(imgUrl);
-          const blob = await imgResponse.blob();
+          const blob = await getCachedImageBlob(imgUrl);
+          if (!blob) continue;
           const base64 = await blobToBase64(blob);
           parts.push({ inline_data: { mime_type: blob.type || 'image/jpeg', data: base64 } });
         }
@@ -261,13 +288,13 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         if (!imageUrl) throw new Error('响应中未找到图片');
 
         const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const finalImageUrl = await saveImageToOSS(imageUrl, 'edit', recordId);
+        const resultCacheKey = await cacheImage(imageUrl, recordId);
 
         const record: GenerationRecord = {
           id: recordId,
           type: 'edit',
           prompt: currentPrompt,
-          imageUrl: finalImageUrl,
+          imageUrl: resultCacheKey,
           referenceImageUrl: currentRefImages[0],
           referenceImageUrls: currentRefImages,
           createdAt: new Date().toISOString(),
@@ -275,8 +302,8 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         };
         await saveGenerationRecordToDB(record);
 
-        setResult(finalImageUrl);
-        setPendingResult(finalImageUrl);
+        setResult(resultCacheKey);
+        setPendingResult(resultCacheKey);
         setHistoryRefreshKey(k => k + 1);
         showToast('success', '生成成功！');
         }
@@ -312,6 +339,12 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   };
 
   const handleDeleteHistory = async (id: string) => {
+    const record = generationHistory.find(r => r.id === id);
+    if (record) {
+      deleteCachedImage(record.imageUrl);
+      if (record.referenceImageUrl) deleteCachedImage(record.referenceImageUrl);
+      if (record.referenceImageUrls) record.referenceImageUrls.forEach(u => deleteCachedImage(u));
+    }
     await deleteGenerationRecordFromDB(id);
     setGenerationHistory(prev => prev.filter(r => r.id !== id));
     showToast('info', '已删除');
@@ -324,7 +357,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         <div className="grid grid-cols-3 gap-2 mb-3">
           {referenceImages.map((img, idx) => (
             <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-surface-1 relative group">
-              <img src={img} alt={`参考图 ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <RefImageThumb cacheKey={img} alt={`参考图 ${idx + 1}`} />
               <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => setEditingImageIndex(idx)}
@@ -387,7 +420,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           {(result || pendingResult) ? (
             <div className="mb-6">
               <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-white/[0.04]">
-                <img src={result || pendingResult} alt="生成结果" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                <img src={displayResult || displayPendingResult || ''} alt="生成结果" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
               </div>
             </div>
           ) : isGenerating ? (
@@ -457,12 +490,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                     style={{ width: thumbnailSize, height: thumbnailSize }}
                     onClick={() => handleItemClick(record)}
                   >
-                    <img
-                      src={isOSSUrl(record.imageUrl) ? getOSSThumbnailUrl(record.imageUrl, thumbnailSize * 2) : record.imageUrl}
+                    <EditHistoryThumbnail
+                      cacheKey={record.imageUrl}
                       alt={record.prompt}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      referrerPolicy="no-referrer"
-                      loading="lazy"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
@@ -514,23 +545,21 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       />
       {/* Image Editor Modal */}
       {editingImageIndex !== null && referenceImages[editingImageIndex] && (
-        <ImageEditor
-          imageUrl={referenceImages[editingImageIndex]}
+        <CachedEditImageEditor
+          cacheKey={referenceImages[editingImageIndex]}
           onSave={async (editedImage) => {
             try {
-              // 编辑后图片是 base64，上传到 OSS
-              const ossId = `edit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-              const ossUrl = await saveImageToOSS(editedImage, 'edit', ossId);
+              const cacheKey = await cacheImage(editedImage);
               setReferenceImages(prev => {
                 const newImages = [...prev];
-                newImages[editingImageIndex!] = ossUrl;
+                newImages[editingImageIndex!] = cacheKey;
                 return newImages;
               });
               setEditingImageIndex(null);
               showToast('success', '图片编辑已保存');
-            } catch (err) {
+            } catch {
               setEditingImageIndex(null);
-              showToast('error', '编辑图片上传失败');
+              showToast('error', '编辑图片保存失败');
             }
           }}
           onCancel={() => setEditingImageIndex(null)}

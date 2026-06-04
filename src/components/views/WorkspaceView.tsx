@@ -12,7 +12,7 @@ import {
   getComputePointsCost, getResolution,
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
-  saveImageToOSS, getOSSThumbnailUrl, isOSSUrl,
+  cacheImage, getCachedImage, getCachedImageBlob, isCacheKey, deleteCachedImage,
 } from '../../utils';
 import { API_TIMEOUT_MS } from '../../utils/constants';
 import { downloadImage } from '../../utils/download';
@@ -24,9 +24,35 @@ import type { MenuItemId } from '../../menuConfig';
 import type { GenerationRecord, PreviewImageData } from '../../types';
 import { RightPanel } from '../layout/RightPanel';
 import { lazy } from 'react';
+import { useCachedImageUrl } from '../../hooks/useCachedImage';
 
 const PanoramaViewer = lazy(() => import('../PanoramaViewer'));
 const ImageEditor = lazy(() => import('../ImageEditor'));
+
+// 历史缩略图组件 - 解析缓存 key
+const HistoryThumbnail: React.FC<{ cacheKey: string; alt: string; className?: string; onClick?: () => void }> = ({ cacheKey, alt, className, onClick }) => {
+  const displayUrl = useCachedImageUrl(cacheKey);
+  return <img src={displayUrl || ''} alt={alt} className={className} referrerPolicy="no-referrer" loading="lazy" onClick={onClick} />;
+};
+
+// 缓存图片编辑器包装 - 解析缓存 key 后传给 ImageEditor
+const CachedImageEditor: React.FC<{
+  cacheKey: string;
+  onSave: (editedImage: string) => void;
+  onCancel: () => void;
+  onError: (message: string) => void;
+}> = ({ cacheKey, onSave, onCancel, onError }) => {
+  const displayUrl = useCachedImageUrl(cacheKey);
+  if (!displayUrl) return null;
+  return <ImageEditor imageUrl={displayUrl} onSave={onSave} onCancel={onCancel} onError={onError} />;
+};
+
+// 缓存全景查看器包装 - 解析缓存 key 后传给 PanoramaViewer
+const CachedPanoramaViewer: React.FC<{ cacheKey: string; isOpen: boolean; onClose: () => void }> = ({ cacheKey, isOpen, onClose }) => {
+  const displayUrl = useCachedImageUrl(cacheKey);
+  if (!displayUrl) return null;
+  return <PanoramaViewer imageUrl={displayUrl} isOpen={isOpen} onClose={onClose} />;
+};
 
 interface WorkspaceViewProps {
   activeMenuItem: MenuItemId;
@@ -77,6 +103,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 解析缓存 key 为可显示的 blob URL
+  const displayResult = useCachedImageUrl(result);
+  const displayRefImage = useCachedImageUrl(imageUrls[0]);
 
   const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
   const filteredPresets = getPresetsForMenu(activeMenuItem);
@@ -135,10 +165,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   showToast('success', `已自动选择比例 ${closest}`);
                 }
               }
-              // 上传到 OSS，使用 URL 替代 base64
-              const ossId = `paste-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-              const ossUrl = await saveImageToOSS(base64Url, activeMenuItem, ossId);
-              setImageUrls([ossUrl]);
+              // 存入缓存，使用 cache key
+              const cacheKey = await cacheImage(base64Url);
+              setImageUrls([cacheKey]);
               if (aspectRatio !== 'auto') showToast('success', '图片已粘贴');
             } catch (error) {
               showToast('error', `粘贴失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -158,7 +187,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     };
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [showToast, aspectRatio, activeMenuItem]);
+  }, [showToast, aspectRatio]);
 
   const handleGenerate = async () => {
     if (isGeneratingRef.current) return;
@@ -201,8 +230,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           formData.append('n', '1');
 
           for (let i = 0; i < imageUrls.length; i++) {
-            const imgResponse = await fetch(imageUrls[i]);
-            const blob = await imgResponse.blob();
+            const blob = await getCachedImageBlob(imageUrls[i]);
+            if (!blob) continue;
             const fileName = i === 0 ? 'image.png' : `image_${i}.png`;
             formData.append('image', blob, fileName);
           }
@@ -244,15 +273,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           if (!imageUrl) throw new Error('响应中未找到图片');
 
           const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const finalImageUrl = await saveImageToOSS(imageUrl, activeMenuItem, recordId);
+          const resultCacheKey = await cacheImage(imageUrl, recordId);
+          const refCacheKey = imageUrls[0] || undefined;
 
-          setResult(finalImageUrl);
+          setResult(resultCacheKey);
           setImageUrls([]);
           const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
           const record: GenerationRecord = {
             id: recordId,
-            type: activeMenuItem, prompt, imageUrl: finalImageUrl,
-            referenceImageUrl: imageUrls[0] || undefined,
+            type: activeMenuItem, prompt, imageUrl: resultCacheKey,
+            referenceImageUrl: refCacheKey,
             createdAt: new Date().toISOString(),
             resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
           };
@@ -307,15 +337,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           if (!imageUrl) throw new Error('响应中未找到图片');
 
           const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const finalImageUrl = await saveImageToOSS(imageUrl, activeMenuItem, recordId);
+          const resultCacheKey = await cacheImage(imageUrl, recordId);
 
-          setResult(finalImageUrl);
+          setResult(resultCacheKey);
           setImageUrls([]);
           const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
           const record: GenerationRecord = {
             id: recordId,
-            type: activeMenuItem, prompt, imageUrl: finalImageUrl,
-            referenceImageUrl: imageUrls[0] || undefined,
+            type: activeMenuItem, prompt, imageUrl: resultCacheKey,
+            referenceImageUrl: undefined,
             createdAt: new Date().toISOString(),
             resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
           };
@@ -338,9 +368,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         const parts = [];
         for (const imgUrl of imageUrls) {
           try {
-            const imgResponse = await fetch(imgUrl);
-            if (!imgResponse.ok) continue;
-            const blob = await imgResponse.blob();
+            const blob = await getCachedImageBlob(imgUrl);
+            if (!blob) continue;
             const base64 = await blobToBase64(blob);
             parts.push({ inline_data: { mime_type: blob.type || 'image/jpeg', data: base64 } });
             hasValidImages = true;
@@ -395,15 +424,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       if (!imageUrl) throw new Error('响应中未找到图片');
 
       const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const finalImageUrl = await saveImageToOSS(imageUrl, activeMenuItem, recordId);
+      const resultCacheKey = await cacheImage(imageUrl, recordId);
+      const refCacheKey = imageUrls[0] || undefined;
 
-      setResult(finalImageUrl);
+      setResult(resultCacheKey);
       setImageUrls([]);
       const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
       const record: GenerationRecord = {
         id: recordId,
-        type: activeMenuItem, prompt, imageUrl: finalImageUrl,
-        referenceImageUrl: imageUrls[0] || undefined,
+        type: activeMenuItem, prompt, imageUrl: resultCacheKey,
+        referenceImageUrl: refCacheKey,
         createdAt: new Date().toISOString(),
         resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
       };
@@ -444,6 +474,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     } catch { showToast('error', '下载失败'); }
   };
   const handleDeleteHistory = (id: string) => {
+    const record = generationHistory.find(h => h.id === id);
+    if (record) {
+      deleteCachedImage(record.imageUrl);
+      if (record.referenceImageUrl) deleteCachedImage(record.referenceImageUrl);
+    }
     dbOperations.delete(id);
     setGenerationHistory(prev => prev.filter(h => h.id !== id));
     showToast('info', '已删除');
@@ -503,7 +538,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   };
   const handleCopyResult = async () => {
     if (result) {
-      try { await navigator.clipboard.writeText(result); showToast('success', '图片链接已复制到剪贴板'); }
+      try { await navigator.clipboard.writeText(result); showToast('success', '图片缓存链接已复制'); }
       catch { showToast('error', '复制失败'); }
     }
   };
@@ -527,15 +562,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     try {
       const base64 = await blobToBase64(file);
       const base64Url = `data:${file.type};base64,${base64}`;
-      // 先用 base64 预览和检测尺寸
       if (aspectRatio === 'auto') {
         const dims = await getImageDimensions(base64Url);
         if (dims) { setAspectRatio(getClosestAspectRatio(dims.width, dims.height)); showToast('success', '已自动选择比例'); }
       }
-      // 上传到 OSS，使用 URL 替代 base64
-      const ossId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const ossUrl = await saveImageToOSS(base64Url, activeMenuItem, ossId);
-      setImageUrls([ossUrl]);
+      // 存入缓存，使用 cache key
+      const cacheKey = await cacheImage(base64Url);
+      setImageUrls([cacheKey]);
       if (aspectRatio !== 'auto') showToast('success', '参考图片已添加');
     } catch (error) {
       showToast('error', `上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -568,9 +601,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   setSliderPosition(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)));
                 }}
               >
-                <img src={imageUrls[0]} alt="Reference" className="absolute inset-0 w-full h-full object-contain" referrerPolicy="no-referrer" />
+                <img src={displayRefImage || ''} alt="Reference" className="absolute inset-0 w-full h-full object-contain" referrerPolicy="no-referrer" />
                 <div className="absolute inset-0 w-full h-full overflow-hidden" style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}>
-                  <img src={result} alt="Generated Result" className="absolute inset-0 w-full h-full object-contain" referrerPolicy="no-referrer" />
+                  <img src={displayResult || ''} alt="Generated Result" className="absolute inset-0 w-full h-full object-contain" referrerPolicy="no-referrer" />
                 </div>
                 <div className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-10 shadow-lg" style={{ left: `${sliderPosition}%` }}>
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center">
@@ -584,7 +617,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           ) : result ? (
             <div className="mb-6 relative">
               <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-white/[0.04]">
-                <img src={result} alt="Generated Result" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                <img src={displayResult || ''} alt="Generated Result" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                 {activeMenuItem === 'panorama' && (
                   <button
                     onClick={() => { setPanoramaImageUrl(result); setShowPanoramaViewer(true); }}
@@ -604,7 +637,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                 {isUploading ? (
                   <><RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" /><p className="text-slate-500 text-sm">上传中...</p></>
                 ) : (
-                  <><img src={imageUrls[0]} alt="参考图" className="w-full h-full object-contain" onClick={handleUpload} />
+                  <><img src={displayRefImage || ''} alt="参考图" className="w-full h-full object-contain" onClick={handleUpload} />
                     <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/80 rounded-lg transition-colors backdrop-blur-sm"><X className="w-4 h-4 text-white" /></button></>
                 )}
               </div>
@@ -683,12 +716,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   <motion.div key={record.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}
                     className="history-card rounded-xl overflow-hidden bg-surface-2 relative group cursor-pointer shrink-0 border border-white/[0.04]"
                     style={{ width: thumbnailSize, height: thumbnailSize }} onClick={() => handleItemClick(record)}>
-                    <img
-                      src={isOSSUrl(record.imageUrl) ? getOSSThumbnailUrl(record.imageUrl, thumbnailSize * 2) : record.imageUrl}
+                    <HistoryThumbnail
+                      cacheKey={record.imageUrl}
                       alt={record.prompt}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      referrerPolicy="no-referrer"
-                      loading="lazy"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
@@ -720,25 +751,23 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
         {showPanoramaViewer && panoramaImageUrl && (
           <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center"><RefreshCw className="w-8 h-8 animate-spin text-white" /></div>}>
-            <PanoramaViewer imageUrl={panoramaImageUrl} isOpen={showPanoramaViewer} onClose={() => setShowPanoramaViewer(false)} />
+            <CachedPanoramaViewer cacheKey={panoramaImageUrl} isOpen={showPanoramaViewer} onClose={() => setShowPanoramaViewer(false)} />
           </Suspense>
         )}
 
         {editingImageIndex !== null && imageUrls[editingImageIndex] && (
           <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center"><RefreshCw className="w-8 h-8 animate-spin text-white" /></div>}>
-            <ImageEditor
-              imageUrl={imageUrls[editingImageIndex]}
+            <CachedImageEditor
+              cacheKey={imageUrls[editingImageIndex]}
               onSave={async (editedImage) => {
                 try {
-                  // 编辑后图片是 base64，上传到 OSS
-                  const ossId = `edit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                  const ossUrl = await saveImageToOSS(editedImage, activeMenuItem, ossId);
-                  setImageUrls(prev => { const newImages = [...prev]; newImages[editingImageIndex!] = ossUrl; return newImages; });
+                  const cacheKey = await cacheImage(editedImage);
+                  setImageUrls(prev => { const newImages = [...prev]; newImages[editingImageIndex!] = cacheKey; return newImages; });
                   setEditingImageIndex(null);
                   showToast('success', '图片编辑已保存');
-                } catch (err) {
+                } catch {
                   setEditingImageIndex(null);
-                  showToast('error', '编辑图片上传失败');
+                  showToast('error', '编辑图片保存失败');
                 }
               }}
               onCancel={() => setEditingImageIndex(null)}
