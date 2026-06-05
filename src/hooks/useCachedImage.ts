@@ -13,16 +13,18 @@ export function useCachedImageUrl(cacheKey: string | null | undefined): string |
     if (!isCacheKey(cacheKey)) { setUrl(cacheKey); return; }
 
     let revoked = false;
+    let currentBlobUrl: string | undefined;
     getCachedImage(cacheKey).then(blobUrl => {
       if (revoked) {
         if (blobUrl) URL.revokeObjectURL(blobUrl);
         return;
       }
+      currentBlobUrl = blobUrl ?? undefined;
       setUrl(blobUrl);
     });
     return () => {
       revoked = true;
-      if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+      if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
     };
   }, [cacheKey]);
 
@@ -37,18 +39,25 @@ export function useCachedImageUrls(cacheKeys: (string | null | undefined)[]): (s
 
   useEffect(() => {
     let cancelled = false;
+    const activeBlobUrls: string[] = [];
     const resolve = async () => {
       const resolved: (string | null)[] = [];
       for (const key of cacheKeys) {
         if (!key) { resolved.push(null); continue; }
         if (!isCacheKey(key)) { resolved.push(key); continue; }
         const blobUrl = await getCachedImage(key);
+        if (blobUrl) activeBlobUrls.push(blobUrl);
         resolved.push(blobUrl);
       }
       if (!cancelled) setUrls(resolved);
     };
     resolve();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      for (const blobUrl of activeBlobUrls) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
   }, [JSON.stringify(cacheKeys)]);
 
   return urls;
