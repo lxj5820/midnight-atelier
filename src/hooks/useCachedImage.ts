@@ -39,22 +39,29 @@ export function useCachedImageUrls(cacheKeys: (string | null | undefined)[]): (s
 
   useEffect(() => {
     let cancelled = false;
-    const activeBlobUrls: string[] = [];
+    const resolvedUrls: string[] = [];
     const resolve = async () => {
       const resolved: (string | null)[] = [];
       for (const key of cacheKeys) {
         if (!key) { resolved.push(null); continue; }
         if (!isCacheKey(key)) { resolved.push(key); continue; }
         const blobUrl = await getCachedImage(key);
-        if (blobUrl) activeBlobUrls.push(blobUrl);
-        resolved.push(blobUrl);
+        if (blobUrl) resolved.push(blobUrl);
+        else resolved.push(null);
       }
-      if (!cancelled) setUrls(resolved);
+      if (!cancelled) {
+        setUrls(resolved);
+        resolvedUrls.push(...resolved.filter((url): url is string => url != null));
+      } else {
+        for (const url of resolved) {
+          if (url) URL.revokeObjectURL(url);
+        }
+      }
     };
     resolve();
     return () => {
       cancelled = true;
-      for (const blobUrl of activeBlobUrls) {
+      for (const blobUrl of resolvedUrls) {
         URL.revokeObjectURL(blobUrl);
       }
     };
