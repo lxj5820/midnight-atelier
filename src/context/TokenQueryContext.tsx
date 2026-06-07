@@ -8,6 +8,8 @@ interface TokenState {
   loading: boolean;
   error: string | null;
   refresh: () => void;
+  // 标记数据已过期（生成完成后调用），会延迟自动刷新一次
+  markStale: () => void;
   usedPercent: number;
   formatQuota: typeof formatQuota;
   formatExpiresAt: typeof formatExpiresAt;
@@ -65,12 +67,19 @@ export function TokenQueryProvider({ children }: { children: React.ReactNode }) 
     }
   }, [hasApiKey, apiKey, loadTokenData]);
 
+  // 标记数据已过期：生成完成后立即刷新一次
+  const markStale = useCallback(() => {
+    if (!hasApiKey) return;
+    refreshingRef.current = false;
+    loadTokenData(apiKey);
+  }, [hasApiKey, apiKey, loadTokenData]);
+
   const usedPercent = tokenInfo && !tokenInfo.unlimited_quota && tokenInfo.total_granted > 0
     ? Math.min((tokenInfo.total_used / tokenInfo.total_granted) * 100, 100)
     : 0;
 
   return (
-    <TokenQueryContext.Provider value={{ tokenInfo, logStats, loading, error, refresh, usedPercent, formatQuota, formatExpiresAt }}>
+    <TokenQueryContext.Provider value={{ tokenInfo, logStats, loading, error, refresh, markStale, usedPercent, formatQuota, formatExpiresAt }}>
       {children}
     </TokenQueryContext.Provider>
   );

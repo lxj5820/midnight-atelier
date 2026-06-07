@@ -3,6 +3,7 @@ import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, RefreshCw, Maxim
 import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
+import { useTokenQuery } from '../context/TokenQueryContext';
 import { downloadImage } from '../utils/download';
 import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getSizeFromRefImage, getClosestAspectRatio } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
@@ -48,6 +49,7 @@ interface EditWorkspaceProps {
 const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPreviewImage, onNavigateSettings }) => {
   const { hasApiKey } = useApiKey();
   const { startGenerating, stopGenerating } = useGeneration();
+  const { markStale } = useTokenQuery();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const isGeneratingRef = useRef(false); // 防抖保护 ref
@@ -270,6 +272,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           setPendingResult(resultCacheKey);
           setHistoryRefreshKey(k => k + 1);
           showToast('success', '生成成功！');
+          markStale();
         } else {
         const modelMap: Record<string, string> = { '🍌全能图片V2': 'gemini-3.1-flash-image-preview', '🍌全能图片PRO': 'gemini-3-pro-image-preview' };
         const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
@@ -327,6 +330,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         setPendingResult(resultCacheKey);
         setHistoryRefreshKey(k => k + 1);
         showToast('success', '生成成功！');
+        markStale();
         }
       } catch (error) {
         console.error('Generation error:', error);

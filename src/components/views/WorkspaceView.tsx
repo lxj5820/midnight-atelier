@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useGeneration } from '../../GenerationContext';
 import { useApiKey } from '../../ApiKeyContext';
+import { useTokenQuery } from '../../context/TokenQueryContext';
 import {
   blobToBase64, getImageDimensions, getClosestAspectRatio,
   getComputePointsCost, getResolution, getSizeFromRefImage,
@@ -86,6 +87,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 }) => {
   const { apiKey, hasApiKey } = useApiKey();
   const { startGenerating, stopGenerating } = useGeneration();
+  const { markStale } = useTokenQuery();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const isGeneratingRef = useRef(false);
@@ -292,6 +294,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           await dbOperations.save(record);
           setHistoryRefreshKey(k => k + 1);
           showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+          markStale();
         } else {
           gptApiUrl = 'https://newapi.asia/v1/images/generations';
           gptRequestBody = {
@@ -355,6 +358,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           await dbOperations.save(record);
           setHistoryRefreshKey(k => k + 1);
           showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+          markStale();
         }
       } else {
       const modelMap: Record<string, string> = {
@@ -453,6 +457,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       await dbOperations.save(record);
       setHistoryRefreshKey(k => k + 1);
       showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+      markStale();
       }
     } catch (error) {
       console.error('Generation error:', error);
