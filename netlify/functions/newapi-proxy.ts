@@ -11,16 +11,16 @@ const ALLOWED_PATHS = new Set([
 function isPathSafe(path: string): boolean {
   // 1. 必须以 /api/ 开头
   if (!path.startsWith('/api/')) return false;
-  // 2. URL 解析后 pathname 不能包含 .. 段（规范化后）
+  // 2. 规范化路径后仍需以 /api/ 开头（拦截 /api/../xxx 这类越界到 /api/ 之外的输入）
+  let normalized: string;
   try {
-    const normalized = new URL(path, 'http://placeholder').pathname;
-    if (normalized !== path) return false; // 含 .. 或空段
-    if (normalized.includes('..')) return false;
+    normalized = new URL(path, 'http://placeholder').pathname;
   } catch {
     return false;
   }
+  if (!normalized.startsWith('/api/')) return false;
   // 3. 白名单校验
-  return ALLOWED_PATHS.has(path);
+  return ALLOWED_PATHS.has(normalized);
 }
 
 export const handler: Handler = async (event) => {
@@ -64,7 +64,7 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  const targetUrl = `${NEWAPI_BASE}${path}`;
+  const targetUrl = `${NEWAPI_BASE}${normalized}`;
 
   try {
     const headers: Record<string, string> = {
