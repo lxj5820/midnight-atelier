@@ -8,19 +8,20 @@ const ALLOWED_PATHS = new Set([
   '/api/log/self/stat',
 ]);
 
-function isPathSafe(path: string): boolean {
+function isPathSafe(path: string): { safe: boolean; normalized?: string } {
   // 1. 必须以 /api/ 开头
-  if (!path.startsWith('/api/')) return false;
+  if (!path.startsWith('/api/')) return { safe: false };
   // 2. 规范化路径后仍需以 /api/ 开头（拦截 /api/../xxx 这类越界到 /api/ 之外的输入）
   let normalized: string;
   try {
     normalized = new URL(path, 'http://placeholder').pathname;
   } catch {
-    return false;
+    return { safe: false };
   }
-  if (!normalized.startsWith('/api/')) return false;
+  if (!normalized.startsWith('/api/')) return { safe: false };
   // 3. 白名单校验
-  return ALLOWED_PATHS.has(normalized);
+  if (!ALLOWED_PATHS.has(normalized)) return { safe: false };
+  return { safe: true, normalized };
 }
 
 export const handler: Handler = async (event) => {
@@ -56,7 +57,8 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  if (!isPathSafe(path)) {
+  const result = isPathSafe(path);
+  if (!result.safe) {
     return {
       statusCode: 400,
       headers: { 'Access-Control-Allow-Origin': '*' },
@@ -64,7 +66,7 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  const targetUrl = `${NEWAPI_BASE}${normalized}`;
+  const targetUrl = `${NEWAPI_BASE}${result.normalized}`;
 
   try {
     const headers: Record<string, string> = {
