@@ -223,7 +223,6 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
 
     let isMounted = true;
     let disposePromise: Promise<void> | null = null;
-    let blobUrlToRevoke: string | null = null;
 
     // 解析 imageUrl：如果是 cache key，从 IndexedDB 读取并转为 data URL
     const resolveImageUrl = async (): Promise<string | null> => {
@@ -305,8 +304,8 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
           const bgImg = new fabric.Image(fabricImageEl);
 
           // 获取图片原始尺寸
-          const imgWidth = img.naturalWidth || img.width || bgImg.width || 1;
-          const imgHeight = img.naturalHeight || img.height || bgImg.height || 1;
+          const imgWidth = fabricImageEl.naturalWidth || fabricImageEl.width || bgImg.width || 1;
+          const imgHeight = fabricImageEl.naturalHeight || fabricImageEl.height || bgImg.height || 1;
 
           // 验证尺寸有效性
           if (imgWidth < 1 || imgHeight < 1) {
