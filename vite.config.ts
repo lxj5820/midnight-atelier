@@ -54,6 +54,52 @@ function imageProxyPlugin(): Plugin {
   };
 }
 
+function newApiProxyPlugin(): Plugin {
+  return {
+    name: 'newapi-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/newapi', async (req, res) => {
+        if (req.method === 'OPTIONS') {
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+          res.statusCode = 204;
+          res.end();
+          return;
+        }
+
+        try {
+          // req.url 在 Connect 中间件中是去掉挂载前缀后的路径，如 /api/usage/token
+          const targetPath = req.url || '/';
+          const targetUrl = `https://newapi.asia${targetPath}`;
+
+          const headers: Record<string, string> = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+          };
+          if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization as string;
+          }
+
+          const response = await fetch(targetUrl, { headers });
+
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json');
+          res.statusCode = response.status;
+          const body = await response.text();
+          res.end(body);
+        } catch (err: any) {
+          console.error('[newapi-proxy] Error:', err.message);
+          res.statusCode = 502;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.end(JSON.stringify({ success: false, message: `Proxy error: ${err.message}` }));
+        }
+      });
+    },
+  };
+}
+
 function ossUploadPlugin(env: Record<string, string>): Plugin {
   return {
     name: 'oss-upload',
@@ -140,7 +186,7 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
-    plugins: [react(), tailwindcss(), imageProxyPlugin(), ossUploadPlugin(env)],
+    plugins: [react(), tailwindcss(), imageProxyPlugin(), newApiProxyPlugin(), ossUploadPlugin(env)],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'http://localhost:3001/api'),

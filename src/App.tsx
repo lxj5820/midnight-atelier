@@ -16,9 +16,15 @@ import {
   EyeOff,
   RefreshCw,
   Info,
-  MessageCircle
+  MessageCircle,
+  Wallet,
+  BarChart3,
+  Clock,
+  Shield,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApiKey } from './ApiKeyContext';
+import { TokenQueryProvider, useTokenQuery } from './context/TokenQueryContext';
 import type { MenuItemId } from './menuConfig';
 import { getPresetsForMenu } from './visualPresetConfig';
 import { useGeneration } from './GenerationContext';
@@ -166,6 +172,7 @@ const TopBar = ({
   activeTasks?: Array<{ id: string; menuName: string; startedAt: number }>,
 }) => {
   const { hasApiKey } = useApiKey();
+  const { tokenInfo, loading, usedPercent, formatQuota } = useTokenQuery();
   const isGenerating = activeTasks && activeTasks.length > 0;
 
   return (
@@ -209,6 +216,34 @@ const TopBar = ({
           >
             <Key className="w-4 h-4 text-amber-400" />
             <span className="text-xs font-bold text-amber-400">请先配置 API Key</span>
+          </div>
+        )}
+
+        {hasApiKey && tokenInfo && (
+          <div
+            onClick={() => setView('settings')}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer hover:bg-white/[0.04] transition-colors bg-white/[0.02] border-white/[0.06]"
+          >
+            <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-xs font-bold tabular-nums text-emerald-400">
+              {tokenInfo.unlimited_quota ? '∞' : formatQuota(tokenInfo.total_available)}
+            </span>
+            {!tokenInfo.unlimited_quota && (
+              <div className="w-12 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    usedPercent > 90 ? 'bg-rose-500' : usedPercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${usedPercent}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {hasApiKey && loading && !tokenInfo && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.02] border border-white/[0.06]">
+            <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin" />
           </div>
         )}
 
@@ -263,6 +298,7 @@ const SettingsView = ({
   const { apiKey, setApiKey, clearApiKey, hasApiKey } = useApiKey();
   const [tempApiKey, setTempApiKey] = useState(apiKey);
   const [showKey, setShowKey] = useState(false);
+  const { tokenInfo, logStats, loading: tokenLoading, error: tokenError, refresh: refreshToken, usedPercent, formatQuota, formatExpiresAt } = useTokenQuery();
 
   useEffect(() => {
     setTempApiKey(apiKey);
@@ -332,14 +368,14 @@ const SettingsView = ({
               </div>
             </div>
             <div className="flex gap-3">
-              <a
-                href="https://chaxun.wlai.vip/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-primary flex-1 text-white py-2.5 rounded-xl font-bold text-center"
+              <button
+                onClick={refreshToken}
+                disabled={!hasApiKey || tokenLoading}
+                className="btn-primary flex-1 text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                用量查询
-              </a>
+                <RefreshCw className={`w-4 h-4 ${tokenLoading ? 'animate-spin' : ''}`} />
+                {tokenLoading ? '查询中...' : '刷新用量'}
+              </button>
               <button
                 onClick={handleSaveApiKey}
                 className="btn-primary flex-1 text-white py-2.5 rounded-xl font-bold"
@@ -356,6 +392,136 @@ const SettingsView = ({
               )}
             </div>
           </div>
+
+          {/* 令牌信息 */}
+          {hasApiKey && (
+            <div className="glass-card rounded-2xl p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-sm font-bold text-white">令牌信息</h3>
+                </div>
+                {tokenInfo && (
+                  <span className="text-xs text-slate-500">
+                    {tokenInfo.name}
+                  </span>
+                )}
+              </div>
+
+              {tokenLoading && (
+                <div className="flex items-center justify-center py-6">
+                  <RefreshCw className="w-5 h-5 text-indigo-400 animate-spin" />
+                  <span className="ml-2 text-sm text-slate-400">加载中...</span>
+                </div>
+              )}
+
+              {tokenError && (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span className="text-sm text-rose-400">{tokenError}</span>
+                </div>
+              )}
+
+              {tokenInfo && !tokenLoading && (
+                <>
+                  {/* 额度概览 */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.04]">
+                      <p className="text-[10px] text-slate-500 mb-1">总额度</p>
+                      <p className="text-sm font-bold text-white tabular-nums">
+                        {tokenInfo.unlimited_quota ? '∞' : formatQuota(tokenInfo.total_granted)}
+                      </p>
+                    </div>
+                    <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.04]">
+                      <p className="text-[10px] text-slate-500 mb-1">已使用</p>
+                      <p className="text-sm font-bold text-amber-400 tabular-nums">
+                        {formatQuota(tokenInfo.total_used)}
+                      </p>
+                    </div>
+                    <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.04]">
+                      <p className="text-[10px] text-slate-500 mb-1">剩余额度</p>
+                      <p className="text-sm font-bold text-emerald-400 tabular-nums">
+                        {tokenInfo.unlimited_quota ? '∞' : formatQuota(tokenInfo.total_available)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 用量进度条 */}
+                  {!tokenInfo.unlimited_quota && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500">用量</span>
+                        <span className="text-slate-400 tabular-nums">{usedPercent.toFixed(1)}%</span>
+                      </div>
+                      <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            usedPercent > 90 ? 'bg-rose-500' : usedPercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${usedPercent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 详细信息 */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="text-slate-500">到期时间</span>
+                      <span className="text-white/80 ml-auto tabular-nums">
+                        {formatExpiresAt(tokenInfo.expires_at)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <Shield className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="text-slate-500">无限额度</span>
+                      <span className={`ml-auto ${tokenInfo.unlimited_quota ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {tokenInfo.unlimited_quota ? '是' : '否'}
+                      </span>
+                    </div>
+                    {tokenInfo.model_limits_enabled && tokenInfo.model_limits && (
+                      <div className="col-span-2 flex items-center gap-2 text-xs">
+                        <BarChart3 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span className="text-slate-500 shrink-0">模型限制</span>
+                        <span className="text-white/80 truncate">{tokenInfo.model_limits}</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 调用详情 */}
+          {hasApiKey && logStats.length > 0 && (
+            <div className="glass-card rounded-2xl p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-sm font-bold text-white">调用详情</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/[0.06]">
+                      <th className="text-left py-2 text-xs font-bold text-slate-500">模型</th>
+                      <th className="text-right py-2 text-xs font-bold text-slate-500">调用次数</th>
+                      <th className="text-right py-2 text-xs font-bold text-slate-500">消耗额度</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logStats.map((stat, idx) => (
+                      <tr key={idx} className="border-b border-white/[0.03] last:border-0">
+                        <td className="py-2 text-xs font-medium text-white/80 truncate max-w-[200px]">{stat.model}</td>
+                        <td className="py-2 text-xs text-slate-400 text-right tabular-nums">{stat.count}</td>
+                        <td className="py-2 text-xs text-amber-400 text-right tabular-nums font-medium">{formatQuota(stat.quota)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="space-y-4">
