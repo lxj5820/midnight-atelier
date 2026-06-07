@@ -67,12 +67,8 @@ export function TokenQueryProvider({ children }: { children: React.ReactNode }) 
     }
   }, [hasApiKey, apiKey, loadTokenData]);
 
-  // 标记数据已过期：生成完成后立即刷新一次
-  const markStale = useCallback(() => {
-    if (!hasApiKey) return;
-    refreshingRef.current = false;
-    loadTokenData(apiKey);
-  }, [hasApiKey, apiKey, loadTokenData]);
+  // 标记数据已过期：生成完成后立即刷新一次（复用 refresh，受 refreshingRef 防抖保护）
+  const markStale = refresh;
 
   const usedPercent = tokenInfo && !tokenInfo.unlimited_quota && tokenInfo.total_granted > 0
     ? Math.min((tokenInfo.total_used / tokenInfo.total_granted) * 100, 100)
