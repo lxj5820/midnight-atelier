@@ -1,8 +1,11 @@
 const NEWAPI_BASE = 'https://newapi.asia';
 const QUOTA_PER_DOLLAR = 500000;
 
-function getApiBase(): string {
-  return window.location.hostname === 'localhost' ? '' : NEWAPI_BASE;
+function buildUrl(apiPath: string): string {
+  if (window.location.hostname === 'localhost') {
+    return `/api/newapi${apiPath}`;
+  }
+  return `/.netlify/functions/newapi-proxy?path=${encodeURIComponent(apiPath)}`;
 }
 
 export interface TokenInfo {
@@ -53,9 +56,7 @@ export function formatExpiresAt(timestamp: number | null): string {
 }
 
 export async function fetchTokenInfo(apiKey: string): Promise<TokenInfo> {
-  const base = getApiBase();
-  const path = base ? '/api/usage/token' : '/api/newapi/api/usage/token';
-  const res = await fetch(`${base}${path}`, {
+  const res = await fetch(buildUrl('/api/usage/token'), {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
   const text = await res.text();
@@ -72,9 +73,7 @@ export async function fetchTokenInfo(apiKey: string): Promise<TokenInfo> {
 }
 
 export async function fetchLogStats(apiKey: string): Promise<LogStatItem[]> {
-  const base = getApiBase();
-  const path = base ? '/api/log/self/stat' : '/api/newapi/api/log/self/stat';
-  const res = await fetch(`${base}${path}`, {
+  const res = await fetch(buildUrl('/api/log/self/stat'), {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
   const text = await res.text();
