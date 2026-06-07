@@ -2,6 +2,27 @@ import type { Handler } from '@netlify/functions';
 
 const NEWAPI_BASE = 'https://newapi.asia';
 
+// 只允许 New API 的查询接口（防止 SSRF / 路径遍历）
+const ALLOWED_PATHS = new Set([
+  '/api/usage/token',
+  '/api/log/self/stat',
+]);
+
+function isPathSafe(path: string): boolean {
+  // 1. 必须以 /api/ 开头
+  if (!path.startsWith('/api/')) return false;
+  // 2. URL 解析后 pathname 不能包含 .. 段（规范化后）
+  try {
+    const normalized = new URL(path, 'http://placeholder').pathname;
+    if (normalized !== path) return false; // 含 .. 或空段
+    if (normalized.includes('..')) return false;
+  } catch {
+    return false;
+  }
+  // 3. 白名单校验
+  return ALLOWED_PATHS.has(path);
+}
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -35,7 +56,7 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  if (!path.startsWith('/api/')) {
+  if (!isPathSafe(path)) {
     return {
       statusCode: 400,
       headers: { 'Access-Control-Allow-Origin': '*' },
