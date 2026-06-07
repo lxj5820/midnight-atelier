@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { getCachedImage, isCacheKey } from '../utils/imageCache';
 
 export type CachedImageState = 'loading' | 'loaded' | 'missing';
@@ -44,39 +44,57 @@ export function useCachedImageUrl(cacheKey: string | null | undefined): [string 
 
 /**
  * Hook: 批量解析 cache keys 为 blob URLs
+ * 内部缓存 cacheKeys 的字符串表示，避免每次渲染产生新引用导致 effect 重复执行
  */
 export function useCachedImageUrls(cacheKeys: (string | null | undefined)[]): (string | null)[] {
   const [urls, setUrls] = useState<(string | null)[]>(cacheKeys.map(() => null));
 
+  // 缓存字符串形式的 key 列表，用于做引用稳定的依赖
+  const cacheKeysKey = useMemo(() => cacheKeys.map(k => k ?? '').join('|'), [cacheKeys]);
+  // 缓存实际数组（按字符串拆分还原），让 effect 内部访问的是稳定引用
+  const stableKeys = useMemo(() => cacheKeysKey.split('|'), [cacheKeysKey]);
+
+  // 用 ref 跟踪当前已 resolve 的 blob URL，确保 cleanup 能正确 revoke
+  const resolvedUrlsRef = useRef<string[]>([]);
+
   useEffect(() => {
     let cancelled = false;
-    const resolvedUrls: string[] = [];
+    const currentBatch: string[] = [];
+    resolvedUrlsRef.current = [];
     const resolve = async () => {
       const resolved: (string | null)[] = [];
-      for (const key of cacheKeys) {
+      for (const key of stableKeys) {
         if (!key) { resolved.push(null); continue; }
         if (!isCacheKey(key)) { resolved.push(key); continue; }
         const blobUrl = await getCachedImage(key);
-        if (blobUrl) resolved.push(blobUrl);
-        else resolved.push(null);
+        if (cancelled) {
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          continue;
+        }
+        if (blobUrl) {
+          currentBatch.push(blobUrl);
+          resolved.push(blobUrl);
+        } else {
+          resolved.push(null);
+        }
       }
       if (!cancelled) {
         setUrls(resolved);
-        resolvedUrls.push(...resolved.filter((url): url is string => url != null));
+        resolvedUrlsRef.current = currentBatch;
       } else {
-        for (const url of resolved) {
-          if (url) URL.revokeObjectURL(url);
-        }
+        // 已取消，把当前批次所有 blob URL revoke
+        for (const url of currentBatch) URL.revokeObjectURL(url);
       }
     };
     resolve();
     return () => {
       cancelled = true;
-      for (const blobUrl of resolvedUrls) {
+      for (const blobUrl of resolvedUrlsRef.current) {
         URL.revokeObjectURL(blobUrl);
       }
+      resolvedUrlsRef.current = [];
     };
-  }, [JSON.stringify(cacheKeys)]);
+  }, [cacheKeysKey]);
 
   return urls;
 }
