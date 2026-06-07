@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { downloadImage } from '../utils/download';
-import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage } from '../utils';
+import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getSizeFromRefImage } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
@@ -198,11 +198,24 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       try {
         if (model === 'GPT Image 2') {
           const gptImage2SizeMap: Record<string, Record<string, string>> = {
-            '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720', 'auto': 'auto' },
-            '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152', 'auto': 'auto' },
-            '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160', 'auto': 'auto' }
+            '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720' },
+            '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152' },
+            '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160' }
           };
-          const imageSize = gptImage2SizeMap[currentQuality]?.[currentAspectRatio] || 'auto';
+
+          // 当 auto 比例且有参考图时，根据参考图实际比例计算尺寸
+          let imageSize: string;
+          if (currentAspectRatio === 'auto' && currentRefImages.length > 0) {
+            const refBlob = await getCachedImageBlob(currentRefImages[0]);
+            if (refBlob) {
+              const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
+              imageSize = refDims ? getSizeFromRefImage(refDims.width, refDims.height, currentQuality) : 'auto';
+            } else {
+              imageSize = 'auto';
+            }
+          } else {
+            imageSize = gptImage2SizeMap[currentQuality]?.[currentAspectRatio] || 'auto';
+          }
           const gptApiUrl = 'https://newapi.asia/v1/images/edits';
           const formData = new FormData();
           formData.append('model', 'gpt-image-2');

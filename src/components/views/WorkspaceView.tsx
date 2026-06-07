@@ -9,7 +9,7 @@ import { useGeneration } from '../../GenerationContext';
 import { useApiKey } from '../../ApiKeyContext';
 import {
   blobToBase64, getImageDimensions, getClosestAspectRatio,
-  getComputePointsCost, getResolution,
+  getComputePointsCost, getResolution, getSizeFromRefImage,
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
   cacheImage, getCachedImage, getCachedImageBlob, isCacheKey, deleteCachedImage,
@@ -155,18 +155,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             try {
               const base64 = await blobToBase64(file);
               const base64Url = `data:${file.type};base64,${base64}`;
-              if (aspectRatio === 'auto') {
-                const dims = await getImageDimensions(base64Url);
-                if (dims) {
-                  const closest = getClosestAspectRatio(dims.width, dims.height);
-                  setAspectRatio(closest);
-                  showToast('success', `已自动选择比例 ${closest}`);
-                }
-              }
               // 存入缓存，使用 cache key
               const cacheKey = await cacheImage(base64Url);
               setImageUrls([cacheKey]);
-              if (aspectRatio !== 'auto') showToast('success', '图片已粘贴');
+              showToast('success', '图片已粘贴');
             } catch (error) {
               showToast('error', `粘贴失败: ${error instanceof Error ? error.message : '未知错误'}`);
             } finally {
@@ -209,11 +201,24 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     try {
       if (model === 'GPT Image 2') {
         const gptImage2SizeMap: Record<string, Record<string, string>> = {
-          '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720', 'auto': 'auto' },
-          '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152', 'auto': 'auto' },
-          '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160', 'auto': 'auto' }
+          '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720' },
+          '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152' },
+          '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160' }
         };
-        const imageSize = gptImage2SizeMap[quality]?.[aspectRatio] || 'auto';
+
+        // 当 auto 比例且有参考图时，根据参考图实际比例计算尺寸
+        let imageSize: string;
+        if (aspectRatio === 'auto' && imageUrls.length > 0) {
+          const refBlob = await getCachedImageBlob(imageUrls[0]);
+          if (refBlob) {
+            const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
+            imageSize = refDims ? getSizeFromRefImage(refDims.width, refDims.height, quality) : 'auto';
+          } else {
+            imageSize = 'auto';
+          }
+        } else {
+          imageSize = gptImage2SizeMap[quality]?.[aspectRatio] || 'auto';
+        }
 
         let gptApiUrl: string;
         let gptRequestBody: any;
@@ -560,14 +565,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     try {
       const base64 = await blobToBase64(file);
       const base64Url = `data:${file.type};base64,${base64}`;
-      if (aspectRatio === 'auto') {
-        const dims = await getImageDimensions(base64Url);
-        if (dims) { setAspectRatio(getClosestAspectRatio(dims.width, dims.height)); showToast('success', '已自动选择比例'); }
-      }
       // 存入缓存，使用 cache key
       const cacheKey = await cacheImage(base64Url);
       setImageUrls([cacheKey]);
-      if (aspectRatio !== 'auto') showToast('success', '参考图片已添加');
+      showToast('success', '参考图片已添加');
     } catch (error) {
       showToast('error', `上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally { setIsUploading(false); }

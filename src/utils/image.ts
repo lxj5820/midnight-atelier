@@ -57,6 +57,24 @@ export function getClosestAspectRatio(width: number, height: number): string {
 }
 
 /**
+ * 根据参考图片的实际比例和画质，计算最接近的 GPT Image 2 尺寸
+ * 当 aspectRatio 为 auto 时使用，使生成图片与参考图比例一致
+ */
+export function getSizeFromRefImage(
+  refWidth: number,
+  refHeight: number,
+  quality: string
+): string {
+  const gptImage2SizeMap: Record<string, Record<string, string>> = {
+    '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720' },
+    '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152' },
+    '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160' }
+  };
+  const closestRatio = getClosestAspectRatio(refWidth, refHeight);
+  return gptImage2SizeMap[quality]?.[closestRatio] || 'auto';
+}
+
+/**
  * 获取分辨率配置
  */
 export function getResolution(aspectRatio: string, quality: string): { width: number; height: number; tokens: number } {
