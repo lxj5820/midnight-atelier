@@ -364,6 +364,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
       const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
 
+      // 当 auto 比例且有参考图时，根据参考图实际比例计算
+      let effectiveAspectRatio = aspectRatio;
+      if (aspectRatio === 'auto' && imageUrls.length > 0) {
+        const refBlob = await getCachedImageBlob(imageUrls[0]);
+        if (refBlob) {
+          const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
+          if (refDims) effectiveAspectRatio = getClosestAspectRatio(refDims.width, refDims.height);
+        }
+      }
+
       let requestBody: any;
       let hasValidImages = false;
 
@@ -382,7 +392,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           parts.push({ text: finalPrompt });
           requestBody = {
             contents: [{ role: "user", parts }],
-            generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(aspectRatio !== 'auto' && { aspectRatio }), imageSize: quality } }
+            generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: quality } }
           };
         }
       }
@@ -390,7 +400,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       if (!requestBody) {
         requestBody = {
           contents: [{ role: "user", parts: [{ text: finalPrompt }] }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(aspectRatio !== 'auto' && { aspectRatio }), imageSize: quality } }
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: quality } }
         };
       }
 

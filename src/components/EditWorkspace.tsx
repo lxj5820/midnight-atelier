@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { downloadImage } from '../utils/download';
-import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getSizeFromRefImage } from '../utils';
+import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getSizeFromRefImage, getClosestAspectRatio } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
@@ -275,6 +275,16 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
         const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
 
+        // 当 auto 比例且有参考图时，根据参考图实际比例计算
+        let effectiveAspectRatio = currentAspectRatio;
+        if (currentAspectRatio === 'auto' && currentRefImages.length > 0) {
+          const refBlob = await getCachedImageBlob(currentRefImages[0]);
+          if (refBlob) {
+            const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
+            if (refDims) effectiveAspectRatio = getClosestAspectRatio(refDims.width, refDims.height);
+          }
+        }
+
         const parts: any[] = [];
         for (const imgUrl of currentRefImages) {
           const blob = await getCachedImageBlob(imgUrl);
@@ -284,7 +294,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         }
         parts.push({ text: currentPrompt });
 
-        const requestBody = { contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(currentAspectRatio !== 'auto' && { aspectRatio: currentAspectRatio }), imageSize: currentQuality } } };
+        const requestBody = { contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: currentQuality } } };
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
