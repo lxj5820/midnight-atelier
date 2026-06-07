@@ -24,7 +24,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useApiKey } from './ApiKeyContext';
-import { TokenQueryProvider, useTokenQuery } from './context/TokenQueryContext';
+import { useTokenQuery } from './context/TokenQueryContext';
 import type { MenuItemId } from './menuConfig';
 import { getPresetsForMenu } from './visualPresetConfig';
 import { useGeneration } from './GenerationContext';
@@ -484,7 +484,13 @@ const SettingsView = ({
                       <div className="col-span-2 flex items-center gap-2 text-xs">
                         <BarChart3 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                         <span className="text-slate-500 shrink-0">模型限制</span>
-                        <span className="text-white/80 truncate">{tokenInfo.model_limits}</span>
+                        <span className="text-white/80 truncate">
+                          {typeof tokenInfo.model_limits === 'string'
+                            ? tokenInfo.model_limits
+                            : tokenInfo.model_limits
+                            ? Object.keys(tokenInfo.model_limits).join(', ')
+                            : ''}
+                        </span>
                       </div>
                     )}
                   </div>
