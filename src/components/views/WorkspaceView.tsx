@@ -42,9 +42,7 @@ const CachedImageEditor: React.FC<{
   onCancel: () => void;
   onError: (message: string) => void;
 }> = ({ cacheKey, onSave, onCancel, onError }) => {
-  const displayUrl = useCachedImageUrl(cacheKey);
-  if (!displayUrl) return null;
-  return <ImageEditor imageUrl={displayUrl} onSave={onSave} onCancel={onCancel} onError={onError} />;
+  return <ImageEditor imageUrl={cacheKey} onSave={onSave} onCancel={onCancel} onError={onError} />;
 };
 
 // 缓存全景查看器包装 - 解析缓存 key 后传给 PanoramaViewer

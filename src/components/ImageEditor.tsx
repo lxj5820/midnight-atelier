@@ -1,5 +1,6 @@
 import { fabric } from 'fabric';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { getCachedImage, isCacheKey } from '../utils/imageCache';
 import {
   Brush, Eraser, Type,
   Undo2, Redo2, Save, X, Move, Trash2,
@@ -222,155 +223,181 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
 
     let isMounted = true;
     let disposePromise: Promise<void> | null = null;
+    let blobUrlToRevoke: string | null = null;
 
-    // 清理旧 canvas
-    const oldCanvasEl = canvasRef.current;
-    if (fabricCanvasRef.current) {
-      disposePromise = new Promise(resolve => {
-        fabricCanvasRef.current!.dispose();
-        fabricCanvasRef.current = null;
-        resolve();
-      });
-    }
-    while (oldCanvasEl.firstChild) {
-      oldCanvasEl.removeChild(oldCanvasEl.firstChild);
-    }
-
-    // 判断是否为 base64 图片（不需要 CORS）
-    const isBase64 = imageUrl.startsWith('data:');
-    
-    const img = new window.Image();
-    if (!isBase64) {
-      img.crossOrigin = 'anonymous';
-    }
-    img.onerror = () => {
-      console.error('图片加载失败');
-      onError?.('图片加载失败，请检查图片格式是否正确');
-      setTimeout(() => onCancel(), 100);
-    };
-    img.onload = async () => {
-      if (!isMounted) return;
-      // 等待之前的 dispose 完成
-      if (disposePromise) await disposePromise;
-      if (!isMounted || !canvasRef.current) return;
-
+    // 解析 imageUrl：如果是 cache key，从 IndexedDB 读取并转为 data URL
+    const resolveImageUrl = async (): Promise<string | null> => {
+      if (!isCacheKey(imageUrl)) return imageUrl;
+      const blobUrl = await getCachedImage(imageUrl);
+      if (!blobUrl) return null;
+      // 将 blob URL 转为 data URL，避免 blob URL 被 revoke 后图片消失
       try {
-        // 使用 fabric.util.loadImage 加载图片（兼容 fabric.js v5.x）
-        // loadImage 接受回调函数作为第二个参数
-        const fabricImageEl = await new Promise<HTMLImageElement>((resolve, reject) => {
-          fabric.util.loadImage(imageUrl, (img: HTMLImageElement | HTMLCanvasElement) => {
-            if (!img) {
-              reject(new Error('图片加载失败'));
-            } else {
-              // 设置 crossOrigin 属性（用于跨域图片）
-              if (!isBase64 && img instanceof HTMLImageElement) {
-                img.crossOrigin = 'anonymous';
-              }
-              resolve(img as HTMLImageElement);
-            }
-          });
+        const res = await fetch(blobUrl);
+        const blob = await res.blob();
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
         });
-        
-        if (!isMounted) return;
-        
-        const bgImg = new fabric.Image(fabricImageEl);
-        
-        // 获取图片原始尺寸（使用 naturalWidth/naturalHeight 确保正确）
-        const imgWidth = img.naturalWidth || img.width || bgImg.width || 1;
-        const imgHeight = img.naturalHeight || img.height || bgImg.height || 1;
-
-        // 验证尺寸有效性
-        if (imgWidth < 1 || imgHeight < 1) {
-          console.warn('图片尺寸无效');
-          onError?.('图片尺寸无效，无法加载');
-          // 自动关闭编辑器
-          setTimeout(() => onCancel(), 100);
-          return;
-        }
-
-        // 计算容器可用空间（减去 padding）
-        const container = containerRef.current;
-        const maxWidth = container ? container.clientWidth - 20 : 800;
-        const maxHeight = container ? container.clientHeight - 20 : 600;
-
-        // 计算缩放比例，确保图片完整显示且不变形
-        const scale = Math.min(1, Math.min(maxWidth / imgWidth, maxHeight / imgHeight));
-        const displayWidth = Math.round(imgWidth * scale);
-        const displayHeight = Math.round(imgHeight * scale);
-
-        // 设置画布显示尺寸（缩放后的）
-        const fc = new fabric.Canvas(canvasRef.current, {
-          width: displayWidth,
-          height: displayHeight,
-          preserveObjectStacking: true,
-        });
-        fabricCanvasRef.current = fc;
-        fabric.Object.prototype.strokeUniform = true;
-
-        // 设置背景图，使用原始图片的缩放版本
-        bgImg.set({
-          selectable: false,
-          evented: false,
-          originX: 'left',
-          originY: 'top',
-          scaleX: scale,
-          scaleY: scale,
-        });
-        fc.backgroundImage = bgImg;
-        bgImageRef.current = bgImg;
-        fc.renderAll();
-        saveState();
-
-        // 选择事件
-        fc.on('selection:created', (e: any) => {
-          const obj = e.selected?.[0];
-          if (obj) syncSelectionUI(obj);
-        });
-        fc.on('selection:updated', (e: any) => {
-          const obj = e.selected?.[0];
-          if (obj) syncSelectionUI(obj);
-        });
-        fc.on('selection:cleared', () => {
-          setSelectedObject(null);
-        });
-        fc.on('object:modified', () => {
-          saveState();
-        });
-        fc.on('path:created', () => saveState());
-
-        // 鼠标事件
-        fc.on('mouse:down', (e: any) => {
-          const t = toolRef.current;
-          // 处理橡皮擦（点击对象删除）
-          if (t === 'eraser') {
-            handleEraserPointer(e);
-            return;
-          }
-          // 处理形状绘制
-          if (isShapeTool(t)) {
-            onMouseDown(e);
-          }
-        });
-
-        fc.on('mouse:move', (e: any) => {
-          // 处理形状绘制
-          if (isShapeTool(toolRef.current)) {
-            onMouseMove(e);
-          }
-        });
-
-        fc.on('mouse:up', (e: any) => {
-          if (isShapeTool(toolRef.current)) {
-            onMouseUp(e);
-          }
-        });
-      } catch (err) {
-        console.error('FabricImage 加载失败:', err);
-        onError?.('图片加载失败，可能是跨域问题或图片格式不支持');
-        setTimeout(() => onCancel(), 100);
+      } finally {
+        URL.revokeObjectURL(blobUrl);
       }
     };
-    img.src = imageUrl;
+
+    const initCanvas = async () => {
+      const resolvedUrl = await resolveImageUrl();
+      if (!isMounted || !resolvedUrl) {
+        if (!resolvedUrl && isMounted) {
+          onError?.('图片加载失败，缓存中未找到图片');
+          setTimeout(() => onCancel(), 100);
+        }
+        return;
+      }
+
+      // 清理旧 canvas
+      const oldCanvasEl = canvasRef.current;
+      if (fabricCanvasRef.current) {
+        disposePromise = new Promise(resolve => {
+          fabricCanvasRef.current!.dispose();
+          fabricCanvasRef.current = null;
+          resolve();
+        });
+      }
+      while (oldCanvasEl.firstChild) {
+        oldCanvasEl.removeChild(oldCanvasEl.firstChild);
+      }
+
+      // 判断是否为 base64 图片（不需要 CORS）
+      const isBase64 = resolvedUrl.startsWith('data:');
+
+      const img = new window.Image();
+      if (!isBase64) {
+        img.crossOrigin = 'anonymous';
+      }
+      img.onerror = () => {
+        if (!isMounted) return;
+        onError?.('图片加载失败，请检查图片格式是否正确');
+        setTimeout(() => onCancel(), 100);
+      };
+      img.onload = async () => {
+        if (!isMounted) return;
+        // 等待之前的 dispose 完成
+        if (disposePromise) await disposePromise;
+        if (!isMounted || !canvasRef.current) return;
+
+        try {
+          // 使用 fabric.util.loadImage 加载图片（兼容 fabric.js v5.x）
+          const fabricImageEl = await new Promise<HTMLImageElement>((resolve, reject) => {
+            fabric.util.loadImage(resolvedUrl, (img: HTMLImageElement | HTMLCanvasElement) => {
+              if (!img) {
+                reject(new Error('图片加载失败'));
+              } else {
+                if (!isBase64 && img instanceof HTMLImageElement) {
+                  img.crossOrigin = 'anonymous';
+                }
+                resolve(img as HTMLImageElement);
+              }
+            });
+          });
+
+          if (!isMounted) return;
+
+          const bgImg = new fabric.Image(fabricImageEl);
+
+          // 获取图片原始尺寸
+          const imgWidth = img.naturalWidth || img.width || bgImg.width || 1;
+          const imgHeight = img.naturalHeight || img.height || bgImg.height || 1;
+
+          // 验证尺寸有效性
+          if (imgWidth < 1 || imgHeight < 1) {
+            onError?.('图片尺寸无效，无法加载');
+            setTimeout(() => onCancel(), 100);
+            return;
+          }
+
+          // 计算容器可用空间（减去 padding）
+          const container = containerRef.current;
+          const maxWidth = container ? container.clientWidth - 20 : 800;
+          const maxHeight = container ? container.clientHeight - 20 : 600;
+
+          // 计算缩放比例，确保图片完整显示且不变形
+          const scale = Math.min(1, Math.min(maxWidth / imgWidth, maxHeight / imgHeight));
+          const displayWidth = Math.round(imgWidth * scale);
+          const displayHeight = Math.round(imgHeight * scale);
+
+          // 设置画布显示尺寸（缩放后的）
+          const fc = new fabric.Canvas(canvasRef.current, {
+            width: displayWidth,
+            height: displayHeight,
+            preserveObjectStacking: true,
+          });
+          fabricCanvasRef.current = fc;
+          fabric.Object.prototype.strokeUniform = true;
+
+          // 设置背景图，使用原始图片的缩放版本
+          bgImg.set({
+            selectable: false,
+            evented: false,
+            originX: 'left',
+            originY: 'top',
+            scaleX: scale,
+            scaleY: scale,
+          });
+          fc.backgroundImage = bgImg;
+          bgImageRef.current = bgImg;
+          fc.renderAll();
+          saveState();
+
+          // 选择事件
+          fc.on('selection:created', (e: any) => {
+            const obj = e.selected?.[0];
+            if (obj) syncSelectionUI(obj);
+          });
+          fc.on('selection:updated', (e: any) => {
+            const obj = e.selected?.[0];
+            if (obj) syncSelectionUI(obj);
+          });
+          fc.on('selection:cleared', () => {
+            setSelectedObject(null);
+          });
+          fc.on('object:modified', () => {
+            saveState();
+          });
+          fc.on('path:created', () => saveState());
+
+          // 鼠标事件
+          fc.on('mouse:down', (e: any) => {
+            const t = toolRef.current;
+            if (t === 'eraser') {
+              handleEraserPointer(e);
+              return;
+            }
+            if (isShapeTool(t)) {
+              onMouseDown(e);
+            }
+          });
+
+          fc.on('mouse:move', (e: any) => {
+            if (isShapeTool(toolRef.current)) {
+              onMouseMove(e);
+            }
+          });
+
+          fc.on('mouse:up', (e: any) => {
+            if (isShapeTool(toolRef.current)) {
+              onMouseUp(e);
+            }
+          });
+        } catch (err) {
+          if (!isMounted) return;
+          onError?.('图片加载失败，可能是跨域问题或图片格式不支持');
+          setTimeout(() => onCancel(), 100);
+        }
+      };
+      img.src = resolvedUrl;
+    };
+
+    initCanvas();
 
     return () => {
       isMounted = false;

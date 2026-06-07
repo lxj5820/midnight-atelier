@@ -30,9 +30,7 @@ const CachedEditImageEditor: React.FC<{
   onCancel: () => void;
   onError: (message: string) => void;
 }> = ({ cacheKey, onSave, onCancel, onError }) => {
-  const displayUrl = useCachedImageUrl(cacheKey);
-  if (!displayUrl) return null;
-  return <ImageEditor imageUrl={displayUrl} onSave={onSave} onCancel={onCancel} onError={onError} />;
+  return <ImageEditor imageUrl={cacheKey} onSave={onSave} onCancel={onCancel} onError={onError} />;
 };
 
 const POLISH_SYSTEM_PROMPT = `你是一个专业的 AI 图像提示词润色助手。你的任务是将用户输入的简单提示词润色成专业、详细、结构清晰的提示词。
