@@ -25,6 +25,8 @@ export async function downloadImage(url: string, filename: string) {
       URL.revokeObjectURL(blobUrl);
       return;
     }
+    // 缓存丢失，向上抛错让调用方处理
+    throw new Error('图片缓存已失效，无法下载');
   }
 
   if (url.startsWith('data:')) {

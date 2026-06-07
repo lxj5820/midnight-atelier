@@ -1,26 +1,37 @@
 import { useState, useEffect } from 'react';
 import { getCachedImage, isCacheKey } from '../utils/imageCache';
 
+export type CachedImageState = 'loading' | 'loaded' | 'missing';
+
 /**
  * Hook: 将 cache key 解析为可显示的 blob URL
  * 自动管理 blob URL 的生命周期（组件卸载时 revoke）
+ * 返回 [url, state] —— state 为 missing 表示图片已丢失
  */
-export function useCachedImageUrl(cacheKey: string | null | undefined): string | null {
+export function useCachedImageUrl(cacheKey: string | null | undefined): [string | null, CachedImageState] {
   const [url, setUrl] = useState<string | null>(null);
+  const [state, setState] = useState<CachedImageState>(cacheKey ? 'loading' : 'missing');
 
   useEffect(() => {
-    if (!cacheKey) { setUrl(null); return; }
-    if (!isCacheKey(cacheKey)) { setUrl(cacheKey); return; }
+    if (!cacheKey) { setUrl(null); setState('missing'); return; }
+    if (!isCacheKey(cacheKey)) { setUrl(cacheKey); setState('loaded'); return; }
 
     let revoked = false;
     let currentBlobUrl: string | undefined;
+    setState('loading');
     getCachedImage(cacheKey).then(blobUrl => {
       if (revoked) {
         if (blobUrl) URL.revokeObjectURL(blobUrl);
         return;
       }
-      currentBlobUrl = blobUrl ?? undefined;
-      setUrl(blobUrl);
+      if (blobUrl) {
+        currentBlobUrl = blobUrl;
+        setUrl(blobUrl);
+        setState('loaded');
+      } else {
+        setUrl(null);
+        setState('missing');
+      }
     });
     return () => {
       revoked = true;
@@ -28,7 +39,7 @@ export function useCachedImageUrl(cacheKey: string | null | undefined): string |
     };
   }, [cacheKey]);
 
-  return url;
+  return [url, state];
 }
 
 /**

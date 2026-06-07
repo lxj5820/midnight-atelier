@@ -1,6 +1,47 @@
 import { DB_NAME, DB_VERSION, STORE_NAME } from './constants';
 import type { GenerationRecord } from '../types/generation';
 import type { MenuItemId } from '../menuConfig';
+import { cacheImage, isCacheKey } from './imageCache';
+
+/**
+ * 把记录中的所有图片 URL 转成 IndexedDB 缓存 key
+ * （只对 data: / http(s): 开头的图片做转换，cache:// 直接保留）
+ * 转换失败时保留原 URL，避免阻塞保存
+ */
+async function normalizeRecordImages(record: GenerationRecord): Promise<GenerationRecord> {
+  const fields: (keyof GenerationRecord)[] = ['imageUrl', 'referenceImageUrl'];
+  const result = { ...record };
+
+  for (const field of fields) {
+    const url = result[field];
+    if (typeof url !== 'string' || !url) continue;
+    if (isCacheKey(url)) continue;
+    if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+      try {
+        const cacheKey = await cacheImage(url);
+        (result as any)[field] = cacheKey;
+      } catch {
+        // 转换失败保留原值
+      }
+    }
+  }
+
+  if (Array.isArray(result.referenceImageUrls)) {
+    const normalized: string[] = [];
+    for (const url of result.referenceImageUrls) {
+      if (!url) { normalized.push(url); continue; }
+      if (isCacheKey(url)) { normalized.push(url); continue; }
+      if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+        try { normalized.push(await cacheImage(url)); } catch { normalized.push(url); }
+      } else {
+        normalized.push(url);
+      }
+    }
+    result.referenceImageUrls = normalized;
+  }
+
+  return result;
+}
 
 /**
  * 打开 IndexedDB 数据库连接
@@ -112,7 +153,8 @@ export async function getGenerationHistoryByTypeAsync(type: MenuItemId): Promise
 export const dbOperations = {
   async save(record: GenerationRecord): Promise<boolean> {
     try {
-      await saveGenerationRecordToDB(record);
+      const normalized = await normalizeRecordImages(record);
+      await saveGenerationRecordToDB(normalized);
       return true;
     } catch (error) {
       console.error('dbOperations.save failed:', error);

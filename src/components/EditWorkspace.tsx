@@ -1,11 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, RefreshCw, Maximize2, Wand2, Pencil } from 'lucide-react';
+import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, RefreshCw, Maximize2, Wand2, Pencil, ImageOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { useTokenQuery } from '../context/TokenQueryContext';
 import { downloadImage } from '../utils/download';
-import { getGenerationHistoryAsync, saveGenerationRecordToDB, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getSizeFromRefImage, getClosestAspectRatio } from '../utils';
+import { getGenerationHistoryAsync, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getSizeFromRefImage, getClosestAspectRatio, dbOperations } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
@@ -14,14 +14,37 @@ import { useCachedImageUrl } from '../hooks/useCachedImage';
 
 // 参考图缩略图 - 解析缓存 key
 const RefImageThumb: React.FC<{ cacheKey: string; alt: string }> = ({ cacheKey, alt }) => {
-  const displayUrl = useCachedImageUrl(cacheKey);
-  return <img src={displayUrl || ''} alt={alt} className="w-full h-full object-cover" referrerPolicy="no-referrer" />;
+  const [displayUrl] = useCachedImageUrl(cacheKey);
+  if (!displayUrl) return <div className="w-full h-full flex items-center justify-center bg-surface-1 text-slate-600 text-[10px]">已失效</div>;
+  return <img src={displayUrl} alt={alt} className="w-full h-full object-cover" referrerPolicy="no-referrer" />;
 };
 
-// 历史缩略图组件
-const EditHistoryThumbnail: React.FC<{ cacheKey: string; alt: string; className?: string }> = ({ cacheKey, alt, className }) => {
-  const displayUrl = useCachedImageUrl(cacheKey);
-  return <img src={displayUrl || ''} alt={alt} className={className} referrerPolicy="no-referrer" loading="lazy" />;
+// 历史缩略图组件 - 统一处理 cache key 和普通 URL，图片丢失/CORS/ORB 失败时显示占位符
+const EditHistoryThumbnail: React.FC<{
+  cacheKey: string;
+  alt: string;
+  className?: string;
+  onMissing?: () => void;
+}> = ({ cacheKey, alt, className, onMissing }) => {
+  const [displayUrl, state] = useCachedImageUrl(cacheKey);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    if (state === 'missing' && isCacheKey(cacheKey) && onMissing) onMissing();
+  }, [state, cacheKey, onMissing]);
+
+  // URL 变化时重置错误状态
+  useEffect(() => { setImgError(false); }, [displayUrl]);
+
+  if (state === 'missing' || imgError || !displayUrl) {
+    return (
+      <div className={`${className || ''} flex flex-col items-center justify-center bg-surface-1 text-slate-600`}>
+        <ImageOff className="w-6 h-6 mb-1" />
+        <span className="text-[10px]">已失效</span>
+      </div>
+    );
+  }
+  return <img src={displayUrl} alt={alt} className={className} referrerPolicy="no-referrer" loading="lazy" onError={() => setImgError(true)} />;
 };
 
 // 缓存图片编辑器包装
@@ -72,8 +95,8 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   const [isPolishing, setIsPolishing] = useState(false);
 
   // 解析缓存 key 为可显示的 blob URL
-  const displayResult = useCachedImageUrl(result);
-  const displayPendingResult = useCachedImageUrl(pendingResult);
+  const [displayResult] = useCachedImageUrl(result);
+  const [displayPendingResult] = useCachedImageUrl(pendingResult);
 
   const handlePolishPrompt = async () => {
     if (isPolishing) return;
@@ -267,7 +290,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             createdAt: new Date().toISOString(),
             resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
           };
-          await saveGenerationRecordToDB(record);
+          await dbOperations.save(record);
           setResult(resultCacheKey);
           setPendingResult(resultCacheKey);
           setHistoryRefreshKey(k => k + 1);
@@ -324,7 +347,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           createdAt: new Date().toISOString(),
           resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
         };
-        await saveGenerationRecordToDB(record);
+        await dbOperations.save(record);
 
         setResult(resultCacheKey);
         setPendingResult(resultCacheKey);
@@ -343,7 +366,13 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     })();
   };
 
-  const handleDownload = async (url: string) => { await downloadImage(url, `edit-${Date.now()}.png`); };
+  const handleDownload = async (url: string) => {
+    try {
+      await downloadImage(url, `edit-${Date.now()}.png`);
+    } catch (e: any) {
+      showToast('error', e?.message || '下载失败');
+    }
+  };
   const handleClearResult = () => { setResult(null); setReferenceImages([]); };
   const handleClearHistory = async () => {
     for (const record of generationHistory) {
@@ -363,7 +392,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     }
   };
 
-  const handleDeleteHistory = async (id: string) => {
+  const handleDeleteHistory = async (id: string, silent = false) => {
     const record = generationHistory.find(r => r.id === id);
     if (record) {
       deleteCachedImage(record.imageUrl);
@@ -372,7 +401,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     }
     await deleteGenerationRecordFromDB(id);
     setGenerationHistory(prev => prev.filter(r => r.id !== id));
-    showToast('info', '已删除');
+    if (!silent) showToast('info', '已删除');
   };
 
   const referenceImageContent = (
@@ -519,6 +548,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                       cacheKey={record.imageUrl}
                       alt={record.prompt}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      onMissing={() => handleDeleteHistory(record.id, true)}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>

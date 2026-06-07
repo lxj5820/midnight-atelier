@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { ImageOff } from 'lucide-react';
 import {
   Sparkles, RefreshCw, ChevronLeft, ChevronRight, Maximize2,
   Upload, X, Share2, Trash2, RotateCcw, Download, Pencil,
@@ -30,10 +31,31 @@ import { useCachedImageUrl } from '../../hooks/useCachedImage';
 const PanoramaViewer = lazy(() => import('../PanoramaViewer'));
 const ImageEditor = lazy(() => import('../ImageEditor'));
 
-// 历史缩略图组件 - 解析缓存 key
-const HistoryThumbnail: React.FC<{ cacheKey: string; alt: string; className?: string; onClick?: () => void }> = ({ cacheKey, alt, className, onClick }) => {
-  const displayUrl = useCachedImageUrl(cacheKey);
-  return <img src={displayUrl || ''} alt={alt} className={className} referrerPolicy="no-referrer" loading="lazy" onClick={onClick} />;
+// 历史缩略图组件 - 解析缓存 key；图片丢失/CORS/ORB 失败时显示占位符
+const HistoryThumbnail: React.FC<{
+  cacheKey: string;
+  alt: string;
+  className?: string;
+  onClick?: () => void;
+  onMissing?: () => void;
+}> = ({ cacheKey, alt, className, onClick, onMissing }) => {
+  const [displayUrl, state] = useCachedImageUrl(cacheKey);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    if (state === 'missing' && isCacheKey(cacheKey) && onMissing) onMissing();
+  }, [state, cacheKey, onMissing]);
+  useEffect(() => { setImgError(false); }, [displayUrl]);
+
+  if (state !== 'loaded' || imgError || !displayUrl) {
+    return (
+      <div className={`${className || ''} flex flex-col items-center justify-center bg-surface-1 text-slate-600`} onClick={onClick}>
+        <ImageOff className="w-6 h-6 mb-1" />
+        <span className="text-[10px]">已失效</span>
+      </div>
+    );
+  }
+  return <img src={displayUrl} alt={alt} className={className} referrerPolicy="no-referrer" loading="lazy" onClick={onClick} onError={() => setImgError(true)} />;
 };
 
 // 缓存图片编辑器包装 - 解析缓存 key 后传给 ImageEditor
@@ -48,7 +70,7 @@ const CachedImageEditor: React.FC<{
 
 // 缓存全景查看器包装 - 解析缓存 key 后传给 PanoramaViewer
 const CachedPanoramaViewer: React.FC<{ cacheKey: string; isOpen: boolean; onClose: () => void }> = ({ cacheKey, isOpen, onClose }) => {
-  const displayUrl = useCachedImageUrl(cacheKey);
+  const [displayUrl] = useCachedImageUrl(cacheKey);
   if (!displayUrl) return null;
   return <PanoramaViewer imageUrl={displayUrl} isOpen={isOpen} onClose={onClose} />;
 };
@@ -105,8 +127,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 解析缓存 key 为可显示的 blob URL
-  const displayResult = useCachedImageUrl(result);
-  const displayRefImage = useCachedImageUrl(imageUrls[0]);
+  const [displayResult] = useCachedImageUrl(result);
+  const [displayRefImage] = useCachedImageUrl(imageUrls[0]);
 
   const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
   const filteredPresets = getPresetsForMenu(activeMenuItem);
@@ -489,9 +511,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     try {
       await downloadImage(record.imageUrl, `${record.type}-${record.id}.png`);
       showToast('success', '图片下载开始');
-    } catch { showToast('error', '下载失败'); }
+    } catch (e: any) {
+      showToast('error', e?.message || '下载失败');
+    }
   };
-  const handleDeleteHistory = (id: string) => {
+  const handleDeleteHistory = (id: string, silent = false) => {
     const record = generationHistory.find(h => h.id === id);
     if (record) {
       deleteCachedImage(record.imageUrl);
@@ -499,7 +523,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     }
     dbOperations.delete(id);
     setGenerationHistory(prev => prev.filter(h => h.id !== id));
-    showToast('info', '已删除');
+    if (!silent) showToast('info', '已删除');
   };
   const handleItemClick = (record: GenerationRecord) => {
     setPrompt(record.prompt);
@@ -734,6 +758,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                       cacheKey={record.imageUrl}
                       alt={record.prompt}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      onMissing={() => handleDeleteHistory(record.id, true)}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>

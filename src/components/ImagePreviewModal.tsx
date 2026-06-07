@@ -49,7 +49,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
-  const displayUrl = useCachedImageUrl(imageUrl);
+  const displayUrl = useCachedImageUrl(imageUrl)[0];
   const [showMore, setShowMore] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
