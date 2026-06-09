@@ -158,7 +158,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
 
       {/* Right: Info Panel */}
       <div
-        className="w-[380px] bg-[#111317] border-l border-border-subtle flex flex-col overflow-y-auto custom-scrollbar"
+        className="w-[380px] bg-surface-1 border-l border-border flex flex-col overflow-y-auto custom-scrollbar"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
