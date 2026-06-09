@@ -842,11 +842,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         isRightPanelOpen={isRightPanelOpen}
         onToggleRightPanel={onToggleRightPanel}
       />
-      {isMobile && !isRightPanelOpen && (
+      {isMobile && (
         <GlowBlob
           size={112}
           onClick={onToggleRightPanel}
-          className="fixed bottom-16 left-1/2 -translate-x-1/2 z-30"
+          visible={!isRightPanelOpen}
         />
       )}
     </div>

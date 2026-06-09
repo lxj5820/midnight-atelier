@@ -1,16 +1,68 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface GlowBlobProps {
   size?: number;
   onClick?: () => void;
   className?: string;
+  visible?: boolean;
 }
 
-export const GlowBlob: React.FC<GlowBlobProps> = ({ size = 56, onClick, className = '' }) => {
+export const GlowBlob: React.FC<GlowBlobProps> = ({ size = 56, onClick, className = '', visible = true }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const timeRef = useRef(0);
 
+  // Drag state
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const posRef = useRef<{ x: number; y: number } | null>(null);
+  const dragging = useRef(false);
+  const dragStart = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+  const hasMoved = useRef(false);
+
+  // Initialize position to bottom center
+  useEffect(() => {
+    if (posRef.current === null) {
+      const x = window.innerWidth / 2 - size / 2;
+      const y = window.innerHeight - size - 64;
+      posRef.current = { x, y };
+      setPos({ x, y });
+    }
+  }, [size]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    hasMoved.current = false;
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      px: posRef.current?.x ?? 0,
+      py: posRef.current?.y ?? 0,
+    };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current || !dragStart.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved.current = true;
+
+    const newX = Math.max(0, Math.min(window.innerWidth - size, dragStart.current.px + dx));
+    const newY = Math.max(0, Math.min(window.innerHeight - size, dragStart.current.py + dy));
+    setPos({ x: newX, y: newY });
+    posRef.current = { x: newX, y: newY };
+  }, [size]);
+
+  const handlePointerUp = useCallback(() => {
+    dragging.current = false;
+    dragStart.current = null;
+    if (!hasMoved.current && onClick) {
+      onClick();
+    }
+  }, [onClick]);
+
+  // Canvas animation
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -36,6 +88,10 @@ export const GlowBlob: React.FC<GlowBlobProps> = ({ size = 56, onClick, classNam
     };
 
     const animate = () => {
+      if (!visible) {
+        animRef.current = requestAnimationFrame(animate);
+        return;
+      }
       timeRef.current += 0.016;
       const t = timeRef.current;
       const cx = size / 2;
@@ -128,16 +184,31 @@ export const GlowBlob: React.FC<GlowBlobProps> = ({ size = 56, onClick, classNam
     return () => cancelAnimationFrame(animRef.current);
   }, [size]);
 
+  const currentPos = pos ?? posRef.current ?? { x: 0, y: 0 };
+
   return (
-    <button
-      onClick={onClick}
-      className={`${className}`}
-      style={{ width: size, height: size }}
+    <div
+      onPointerDown={visible ? handlePointerDown : undefined}
+      onPointerMove={visible ? handlePointerMove : undefined}
+      onPointerUp={visible ? handlePointerUp : undefined}
+      className={`touch-none select-none ${className}`}
+      style={{
+        position: 'fixed',
+        left: currentPos.x,
+        top: currentPos.y,
+        width: size,
+        height: size,
+        cursor: dragging.current ? 'grabbing' : 'grab',
+        zIndex: 30,
+        opacity: visible ? 1 : 0,
+        pointerEvents: visible ? 'auto' : 'none',
+        transition: 'opacity 0.3s',
+      }}
     >
       <canvas
         ref={canvasRef}
-        style={{ width: size, height: size }}
+        style={{ width: size, height: size, pointerEvents: 'none' }}
       />
-    </button>
+    </div>
   );
 };
