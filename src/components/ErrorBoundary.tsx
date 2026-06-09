@@ -30,13 +30,13 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return this.props.fallback || (
-        <div className="flex items-center justify-center h-screen bg-[#111317]">
+        <div className="flex items-center justify-center h-screen bg-surface-1">
           <div className="text-center max-w-md mx-auto px-4">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-rose-500/20 mb-6">
               <span className="text-3xl">⚠️</span>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">出错了</h1>
-            <p className="text-slate-400 mb-4">
+            <h1 className="text-2xl font-bold text-text-primary mb-2">出错了</h1>
+            <p className="text-text-secondary mb-4">
               {this.state.error?.message || '应用程序发生了未知错误'}
             </p>
             <button

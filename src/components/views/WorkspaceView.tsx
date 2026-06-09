@@ -49,7 +49,7 @@ const HistoryThumbnail: React.FC<{
 
   if (state !== 'loaded' || imgError || !displayUrl) {
     return (
-      <div className={`${className || ''} flex flex-col items-center justify-center bg-surface-1 text-slate-600`} onClick={onClick}>
+      <div className={`${className || ''} flex flex-col items-center justify-center bg-surface-1 text-text-muted`} onClick={onClick}>
         <ImageOff className="w-6 h-6 mb-1" />
         <span className="text-[10px]">已失效</span>
       </div>
@@ -633,7 +633,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           {result && imageUrls.length > 0 && showCompareMode ? (
             <div className="mb-6">
               <div
-                className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 select-none border border-white/[0.04]"
+                className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 select-none border border-border-subtle/70"
                 onMouseMove={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setSliderPosition(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)));
@@ -645,7 +645,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                 </div>
                 <div className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-ew-resize z-10 shadow-lg" style={{ left: `${sliderPosition}%` }}>
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center">
-                    <ChevronLeft className="w-3.5 h-3.5 text-slate-700" /><ChevronRight className="w-3.5 h-3.5 text-slate-700" />
+                    <ChevronLeft className="w-3.5 h-3.5 text-text-secondary" /><ChevronRight className="w-3.5 h-3.5 text-text-secondary" />
                   </div>
                 </div>
                 <div className="absolute top-3 left-3 px-2.5 py-1 bg-indigo-500/80 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">生成图</div>
@@ -654,7 +654,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             </div>
           ) : result ? (
             <div className="mb-6 relative">
-              <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-white/[0.04]">
+              <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-border-subtle/70">
                 <img src={displayResult || ''} alt="Generated Result" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                 {activeMenuItem === 'panorama' && (
                   <button
@@ -669,11 +669,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             </div>
           ) : imageUrls.length > 0 ? (
             <div className="mb-6 relative">
-              <div className={`aspect-video rounded-2xl overflow-hidden bg-surface-2/50 flex flex-col items-center justify-center group cursor-pointer transition-all border-2 border-dashed ${isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-white/[0.06] hover:border-indigo-500/30 hover:bg-surface-2'}`}
+              <div className={`aspect-video rounded-2xl overflow-hidden bg-surface-2/50 flex flex-col items-center justify-center group cursor-pointer transition-all border-2 border-dashed ${isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-border-subtle hover:border-indigo-500/30 hover:bg-surface-2'}`}
                 onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={handleUpload}>
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/jpeg,image/png,image/webp" className="hidden" />
                 {isUploading ? (
-                  <><RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" /><p className="text-slate-500 text-sm">上传中...</p></>
+                  <><RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" /><p className="text-text-muted text-sm">上传中...</p></>
                 ) : (
                   <><img src={displayRefImage || ''} alt="参考图" className="w-full h-full object-contain" onClick={handleUpload} />
                     <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/80 rounded-lg transition-colors backdrop-blur-sm"><X className="w-4 h-4 text-white" /></button></>
@@ -690,38 +690,38 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               )}
             </div>
           ) : (
-            <div className={`upload-zone aspect-video flex flex-col items-center justify-center group cursor-pointer mb-6 ${isDragging ? 'dragging' : 'border-white/[0.06]'}`}
+            <div className={`upload-zone aspect-video flex flex-col items-center justify-center group cursor-pointer mb-6 shadow-lg ${isDragging ? 'dragging' : 'border-border-subtle'}`}
               onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={handleUpload}>
               <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/jpeg,image/png,image/webp" className="hidden" />
-              <div className="w-14 h-14 bg-surface-2 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-white/[0.06]">
+              <div className="w-14 h-14 bg-surface-2 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-border-subtle">
                 <Upload className="w-6 h-6 text-indigo-500" />
               </div>
-              <h3 className="text-base font-bold text-white mb-1.5">点击或拖拽图片上传</h3>
-              <p className="text-slate-500 text-xs">支持 JPG, PNG, WEBP · 也可 Ctrl+V 粘贴</p>
+              <h3 className="text-base font-bold text-text-primary mb-1.5">点击或拖拽图片上传</h3>
+              <p className="text-text-muted text-xs">支持 JPG, PNG, WEBP · 也可 Ctrl+V 粘贴</p>
             </div>
           )}
 
           {(result || imageUrls.length > 0) && (
             <div className="flex items-center justify-end gap-2 mb-5">
               {imageUrls.length > 0 && (
-                <button onClick={() => setEditingImageIndex(0)} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-indigo-400 text-xs font-medium rounded-lg border border-white/[0.06]" title="图片编辑器">
+                <button onClick={() => setEditingImageIndex(0)} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-indigo-400 text-xs font-medium rounded-lg border border-border-subtle" title="图片编辑器">
                   <Pencil className="w-3.5 h-3.5" />图片编辑器
                 </button>
               )}
               {result && imageUrls.length > 0 && (
                 <button
                   onClick={() => setShowCompareMode(!showCompareMode)}
-                  className={`btn-ghost flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border ${showCompareMode ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-surface-2 text-white border-white/[0.06]'}`}
+                  className={`btn-ghost flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border ${showCompareMode ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-surface-2 text-text-primary border-border-subtle'}`}
                   title="图片对比模式"
                 >
                   <Layers className="w-3.5 h-3.5" />{showCompareMode ? '关闭对比' : '对比模式'}
                 </button>
               )}
               {result && imageUrls.length === 0 && (
-                <><button onClick={handleShare} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-white text-xs font-medium rounded-lg border border-white/[0.06]"><Share2 className="w-3.5 h-3.5" />分享</button>
-                  <button onClick={handleCopyResult} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-white text-xs font-medium rounded-lg border border-white/[0.06]"><Download className="w-3.5 h-3.5" />复制链接</button></>
+                <><button onClick={handleShare} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle"><Share2 className="w-3.5 h-3.5" />分享</button>
+                  <button onClick={handleCopyResult} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle"><Download className="w-3.5 h-3.5" />复制链接</button></>
               )}
-              <button onClick={handleClearResult} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-white/[0.06] hover:border-rose-500/20 transition-all duration-200">
+              <button onClick={handleClearResult} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-border-subtle hover:border-rose-500/20 transition-all duration-200">
                 <Trash2 className="w-3.5 h-3.5" />{result ? '清除结果' : '清除参考图'}
               </button>
             </div>
@@ -730,16 +730,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           <div className="mt-2">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
-                <h2 className="text-sm font-bold text-white">{getMenuItemLabel(activeMenuItem)} <span className="text-slate-500 font-normal text-xs ml-1.5">历史记录</span></h2>
+                <h2 className="text-sm font-bold text-text-primary">{getMenuItemLabel(activeMenuItem)} <span className="text-text-muted font-normal text-xs ml-1.5">历史记录</span></h2>
                 {generationHistory.length > 0 && <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold rounded-md">{generationHistory.length}</span>}
               </div>
               <div className="flex items-center gap-3">
                 {generationHistory.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-600 text-[10px]">缩略图</span>
+                    <span className="text-text-muted text-[10px]">缩略图</span>
                     <input type="range" min="60" max="300" value={thumbnailSize} onChange={(e) => setThumbnailSize(Number(e.target.value))}
                       className="w-16 h-1 bg-surface-3 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
-                    <span className="text-slate-600 text-[10px]">{thumbnailSize}px</span>
+                    <span className="text-text-muted text-[10px]">{thumbnailSize}px</span>
                   </div>
                 )}
                 {generationHistory.length > 0 && <button onClick={handleClearHistory} className="text-rose-400/70 text-[10px] font-medium hover:text-rose-400 transition-colors">清除记录</button>}
@@ -752,7 +752,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               <div className="flex flex-wrap gap-3">
                 {generationHistory.map((record, index) => (
                   <motion.div key={record.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}
-                    className="history-card rounded-xl overflow-hidden bg-surface-2 relative group cursor-pointer shrink-0 border border-white/[0.04]"
+                    className="history-card rounded-xl overflow-hidden bg-surface-2 relative group cursor-pointer shrink-0 border border-border-subtle/70"
                     style={{ width: thumbnailSize, height: thumbnailSize }} onClick={() => handleItemClick(record)}>
                     <HistoryThumbnail
                       cacheKey={record.imageUrl}
@@ -760,29 +760,29 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                       onMissing={() => handleDeleteHistory(record.id, true)}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
+                    <div className="thumb-overlay absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2.5">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">
+                      <p className="text-[9px] text-text-secondary mt-0.5">
                         {new Date(record.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        {record.resolution && <span className="ml-1 text-indigo-400">{record.resolution.width > 0 ? `${record.resolution.width}×${record.resolution.height} ` : ''}{record.resolution.quality}</span>}
+                        {record.resolution && <span className="ml-1 text-indigo-500">{record.resolution.width > 0 ? `${record.resolution.width}×${record.resolution.height} ` : ''}{record.resolution.quality}</span>}
                       </p>
                       <div className="flex gap-1 mt-1.5">
                         <button onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrl) { setImageUrls([record.referenceImageUrl]); showToast('success', '已复用提示词和参考图'); } else showToast('success', '已复用提示词'); }}
-                          className="p-1.5 bg-white/10 rounded-md hover:bg-indigo-500/50 transition-colors" title="复用"><RotateCcw className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: record.prompt || '生成结果', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDownloadHistory(record); }} className="p-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 bg-white/10 rounded-md hover:bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
+                          className="p-1.5 thumb-btn rounded-md hover:!bg-indigo-500/50 transition-colors" title="复用"><RotateCcw className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: record.prompt || '生成结果', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDownloadHistory(record); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 thumb-btn rounded-md hover:!bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
                       </div>
                     </div>
                   </motion.div>
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-10 rounded-xl bg-surface-2/30 border border-white/[0.03]">
+              <div className="flex flex-col items-center justify-center py-10 rounded-xl bg-surface-2/30 border border-border-subtle/70">
                 <div className="w-10 h-10 bg-surface-2 rounded-xl flex items-center justify-center mb-3">
-                  <Layers className="w-5 h-5 text-slate-600" />
+                  <Layers className="w-5 h-5 text-text-muted" />
                 </div>
-                <p className="text-slate-500 text-xs">暂无历史记录</p>
+                <p className="text-text-muted text-xs">暂无历史记录</p>
               </div>
             )}
           </div>

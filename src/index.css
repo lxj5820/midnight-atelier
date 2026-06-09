@@ -1,20 +1,91 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* ── Dark theme (default) ── */
+:root {
+  --c-surface-0: #0d0f13;
+  --c-surface-1: #111317;
+  --c-surface-2: #1c1f26;
+  --c-surface-3: #252830;
+  --c-border: #2a2e38;
+  --c-border-light: #363a46;
+  --c-text-primary: #e2e2e7;
+  --c-text-secondary: #94a3b8;
+  --c-text-muted: #64748b;
+  --c-bg-subtle: rgba(255, 255, 255, 0.02);
+  --c-bg-subtle-hover: rgba(255, 255, 255, 0.04);
+  --c-border-subtle: rgba(255, 255, 255, 0.06);
+  --c-glass-from: rgba(28, 31, 38, 0.9);
+  --c-glass-to: rgba(17, 19, 23, 0.95);
+  --c-glass-border: rgba(255, 255, 255, 0.06);
+  --c-scrollbar-thumb: #3a3d47;
+  --c-scrollbar-thumb-hover: #4a4d57;
+  --c-placeholder-bg: #1a1c23;
+  --c-shadow-color: rgba(0, 0, 0, 0.3);
+  --c-shadow-heavy: rgba(0, 0, 0, 0.4);
+  --c-overlay-light: rgba(0, 0, 0, 0.5);
+  --c-overlay-dark: rgba(0, 0, 0, 0.7);
+  --c-thumbnail-btn-bg: rgba(255, 255, 255, 0.1);
+  --c-thumbnail-btn-hover: rgba(255, 255, 255, 0.2);
+  --c-preset-text: #ffffff;
+  --c-preset-gradient-from: transparent;
+  --c-preset-gradient-to: rgba(0, 0, 0, 0.7);
+  --c-hover-border: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Light theme ── */
+.light {
+  --c-surface-0: #fafbfc;
+  --c-surface-1: #ffffff;
+  --c-surface-2: #f4f6fa;
+  --c-surface-3: #e8ecf3;
+  --c-border: #d8dde7;
+  --c-border-light: #c2c8d6;
+  --c-text-primary: #1a1d2e;
+  --c-text-secondary: #4a5067;
+  --c-text-muted: #7a8094;
+  --c-bg-subtle: rgba(99, 102, 241, 0.04);
+  --c-bg-subtle-hover: rgba(99, 102, 241, 0.09);
+  --c-border-subtle: rgba(15, 23, 42, 0.08);
+  --c-glass-from: rgba(255, 255, 255, 0.85);
+  --c-glass-to: rgba(244, 246, 250, 0.92);
+  --c-glass-border: rgba(15, 23, 42, 0.06);
+  --c-scrollbar-thumb: #b8bdcb;
+  --c-scrollbar-thumb-hover: #9ba1b3;
+  --c-placeholder-bg: #d8dde7;
+  --c-shadow-color: rgba(15, 23, 42, 0.08);
+  --c-shadow-heavy: rgba(15, 23, 42, 0.14);
+  --c-overlay-light: rgba(15, 23, 42, 0.55);
+  --c-overlay-dark: rgba(15, 23, 42, 0.7);
+  --c-thumbnail-btn-bg: rgba(15, 23, 42, 0.5);
+  --c-thumbnail-btn-hover: rgba(15, 23, 42, 0.7);
+  --c-preset-text: #1a1d2e;
+  --c-preset-gradient-from: rgba(255, 255, 255, 0.4);
+  --c-preset-gradient-to: rgba(15, 23, 42, 0.55);
+  --c-hover-border: rgba(15, 23, 42, 0.15);
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-headline: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  --color-surface-0: #0d0f13;
-  --color-surface-1: #111317;
-  --color-surface-2: #1c1f26;
-  --color-surface-3: #252830;
-  --color-border: #2a2e38;
-  --color-border-light: #363a46;
+  --color-surface-0: var(--c-surface-0);
+  --color-surface-1: var(--c-surface-1);
+  --color-surface-2: var(--c-surface-2);
+  --color-surface-3: var(--c-surface-3);
+  --color-border: var(--c-border);
+  --color-border-light: var(--c-border-light);
+  --color-text-primary: var(--c-text-primary);
+  --color-text-secondary: var(--c-text-secondary);
+  --color-text-muted: var(--c-text-muted);
+  --color-bg-subtle: var(--c-bg-subtle);
+  --color-bg-subtle-hover: var(--c-bg-subtle-hover);
+  --color-border-subtle: var(--c-border-subtle);
+  --color-placeholder-bg: var(--c-placeholder-bg);
 }
 
 @layer base {
   body {
-    @apply bg-surface-1 text-[#e2e2e7] antialiased;
+    @apply bg-surface-1 text-text-primary antialiased;
   }
 
   * {
@@ -27,26 +98,26 @@
 }
 
 .glass-card {
-  background: linear-gradient(135deg, rgba(28, 31, 38, 0.9) 0%, rgba(17, 19, 23, 0.95) 100%);
+  background: linear-gradient(135deg, var(--c-glass-from) 0%, var(--c-glass-to) 100%);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--c-glass-border);
 }
 
 .glass-card-hover {
-  background: linear-gradient(135deg, rgba(28, 31, 38, 0.9) 0%, rgba(17, 19, 23, 0.95) 100%);
+  background: linear-gradient(135deg, var(--c-glass-from) 0%, var(--c-glass-to) 100%);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--c-glass-border);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card-hover:hover {
   border-color: rgba(99, 102, 241, 0.3);
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.08), 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.08), 0 8px 32px var(--c-shadow-color);
   transform: translateY(-1px);
 }
 
 .shimmer {
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, var(--c-glass-border) 50%, transparent 100%);
   background-size: 200% 100%;
   animation: shimmer 2s infinite;
 }
@@ -113,7 +184,7 @@
 
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #464554 transparent;
+  scrollbar-color: var(--c-scrollbar-thumb) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -125,17 +196,17 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #3a3d47;
+  background: var(--c-scrollbar-thumb);
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #4a4d57;
+  background: var(--c-scrollbar-thumb-hover);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3a3d47 transparent;
+  scrollbar-color: var(--c-scrollbar-thumb) transparent;
 }
 
 html {
@@ -179,18 +250,18 @@ html {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.7) 100%);
+  background: linear-gradient(180deg, var(--c-preset-gradient-from) 0%, var(--c-preset-gradient-from) 40%, var(--c-preset-gradient-to) 100%);
   z-index: 1;
   transition: opacity 0.3s;
 }
 
 .preset-card:hover::before {
-  background: linear-gradient(180deg, transparent 20%, rgba(0,0,0,0.8) 100%);
+  background: linear-gradient(180deg, var(--c-preset-gradient-from) 0%, var(--c-preset-gradient-from) 20%, var(--c-preset-gradient-to) 100%);
 }
 
 .preset-card:hover {
   transform: scale(1.03);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px var(--c-shadow-heavy);
 }
 
 .history-card {
@@ -198,7 +269,7 @@ html {
 }
 
 .history-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px var(--c-shadow-color);
   transform: translateY(-2px);
 }
 
@@ -225,28 +296,49 @@ html {
 }
 
 .input-field {
-  @apply bg-surface-1 border border-border rounded-xl py-3 px-4 text-white outline-none;
+  @apply bg-surface-1 border border-border rounded-xl py-3 px-4 text-text-primary outline-none;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px var(--c-shadow-color);
 }
 
 .input-field:focus {
   border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 1px 2px var(--c-shadow-color);
 }
 
 .upload-zone {
   @apply border-2 border-dashed rounded-2xl;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.03) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.04) 0%, transparent 70%);
+  box-shadow: 0 4px 16px var(--c-shadow-color);
 }
 
 .upload-zone:hover {
   border-color: rgba(99, 102, 241, 0.4);
-  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.06) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
 }
 
 .upload-zone.dragging {
   border-color: #6366f1;
-  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
-  box-shadow: 0 0 30px rgba(99, 102, 241, 0.1);
+  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.15);
+}
+
+/* 浅色模式自适应的图片浮层工具类 */
+.thumb-btn {
+  background: var(--c-thumbnail-btn-bg);
+  transition: background 0.2s;
+}
+.thumb-btn:hover {
+  background: var(--c-thumbnail-btn-hover);
+}
+.thumb-overlay {
+  background: linear-gradient(180deg, transparent 30%, var(--c-overlay-dark) 100%);
+}
+.hover-border-mix {
+  border-color: var(--c-hover-border);
+}
+.preset-label {
+  color: var(--c-preset-text);
+  text-shadow: 0 1px 2px var(--c-shadow-heavy);
 }

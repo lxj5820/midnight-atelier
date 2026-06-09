@@ -133,7 +133,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   return (
     <aside className="w-80 bg-surface-2 border-l border-border flex flex-col shrink-0 fixed right-0 top-14 h-[calc(100vh-3.5rem)] z-30">
       <div className="p-4 pb-3">
-        <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2.5">引擎与模型</p>
+        <p className="text-[10px] font-bold text-text-muted/70 uppercase tracking-wider mb-2.5">引擎与模型</p>
         <Dropdown
           options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <><img src="/gpt-icon.png" alt="GPT" className="w-4 h-4 inline-block" /> Image 2</> : m }))}
           value={model}
@@ -142,7 +142,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           direction="down"
         />
         {presets.length > 0 && (
-          <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2.5 mt-5">效果预设</p>
+          <p className="text-[10px] font-bold text-text-muted/70 uppercase tracking-wider mb-2.5 mt-5">效果预设</p>
         )}
       </div>
 
@@ -159,7 +159,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   className={`preset-card aspect-video rounded-xl overflow-hidden relative group border-2 ${
                     isSelected
                       ? 'border-indigo-500 ring-2 ring-indigo-500/20 glow-indigo'
-                      : 'border-white/[0.04] hover:border-white/[0.12]'
+                      : 'border-border-subtle/70 hover:border-indigo-500/40'
                   }`}
                 >
                   <img
@@ -169,13 +169,13 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                     decoding="async"
                     width={320}
                     height={180}
-                    className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300 bg-[#1a1c23]"
+                    className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300 bg-placeholder-bg"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}
                   />
-                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white uppercase tracking-wider z-[2] drop-shadow-lg">
+                  <span className="preset-label absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase tracking-wider z-[2] drop-shadow">
                     {preset.label}
                   </span>
                   {isSelected && (
@@ -196,7 +196,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         <div className="mb-4">
           <div className="flex gap-3 mb-3">
             <div className="flex-1">
-              <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2">图像比例</p>
+              <p className="text-[10px] font-bold text-text-muted/70 uppercase tracking-wider mb-2">图像比例</p>
               <Dropdown
                 options={[
                   { value: 'auto', label: '自动' },
@@ -213,7 +213,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
               />
             </div>
             <div className="flex-1">
-              <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-2">画质</p>
+              <p className="text-[10px] font-bold text-text-muted/70 uppercase tracking-wider mb-2">画质</p>
               <Dropdown
                 options={['1K', '2K', '4K'].map(q => ({ value: q, label: q }))}
                 value={quality}
@@ -224,18 +224,18 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           </div>
         </div>
 
-        <div className="bg-surface-1 rounded-xl p-3.5 mb-4 border border-white/[0.04]">
+        <div className="bg-surface-1 rounded-xl p-3.5 mb-4 border border-border-subtle/70">
           <textarea
             placeholder={placeholder}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            className="w-full bg-transparent border-none text-sm text-white resize-none outline-none min-h-[72px] placeholder:text-slate-600"
+            className="w-full bg-transparent border-none text-sm text-text-primary resize-none outline-none min-h-[72px] placeholder:text-text-muted"
           />
-          <div className="flex justify-end gap-1.5 mt-2 pt-2 border-t border-white/[0.04]">
+          <div className="flex justify-end gap-1.5 mt-2 pt-2 border-t border-border-subtle/70">
             {showGeneratorButton && (
               <button
                 onClick={() => setShowPromptGenerator(true)}
-                className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200"
+                className="p-2 text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200"
                 title="提示词生成器"
               >
                 <FileJson className="w-4 h-4" />
@@ -244,14 +244,14 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             <button
               onClick={handlePolishPrompt}
               disabled={isPolishing || !prompt.trim()}
-              className="p-2 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500"
+              className="p-2 text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-muted"
               title="润色提示"
             >
               <Sparkles className={`w-4 h-4 ${isPolishing ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={() => setPrompt('')}
-              className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-200"
+              className="p-2 text-text-muted hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-200"
               title="清空"
             >
               <Trash2 className="w-4 h-4" />
@@ -264,7 +264,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
             !hasApiKey
               ? 'bg-gradient-to-br from-[#3f3a2e] to-[#2e2a22] text-amber-200/80 hover:text-amber-200 border border-amber-500/15 hover:border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.06)] hover:shadow-[0_0_20px_rgba(245,158,11,0.10)] cursor-pointer'
-              : 'btn-primary text-white disabled:bg-slate-700 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none'
+              : 'btn-primary text-white disabled:bg-surface-3 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none'
           }`}
         >
           {!hasApiKey ? (

@@ -15,7 +15,7 @@ import { useCachedImageUrl } from '../hooks/useCachedImage';
 // 参考图缩略图 - 解析缓存 key
 const RefImageThumb: React.FC<{ cacheKey: string; alt: string }> = ({ cacheKey, alt }) => {
   const [displayUrl] = useCachedImageUrl(cacheKey);
-  if (!displayUrl) return <div className="w-full h-full flex items-center justify-center bg-surface-1 text-slate-600 text-[10px]">已失效</div>;
+  if (!displayUrl) return <div className="w-full h-full flex items-center justify-center bg-surface-1 text-text-muted text-[10px]">已失效</div>;
   return <img src={displayUrl} alt={alt} className="w-full h-full object-cover" referrerPolicy="no-referrer" />;
 };
 
@@ -38,7 +38,7 @@ const EditHistoryThumbnail: React.FC<{
 
   if (state === 'missing' || imgError || !displayUrl) {
     return (
-      <div className={`${className || ''} flex flex-col items-center justify-center bg-surface-1 text-slate-600`}>
+      <div className={`${className || ''} flex flex-col items-center justify-center bg-surface-1 text-text-muted`}>
         <ImageOff className="w-6 h-6 mb-1" />
         <span className="text-[10px]">已失效</span>
       </div>
@@ -406,13 +406,13 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
   const referenceImageContent = (
     <div className="mb-6 mt-2">
-      <p className="text-[10px] font-bold text-slate-500/70 uppercase tracking-wider mb-3">参考图</p>
+      <p className="text-[10px] font-bold text-text-muted/70 uppercase tracking-wider mb-3">参考图</p>
       {referenceImages.length > 0 ? (
         <div className="grid grid-cols-3 gap-2 mb-3">
           {referenceImages.map((img, idx) => (
             <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-surface-1 relative group">
               <RefImageThumb cacheKey={img} alt={`参考图 ${idx + 1}`} />
-              <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/60 dark:bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => setEditingImageIndex(idx)}
                   className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
@@ -429,7 +429,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         </div>
       ) : null}
       <div
-        className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-white/[0.06] hover:border-indigo-500/30'}`}
+        className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-border-subtle hover:border-indigo-500/30'}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -442,10 +442,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             <span className="text-xs">上传中...</span>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-1 text-slate-400">
+          <div className="flex flex-col items-center gap-1 text-text-secondary">
             <Upload className="w-5 h-5" />
             <span className="text-xs">{referenceImages.length > 0 ? '添加更多' : '点击或拖拽上传'}</span>
-            <span className="text-[10px] text-slate-500">支持 Ctrl+V 粘贴</span>
+            <span className="text-[10px] text-text-muted">支持 Ctrl+V 粘贴</span>
           </div>
         )}
       </div>
@@ -473,38 +473,38 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           {/* Result Area */}
           {(result || pendingResult) ? (
             <div className="mb-6">
-              <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-white/[0.04]">
+              <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-border-subtle/70">
                 <img src={displayResult || displayPendingResult || ''} alt="生成结果" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
               </div>
             </div>
           ) : isGenerating ? (
             <div className="aspect-video rounded-2xl border-2 border-dashed bg-surface-2/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 border-indigo-500/50">
-              <div className="w-12 h-12 bg-surface-1 rounded-xl flex items-center justify-center mb-4 shadow-lg animate-pulse border border-white/[0.06]">
+              <div className="w-12 h-12 bg-surface-1 rounded-xl flex items-center justify-center mb-4 shadow-lg animate-pulse border border-border-subtle">
                 <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
               </div>
-              <h3 className="text-base font-bold text-white mb-1">正在生成图片...</h3>
-              <p className="text-slate-500 text-xs">可切换到其他菜单继续操作</p>
+              <h3 className="text-base font-bold text-text-primary mb-1">正在生成图片...</h3>
+              <p className="text-text-muted text-xs">可切换到其他菜单继续操作</p>
             </div>
           ) : (
-            <div className="upload-zone aspect-video flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 border-white/[0.06]">
-              <div className="w-12 h-12 bg-surface-2 rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-white/[0.06]">
+            <div className="upload-zone aspect-video flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 shadow-lg border-border-subtle">
+              <div className="w-12 h-12 bg-surface-2 rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-border-subtle">
                 <Wand2 className="w-6 h-6 text-indigo-500" />
               </div>
-              <h3 className="text-base font-bold text-white mb-1">全能图片修改</h3>
-              <p className="text-slate-500 text-xs">上传参考图并输入修改指令</p>
+              <h3 className="text-base font-bold text-text-primary mb-1">全能图片修改</h3>
+              <p className="text-text-muted text-xs">上传参考图并输入修改指令</p>
             </div>
           )}
 
           {/* Result Actions */}
           {(result || pendingResult) && (
             <div className="flex justify-end gap-2 mb-4">
-              <button onClick={() => { const img = result || pendingResult; if (img) { setReferenceImages([img]); showToast('info', '已设置为参考图'); } }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-white text-xs font-medium rounded-lg border border-white/[0.06]">
+              <button onClick={() => { const img = result || pendingResult; if (img) { setReferenceImages([img]); showToast('info', '已设置为参考图'); } }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle">
                 <Quote className="w-3.5 h-3.5" />引用
               </button>
-              <button onClick={() => { const img = result || pendingResult; if (img) handleDownload(img); }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-white text-xs font-medium rounded-lg border border-white/[0.06]">
+              <button onClick={() => { const img = result || pendingResult; if (img) handleDownload(img); }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle">
                 <Download className="w-3.5 h-3.5" />下载
               </button>
-              <button onClick={() => { setResult(null); setPendingResult(null); }} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-white/[0.06] hover:border-rose-500/20 transition-all duration-200">
+              <button onClick={() => { setResult(null); setPendingResult(null); }} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-border-subtle hover:border-rose-500/20 transition-all duration-200">
                 <Trash2 className="w-4 h-4" />清除
               </button>
             </div>
@@ -514,7 +514,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           <div className="mt-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
-                <h2 className="text-sm font-bold text-white">全能修改 <span className="text-slate-500 font-normal text-xs ml-2">历史记录</span></h2>
+                <h2 className="text-sm font-bold text-text-primary">全能修改 <span className="text-text-muted font-normal text-xs ml-2">历史记录</span></h2>
                 {generationHistory.length > 0 && (
                   <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-xs rounded-full">{generationHistory.length}</span>
                 )}
@@ -522,9 +522,9 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
               <div className="flex items-center gap-3">
                 {generationHistory.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-500 text-xs">缩略图</span>
-                    <input type="range" min="60" max="300" value={thumbnailSize} onChange={(e) => setThumbnailSize(Number(e.target.value))} className="w-20 h-1 bg-[#2a2e38] rounded-lg appearance-none cursor-pointer accent-indigo-500" />
-                    <span className="text-slate-500 text-xs">{thumbnailSize}px</span>
+                    <span className="text-text-muted text-xs">缩略图</span>
+                    <input type="range" min="60" max="300" value={thumbnailSize} onChange={(e) => setThumbnailSize(Number(e.target.value))} className="w-20 h-1 bg-surface-3 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+                    <span className="text-text-muted text-xs">{thumbnailSize}px</span>
                   </div>
                 )}
                 {generationHistory.length > 0 && (
@@ -540,7 +540,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className="history-card rounded-xl overflow-hidden bg-surface-2 relative group cursor-pointer shrink-0 border border-white/[0.04]"
+                    className="history-card rounded-xl overflow-hidden bg-surface-2 relative group cursor-pointer shrink-0 border border-border-subtle/70"
                     style={{ width: thumbnailSize, height: thumbnailSize }}
                     onClick={() => handleItemClick(record)}
                   >
@@ -550,16 +550,16 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                       onMissing={() => handleDeleteHistory(record.id, true)}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                    <div className="thumb-overlay absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
                       <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">
+                      <p className="text-[9px] text-text-secondary mt-0.5">
                         {new Date(record.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
                       <div className="flex gap-1 mt-1">
-                        <button onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrls && record.referenceImageUrls.length > 0) { setReferenceImages(record.referenceImageUrls); showToast('success', `已引用提示词和${record.referenceImageUrls.length}张参考图`); } else if (record.referenceImageUrl) { setReferenceImages([record.referenceImageUrl]); showToast('success', '已引用提示词和参考图'); } else { showToast('info', '已引用提示词'); } }} className="p-1.5 bg-white/10 rounded hover:bg-indigo-500/50 transition-colors" title="复用"><Quote className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: record.prompt || '生成结果', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDownload(record.imageUrl); }} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 bg-white/10 rounded hover:bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrls && record.referenceImageUrls.length > 0) { setReferenceImages(record.referenceImageUrls); showToast('success', `已引用提示词和${record.referenceImageUrls.length}张参考图`); } else if (record.referenceImageUrl) { setReferenceImages([record.referenceImageUrl]); showToast('success', '已引用提示词和参考图'); } else { showToast('info', '已引用提示词'); } }} className="p-1.5 thumb-btn rounded hover:!bg-indigo-500/50 transition-colors" title="复用"><Quote className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: record.prompt || '生成结果', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 thumb-btn rounded transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDownload(record.imageUrl); }} className="p-1.5 thumb-btn rounded transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 thumb-btn rounded hover:!bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
                       </div>
                     </div>
                   </motion.div>
@@ -567,7 +567,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-6 rounded-xl">
-                <p className="text-slate-500 text-xs">暂无历史记录</p>
+                <p className="text-text-muted text-xs">暂无历史记录</p>
               </div>
             )}
           </div>

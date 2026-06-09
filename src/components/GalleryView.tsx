@@ -55,7 +55,7 @@ function distributeToColumns(images: GalleryImage[], columnCount: number): Galle
 }
 
 const SkeletonCard = () => (
-  <div className="rounded-lg overflow-hidden bg-surface-2 border border-white/[0.04]">
+  <div className="rounded-lg overflow-hidden bg-surface-2 border border-border-subtle/70">
     <div className="shimmer" style={{ aspectRatio: `${0.7 + Math.random() * 0.8}` }} />
   </div>
 );
@@ -127,7 +127,7 @@ const LazyGalleryCard: React.FC<{
         duration: 0.35,
         ease: [0.25, 0.46, 0.45, 0.94],
       }}
-      className="relative group cursor-pointer rounded-lg overflow-hidden bg-surface-2 border border-white/[0.04] hover:border-indigo-500/25 transition-all duration-300"
+      className="relative group cursor-pointer rounded-lg overflow-hidden bg-surface-2 border border-border-subtle/70 hover:border-indigo-500/25 transition-all duration-300"
       style={{
         boxShadow: isHovered
           ? '0 8px 40px rgba(99, 102, 241, 0.12), 0 2px 12px rgba(0, 0, 0, 0.4)'
@@ -146,7 +146,7 @@ const LazyGalleryCard: React.FC<{
         >
           {isVisible && !hasError && (
             <div className="flex flex-col items-center gap-2 opacity-40">
-              <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
+              <Loader2 className="w-5 h-5 text-text-muted animate-spin" />
             </div>
           )}
         </div>
@@ -239,7 +239,7 @@ const LazyGalleryCard: React.FC<{
         <p className="text-xs text-white font-semibold truncate mb-0.5">
           {image.name.replace(/\.[^.]+$/, '')}
         </p>
-        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+        <div className="flex items-center gap-2 text-[10px] text-text-secondary">
           <span>{formatFileSize(image.size)}</span>
           {hasPrompt && (
             <>
@@ -397,7 +397,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-slate-400 max-w-2xl mx-auto text-sm leading-relaxed"
+            className="text-text-secondary max-w-2xl mx-auto text-sm leading-relaxed"
           >
             探索来自 Interior Masters 社区的最新创作，发现无限设计灵感
           </motion.p>
@@ -407,7 +407,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
           <div className="px-6 lg:px-8 pb-8">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-white">加载中</span>
+                <span className="text-sm font-bold text-text-primary">加载中</span>
                 <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
               </div>
             </div>
@@ -425,8 +425,8 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
             <div className="w-16 h-16 bg-rose-500/10 rounded-2xl flex items-center justify-center mb-6 border border-rose-500/10">
               <AlertCircle className="w-8 h-8 text-rose-400" />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">加载失败</h2>
-            <p className="text-slate-500 text-sm mb-4">{error}</p>
+            <h2 className="text-xl font-bold text-text-primary mb-2">加载失败</h2>
+            <p className="text-text-muted text-sm mb-4">{error}</p>
             <button
               onClick={fetchImages}
               className="btn-primary px-6 py-2.5 rounded-xl text-white text-sm font-bold flex items-center gap-2"
@@ -440,8 +440,8 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
             <div className="w-20 h-20 bg-indigo-500/10 rounded-2xl flex items-center justify-center mb-6 animate-float border border-indigo-500/10">
               <Globe className="w-10 h-10 text-indigo-500/70" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">画廊暂无作品</h2>
-            <p className="text-slate-400 max-w-md text-center text-sm leading-relaxed">
+            <h2 className="text-2xl font-bold text-text-primary mb-2">画廊暂无作品</h2>
+            <p className="text-text-secondary max-w-md text-center text-sm leading-relaxed">
               社区画廊正在积累更多精彩作品，敬请期待。
             </p>
           </div>
@@ -449,12 +449,12 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
           <div className="px-6 lg:px-8 pb-8">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-white">全部作品</span>
+                <span className="text-sm font-bold text-text-primary">全部作品</span>
                 <span className="px-2.5 py-0.5 bg-indigo-500/10 text-indigo-400 text-xs rounded-full font-medium">
                   {images.length}
                 </span>
                 {loadedCount < images.length && (
-                  <span className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                  <span className="text-[10px] text-text-muted flex items-center gap-1.5">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     {loadedCount}/{images.length}
                   </span>
@@ -462,7 +462,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
               </div>
               <button
                 onClick={fetchImages}
-                className="flex items-center gap-2 px-3 py-1.5 bg-surface-2 hover:bg-surface-3 text-slate-400 hover:text-white text-xs font-medium rounded-lg border border-white/[0.06] transition-all duration-200"
+                className="flex items-center gap-2 px-3 py-1.5 bg-surface-2 hover:bg-surface-3 text-text-secondary hover:text-text-primary text-xs font-medium rounded-lg border border-border-subtle transition-all duration-200"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 刷新

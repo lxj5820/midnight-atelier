@@ -404,7 +404,7 @@ const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ imageUrl, isOpen, onClo
                   360° 全景查看
                 </span>
               </div>
-              <div className="flex items-center gap-4 text-slate-400 text-sm font-mono">
+              <div className="flex items-center gap-4 text-text-secondary text-sm font-mono">
                 <span>方位: {yaw.toFixed(0)}°</span>
                 <span>俯仰: {pitch.toFixed(0)}°</span>
                 <span className="text-indigo-400 font-bold text-lg">{getCompassDirection(yaw)}</span>
@@ -436,7 +436,7 @@ const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ imageUrl, isOpen, onClo
               <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
                 <div className="flex flex-col items-center gap-4">
                   <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                  <p className="text-slate-400 text-sm">加载全景图中...</p>
+                  <p className="text-text-secondary text-sm">加载全景图中...</p>
                 </div>
               </div>
             )}
@@ -446,7 +446,7 @@ const PanoramaViewer: React.FC<PanoramaViewerProps> = ({ imageUrl, isOpen, onClo
               <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
                 <div className="flex flex-col items-center gap-4 text-center px-4">
                   <p className="text-red-400">{error}</p>
-                  <p className="text-slate-500 text-sm">请确保图片是有效的全景图格式</p>
+                  <p className="text-text-muted text-sm">请确保图片是有效的全景图格式</p>
                 </div>
               </div>
             )}

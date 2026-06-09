@@ -509,16 +509,16 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose} style={{ paddingLeft: 'calc(16rem + 1rem)', paddingTop: 'calc(3.5rem + 1rem)' }}>
       <div
-        className="bg-surface-1 rounded-2xl border border-white/[0.08] w-full max-w-4xl max-h-[calc(100vh-3.5rem-2rem)] overflow-hidden flex flex-col shadow-2xl shadow-black/50"
+        className="bg-surface-1 rounded-2xl border border-border-subtle w-full max-w-4xl max-h-[calc(100vh-3.5rem-2rem)] overflow-hidden flex flex-col shadow-2xl shadow-black/50"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between p-4 border-b border-border-subtle">
           <div className="flex items-center gap-3">
-            <h3 className="text-white font-bold text-base">AI 提示词生成器</h3>
+            <h3 className="text-text-primary font-bold text-base">AI 提示词生成器</h3>
             <div className="relative" ref={presetMenuRef}>
               <button
                 onClick={() => { setShowPresetMenu(!showPresetMenu); setShowSaveDialog(false); }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-2 hover:bg-surface-3 text-slate-300 hover:text-white text-[11px] font-medium rounded-lg border border-white/[0.06] transition-all"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-2 hover:bg-surface-3 text-text-secondary hover:text-text-primary text-[11px] font-medium rounded-lg border border-border-subtle transition-all"
               >
                 <Bookmark className="w-3.5 h-3.5" />
                 预设
@@ -527,7 +527,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                 <ChevronDown className={`w-3 h-3 transition-transform ${showPresetMenu ? 'rotate-180' : ''}`} />
               </button>
               {showPresetMenu && (
-                <div className="absolute top-full left-0 mt-1.5 w-64 bg-surface-2 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
+                <div className="absolute top-full left-0 mt-1.5 w-64 bg-surface-2 border border-border-subtle rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
                   <div className="p-2">
                     <button
                       onClick={() => { setShowSaveDialog(true); setShowPresetMenu(false); }}
@@ -538,23 +538,23 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                     </button>
                   </div>
                   {presets.length > 0 && (
-                    <div className="border-t border-white/[0.06] max-h-[200px] overflow-y-auto custom-scrollbar">
+                    <div className="border-t border-border-subtle max-h-[200px] overflow-y-auto custom-scrollbar">
                       {presets.map(preset => (
                         <div
                           key={preset.id}
-                          className="flex items-center gap-2 px-3 py-2 hover:bg-white/[0.04] transition-colors group cursor-pointer"
+                          className="flex items-center gap-2 px-3 py-2 hover:bg-bg-subtle transition-colors group cursor-pointer"
                           onClick={() => handleLoadPreset(preset)}
                         >
                           <Bookmark className="w-3 h-3 text-indigo-400 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <div className="text-[11px] font-medium text-white truncate">{preset.name}</div>
-                            <div className="text-[9px] text-slate-500">
+                            <div className="text-[11px] font-medium text-text-primary truncate">{preset.name}</div>
+                            <div className="text-[9px] text-text-muted">
                               {new Date(preset.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </div>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDeletePreset(preset.id); }}
-                            className="p-1 text-slate-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all rounded"
+                            className="p-1 text-text-muted hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all rounded"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -563,7 +563,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                     </div>
                   )}
                   {presets.length === 0 && (
-                    <div className="px-3 py-3 text-[11px] text-slate-500 text-center border-t border-white/[0.06]">
+                    <div className="px-3 py-3 text-[11px] text-text-muted text-center border-t border-border-subtle">
                       暂无保存的预设
                     </div>
                   )}
@@ -571,7 +571,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all">
+          <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-bg-subtle rounded-lg transition-all">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -591,13 +591,13 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
             <button
               onClick={handleSavePreset}
               disabled={!presetName.trim()}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-[11px] font-medium rounded-lg transition-colors"
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-surface-3 disabled:cursor-not-allowed text-white text-[11px] font-medium rounded-lg transition-colors"
             >
               保存
             </button>
             <button
               onClick={() => { setShowSaveDialog(false); setPresetName(''); }}
-              className="px-3 py-1.5 bg-surface-3 hover:bg-surface-2 text-slate-300 text-[11px] font-medium rounded-lg transition-colors"
+              className="px-3 py-1.5 bg-surface-3 hover:bg-surface-2 text-text-secondary text-[11px] font-medium rounded-lg transition-colors"
             >
               取消
             </button>
@@ -605,15 +605,15 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
         )}
 
         <div className="flex-1 flex overflow-hidden min-h-0">
-          <div className="w-1/2 border-r border-white/[0.06] overflow-y-auto p-4 custom-scrollbar">
+          <div className="w-1/2 border-r border-border-subtle overflow-y-auto p-4 custom-scrollbar">
             {Object.entries(CONFIG).map(([sectionId, section]) => {
               const isToggleable = ['scene', 'light', 'camera'].includes(sectionId);
               const isEnabled = enabledSections.has(sectionId);
 
               return (
-              <div key={sectionId} className={`mb-3 bg-surface-2 rounded-xl border border-white/[0.04] overflow-hidden ${!isEnabled ? 'opacity-60' : ''}`}>
+              <div key={sectionId} className={`mb-3 bg-surface-2 rounded-xl border border-border-subtle/70 overflow-hidden ${!isEnabled ? 'opacity-60' : ''}`}>
                 <div
-                  className="flex items-center justify-between p-2.5 cursor-pointer hover:bg-white/[0.03] transition-colors"
+                  className="flex items-center justify-between p-2.5 cursor-pointer hover:bg-bg-subtle transition-colors"
                   onClick={() => toggleSection(sectionId)}
                 >
                   <div className="flex items-center gap-2.5">
@@ -640,19 +640,19 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                       </div>
                     )}
                     <div>
-                      <div className="text-white font-medium text-sm">{section.title}</div>
-                      <div className="text-slate-500 text-[11px]">{section.desc}</div>
+                      <div className="text-text-primary font-medium text-sm">{section.title}</div>
+                      <div className="text-text-muted text-[11px]">{section.desc}</div>
                     </div>
                   </div>
                   <div className={`transform transition-transform ${openSections.has(sectionId) ? 'rotate-180' : ''}`}>
-                    <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+                    <svg className="w-3.5 h-3.5 text-text-secondary" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
                   </div>
                 </div>
 
                 {openSections.has(sectionId) && (
-                  <div className="p-2.5 border-t border-white/[0.04]">
+                  <div className="p-2.5 border-t border-border-subtle/70">
                     <div className="space-y-2.5">
                       {section.fields.filter(f => f.type === 'select').map(field => {
                         const key = `${sectionId}__${field.key}`;
@@ -669,7 +669,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
 
                         return (
                           <div key={field.key}>
-                            <label className="text-slate-400 text-[11px] font-medium mb-1 block">{field.label}</label>
+                            <label className="text-text-secondary text-[11px] font-medium mb-1 block">{field.label}</label>
                             <div className="flex flex-wrap gap-1">
                               {options.slice(0, -1).map((opt, idx) => (
                                 <button
@@ -678,7 +678,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                                   className={`px-2 py-0.5 rounded-md text-[11px] transition-all ${
                                     selectedIndex === idx
                                       ? 'bg-indigo-600 text-white'
-                                      : 'bg-surface-1 text-slate-400 hover:bg-surface-3'
+                                      : 'bg-surface-1 text-text-secondary hover:bg-surface-3'
                                   }`}
                                 >
                                   {opt.length > 10 ? opt.substring(0, 10) + '...' : opt}
@@ -695,7 +695,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                                   className={`px-2 py-0.5 rounded-md text-[11px] transition-all group relative ${
                                     selectedIndex === builtInCount + idx
                                       ? 'bg-indigo-600 text-white'
-                                      : 'bg-surface-1 text-slate-400 hover:bg-surface-3'
+                                      : 'bg-surface-1 text-text-secondary hover:bg-surface-3'
                                   }`}
                                 >
                                   {btn.shortLabel}
@@ -716,7 +716,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                                 className={`px-2 py-0.5 rounded-md text-[11px] transition-all ${
                                   isCustom
                                     ? 'bg-indigo-600 text-white'
-                                    : 'bg-surface-1 text-slate-400 hover:bg-surface-3'
+                                    : 'bg-surface-1 text-text-secondary hover:bg-surface-3'
                                 }`}
                               >
                                 自定义
@@ -755,19 +755,19 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
           </div>
 
           <div className="w-1/2 flex flex-col">
-            <div className="flex items-center justify-between p-3 border-b border-white/[0.06]">
-              <div className="text-slate-400 text-[11px] font-medium">实时预览</div>
+            <div className="flex items-center justify-between p-3 border-b border-border-subtle">
+              <div className="text-text-secondary text-[11px] font-medium">实时预览</div>
               <div className="flex gap-1.5">
                 <button
                   onClick={handleCopy}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all"
+                  className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-bg-subtle rounded-lg transition-all"
                   title="复制"
                 >
                   <Copy className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={handleReset}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all"
+                  className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-bg-subtle rounded-lg transition-all"
                   title="重置"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -776,17 +776,17 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
             </div>
             <div className="flex-1 overflow-auto p-4 custom-scrollbar min-h-0">
               <pre
-                className="text-xs font-mono whitespace-pre-wrap text-slate-300 leading-relaxed"
+                className="text-xs font-mono whitespace-pre-wrap text-text-secondary leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: syntaxHighlight(previewContent) }}
               />
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2.5 p-3 border-t border-white/[0.06]">
+        <div className="flex items-center justify-end gap-2.5 p-3 border-t border-border-subtle">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-surface-3 text-white text-sm font-medium hover:bg-surface-2 transition-all border border-white/[0.04]"
+            className="px-4 py-2 rounded-xl bg-surface-3 text-text-primary text-sm font-medium hover:bg-surface-2 transition-all border border-border-subtle/70"
           >
             取消
           </button>

@@ -929,12 +929,12 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
 
   return (
     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
-      <div className="bg-[#1c1f26] rounded-2xl w-[95vw] h-[95vh] flex flex-col overflow-hidden shadow-2xl">
+      <div className="bg-surface-2 rounded-2xl w-[95vw] h-[95vh] flex flex-col overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2e38]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-4">
-            <h2 className="text-white font-bold">图片编辑器</h2>
-            <span className="text-slate-500 text-xs">
+            <h2 className="text-text-primary font-bold">图片编辑器</h2>
+            <span className="text-text-muted text-xs">
               {tool === 'text' ? '点击画布添加文字'
                 : tool === 'eraser' ? '点击对象删除（不影响底图）'
                 : isShapeTool(tool) ? '拖拽绘制图形，松开确认'
@@ -942,7 +942,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onCancel} className="flex items-center gap-2 px-3 py-1.5 bg-[#2a2e38] hover:bg-[#3a3e48] text-white text-sm rounded-lg transition-colors">
+            <button onClick={onCancel} className="flex items-center gap-2 px-3 py-1.5 bg-surface-3 hover:bg-border-light text-text-primary text-sm rounded-lg transition-colors">
               <X className="w-4 h-4" />取消
             </button>
             <button onClick={handleSave} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
@@ -953,34 +953,34 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
 
         <div className="flex flex-1 overflow-hidden">
           {/* Left Toolbar */}
-          <div className="w-16 bg-[#111317] border-r border-[#2a2e38] flex flex-col items-center py-4 gap-1">
+          <div className="w-16 bg-surface-1 border-r border-border flex flex-col items-center py-4 gap-1">
             {toolBtns.map(({ id, icon, title, key }) => (
               <button key={id} onClick={() => setTool(id)} title={`${title} (${key})`}
-                className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative ${tool === id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-[#2a2e38] hover:text-white'}`}>
+                className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative ${tool === id ? 'bg-indigo-600 text-white' : 'text-text-secondary hover:bg-surface-3 hover:text-text-primary'}`}>
                 {icon}
                 <span className="absolute bottom-0.5 right-0.5 text-[8px] opacity-50">{key}</span>
               </button>
             ))}
-            <div className="w-8 border-t border-[#2a2e38] my-1" />
+            <div className="w-8 border-t border-border my-1" />
             <button onClick={handleImageImport} title="导入图片 (9)"
-              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:bg-[#2a2e38] hover:text-white">
+              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-text-secondary hover:bg-surface-3 hover:text-text-primary">
               <ImagePlus className="w-5 h-5" />
               <span className="absolute bottom-0.5 right-0.5 text-[8px] opacity-50">9</span>
             </button>
             <div className="flex-1" />
             <button onClick={handleUndo} disabled={!canUndo} title="撤销 (Ctrl+Z)"
-              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:bg-[#2a2e38] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
+              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-text-secondary hover:bg-surface-3 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed">
               <Undo2 className="w-5 h-5" />
             </button>
             <button onClick={handleRedo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)"
-              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:bg-[#2a2e38] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
+              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-text-secondary hover:bg-surface-3 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed">
               <Redo2 className="w-5 h-5" />
             </button>
           </div>
 
           {/* Canvas */}
           <div ref={containerRef}
-            className={`flex-1 relative bg-[#111317] overflow-hidden flex items-center justify-center transition-colors ${isDragOver ? 'ring-2 ring-indigo-500 ring-inset bg-indigo-500/5' : ''}`}
+            className={`flex-1 relative bg-surface-1 overflow-hidden flex items-center justify-center transition-colors ${isDragOver ? 'ring-2 ring-indigo-500 ring-inset bg-indigo-500/5' : ''}`}
             onClick={(e) => { if (tool === 'text') addText(e); }}
             onDragOver={handleCanvasDragOver}
             onDragLeave={handleCanvasDragLeave}
@@ -999,11 +999,11 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
           </div>
 
           {/* Right Panel */}
-          <div className="w-60 bg-[#111317] border-l border-[#2a2e38] p-4 overflow-y-auto custom-scrollbar flex flex-col gap-5">
+          <div className="w-60 bg-surface-1 border-l border-border p-4 overflow-y-auto custom-scrollbar flex flex-col gap-5">
 
             {/* 描边/画笔颜色 */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+              <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-2">
                 {tool === 'brush' ? '画笔颜色' : '描边颜色'}
               </p>
               <div className="grid grid-cols-6 gap-1.5 mb-2">
@@ -1031,20 +1031,20 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
                     if (selectedObject) { setSelStroke(v); applyToSelected({ stroke: v }); }
                     else { setStrokeColor(v); setBrushColor(v); }
                   }}
-                  className="flex-1 bg-[#1c1f26] border border-[#2a2e38] rounded px-2 py-1 text-white text-xs outline-none focus:border-indigo-500" />
+                  className="flex-1 bg-surface-2 border border-border rounded px-2 py-1 text-text-primary text-xs outline-none focus:border-indigo-500" />
               </div>
             </div>
 
             {/* 填充颜色（图形工具或选中非画笔非文字对象） */}
             {showFillPanel && (
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">填充颜色</p>
+                <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-2">填充颜色</p>
                 <button
                   onClick={() => {
                     if (selectedObject) { setSelFill(''); applyToSelected({ fill: 'transparent' }); }
                     else setFillColor('');
                   }}
-                  className={`mb-2 px-2 py-0.5 text-xs rounded border transition-colors ${(selectedObject ? selFill : fillColor) === '' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#1c1f26] border-[#2a2e38] text-slate-400 hover:text-white'}`}>
+                  className={`mb-2 px-2 py-0.5 text-xs rounded border transition-colors ${(selectedObject ? selFill : fillColor) === '' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-surface-2 border-border text-text-secondary hover:text-text-primary'}`}>
                   无填充
                 </button>
                 <div className="grid grid-cols-6 gap-1.5 mb-2">
@@ -1070,7 +1070,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
 
             {/* 线条粗细 */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+              <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-2">
                 线条粗细: {selectedObject ? selLineWidth : brushSize}px
               </p>
               <input type="range" min="1" max="50"
@@ -1080,13 +1080,13 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
                   if (selectedObject) { setSelLineWidth(v); applyToSelected({ strokeWidth: v }); }
                   else setBrushSize(v);
                 }}
-                className="w-full h-2 bg-[#2a2e38] rounded-lg appearance-none cursor-pointer accent-indigo-500" />
-              <div className="flex justify-between text-slate-500 text-[10px] mt-1"><span>细</span><span>粗</span></div>
+                className="w-full h-2 bg-surface-3 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+              <div className="flex justify-between text-text-muted text-[10px] mt-1"><span>细</span><span>粗</span></div>
             </div>
 
             {/* 不透明度 */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+              <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-2">
                 不透明度: {selectedObject ? selOpacity : 100}%
               </p>
               <input type="range" min="10" max="100"
@@ -1095,24 +1095,24 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
                   const v = Number(e.target.value);
                   if (selectedObject) { setSelOpacity(v); applyToSelected({ opacity: v / 100 }); }
                 }}
-                className="w-full h-2 bg-[#2a2e38] rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+                className="w-full h-2 bg-surface-3 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
             </div>
 
             {/* 字体大小 */}
             {tool === 'text' && (
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">字体大小: {fontSize}px</p>
+                <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-2">字体大小: {fontSize}px</p>
                 <input type="range" min="10" max="120" value={fontSize}
                   onChange={e => setFontSize(Number(e.target.value))}
-                  className="w-full h-2 bg-[#2a2e38] rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+                  className="w-full h-2 bg-surface-3 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
               </div>
             )}
 
             {/* 画笔预览 */}
             {(tool === 'brush' || tool === 'eraser') && !selectedObject && (
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">预览</p>
-                <div className="w-full aspect-square rounded-lg border border-[#2a2e38] flex items-center justify-center bg-[#1c1f26]">
+                <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-2">预览</p>
+                <div className="w-full aspect-square rounded-lg border border-border flex items-center justify-center bg-surface-2">
                   <div className="rounded-full" style={{
                     width: Math.min(brushSize * 2, 80),
                     height: Math.min(brushSize * 2, 80),

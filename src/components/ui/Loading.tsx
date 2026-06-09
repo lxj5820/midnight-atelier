@@ -11,10 +11,10 @@ export const LoadingSpinner: React.FC<{ className?: string }> = ({ className = '
 
 export const LoadingPage: React.FC = () => {
   return (
-    <div className="flex items-center justify-center h-screen bg-[#111317]">
+    <div className="flex items-center justify-center h-screen bg-surface-1">
       <div className="text-center">
         <LoadingSpinner className="mb-4" />
-        <p className="text-slate-400 text-sm">加载中...</p>
+        <p className="text-text-secondary text-sm">加载中...</p>
       </div>
     </div>
   );

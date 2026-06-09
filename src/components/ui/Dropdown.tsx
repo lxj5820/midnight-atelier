@@ -48,19 +48,20 @@ export const Dropdown: React.FC<DropdownProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-surface-1 border border-white/[0.06] rounded-xl py-2.5 px-4 text-sm text-white cursor-pointer flex justify-between items-center transition-all duration-200 hover:bg-surface-3 hover:border-white/[0.1] focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/10"
+        className="w-full bg-surface-1 border border-border rounded-xl py-2.5 px-4 text-sm text-text-primary cursor-pointer flex justify-between items-center transition-all duration-200 hover:bg-surface-3 hover:border-indigo-500/40 focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/15 shadow-sm"
         style={{ outline: 'none' }}
       >
         <span className="truncate flex items-center gap-2">{selectedOption?.icon}{selectedOption?.label || '请选择'}</span>
         <ChevronDown
-          className={`w-4 h-4 text-slate-500 transition-transform duration-200 flex-shrink-0 ml-2 ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-text-muted transition-transform duration-200 flex-shrink-0 ml-2 ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
       <div
-        className={`absolute ${direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 right-0 bg-surface-2 border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden transition-all duration-150 ${
+        className={`absolute ${direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 right-0 bg-surface-1 border border-border rounded-xl shadow-2xl z-50 overflow-hidden transition-all duration-150 ${
           isOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible pointer-events-none translate-y-1'
         }`}
+        style={{ boxShadow: '0 10px 40px var(--c-shadow-heavy)' }}
       >
         <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-1.5">
           {options.map(option => (
@@ -69,13 +70,13 @@ export const Dropdown: React.FC<DropdownProps> = ({
               onClick={() => handleSelect(option.value)}
               className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg cursor-pointer transition-all duration-150 ${
                 option.value === value
-                  ? 'bg-indigo-500/15 text-indigo-400'
-                  : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
+                  ? 'bg-indigo-500/15 text-indigo-500 font-semibold'
+                  : 'text-text-secondary hover:bg-bg-subtle hover:text-text-primary'
               }`}
             >
               <span className="pr-2 truncate flex items-center gap-2">{option.icon}{option.label}</span>
               {option.value === value && (
-                <Check className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+                <Check className="w-3 h-3 text-indigo-500 flex-shrink-0" />
               )}
             </div>
           ))}
