@@ -69,18 +69,18 @@ export const Dropdown: React.FC<DropdownProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (!isOpen) return;
       const target = event.target as Node;
-      if (
-        dropdownRef.current && !dropdownRef.current.contains(target) &&
-        panelRef.current && !panelRef.current.contains(target)
-      ) {
+      const insideButton = dropdownRef.current?.contains(target) ?? false;
+      const insidePanel = panelRef.current?.contains(target) ?? false;
+      if (!insideButton && !insidePanel) {
         setIsOpen(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue);
