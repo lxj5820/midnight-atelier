@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { downloadImage } from '../utils/download';
 import { useCachedImageUrl } from '../hooks/useCachedImage';
+import { useMobile } from '../hooks/useMobile';
 
 interface ImagePreviewModalProps {
   imageUrl: string;
@@ -52,6 +53,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   const displayUrl = useCachedImageUrl(imageUrl)[0];
   const [showMore, setShowMore] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const isMobile = useMobile();
 
   const handleCopyPrompt = useCallback(() => {
     if (prompt) {
@@ -94,12 +96,12 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 bg-black/95 z-50 flex"
+      className={`fixed inset-0 bg-black/95 z-50 flex ${isMobile ? 'flex-col' : 'flex-row'}`}
       onClick={onClose}
     >
       {/* Left: Image Area */}
       <div
-        className="flex-1 flex items-center justify-center relative overflow-hidden"
+        className={`${isMobile ? 'h-[50vh] w-full' : 'flex-1'} flex items-center justify-center relative overflow-hidden`}
       >
         {/* Close button - top right of image area */}
         <button
@@ -158,7 +160,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
 
       {/* Right: Info Panel */}
       <div
-        className="w-[380px] bg-surface-1 border-l border-border flex flex-col overflow-y-auto custom-scrollbar"
+        className={`${isMobile ? 'w-full border-t' : 'w-[380px] border-l'} bg-surface-1 border-border flex flex-col overflow-y-auto custom-scrollbar`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

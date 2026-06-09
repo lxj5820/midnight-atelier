@@ -24,6 +24,8 @@ import {
   AlertTriangle,
   Sun,
   Moon,
+  Menu,
+  Settings,
 } from 'lucide-react';
 import { useApiKey } from './ApiKeyContext';
 import { useTokenQuery } from './context/TokenQueryContext';
@@ -32,6 +34,7 @@ import type { MenuItemId } from './menuConfig';
 import { getPresetsForMenu } from './visualPresetConfig';
 import { useGeneration } from './GenerationContext';
 import type { PreviewImageData } from './types';
+import { useMobile } from './hooks/useMobile';
 
 import EditWorkspace from './components/EditWorkspace';
 import GalleryView from './components/GalleryView';
@@ -82,12 +85,18 @@ const Sidebar = ({
   activeMenuItem,
   setActiveMenuItem,
   setModel,
+  isMobile,
+  isOpen,
+  onClose,
 }: {
   currentView: View,
   setView: (v: View) => void,
   activeMenuItem: MenuItemId,
   setActiveMenuItem: (id: MenuItemId) => void,
   setModel: (m: string) => void,
+  isMobile: boolean,
+  isOpen: boolean,
+  onClose: () => void,
 }) => {
   const menuItems = menuItemsConfig;
   const groups = Array.from(new Set(menuItems.map(item => item.group)));
@@ -100,10 +109,11 @@ const Sidebar = ({
     } else {
       setView('workspace');
     }
+    if (isMobile) onClose();
   };
 
-  return (
-    <aside className="w-64 bg-surface-2 h-screen flex flex-col border-r border-border fixed left-0 top-0 z-40">
+  const sidebarContent = (
+    <>
       <div className="p-6 mb-4">
         <div className="flex items-center gap-3 mb-1">
           <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center">
@@ -146,7 +156,7 @@ const Sidebar = ({
 
       <div className="mt-auto p-2 border-t border-border space-y-2">
         <div
-          onClick={() => { setView('settings'); setActiveMenuItem('workspace' as MenuItemId); }}
+          onClick={() => { setView('settings'); setActiveMenuItem('workspace' as MenuItemId); if (isMobile) onClose(); }}
           className="p-3 bg-surface-1 rounded-xl flex items-center gap-3 group cursor-pointer hover:bg-surface-3 transition-colors"
         >
           <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center">
@@ -159,7 +169,49 @@ const Sidebar = ({
           <MoreVertical className="w-3 h-3 text-text-muted" />
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  // 桌面端：固定侧边栏
+  if (!isMobile) {
+    return (
+      <aside className="w-64 bg-surface-2 h-screen flex flex-col border-r border-border fixed left-0 top-0 z-40">
+        {sidebarContent}
+      </aside>
+    );
+  }
+
+  // 移动端：overlay 侧边栏
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={onClose}
+          />
+          <motion.aside
+            initial={{ x: -256 }}
+            animate={{ x: 0 }}
+            exit={{ x: -256 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="w-64 bg-surface-2 h-screen flex flex-col border-r border-border fixed left-0 top-0 z-50"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <span className="text-sm font-bold text-text-primary">导航</span>
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors">
+                <X className="w-4 h-4 text-text-muted" />
+              </button>
+            </div>
+            {sidebarContent}
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
   );
 };
 
@@ -181,20 +233,26 @@ const TopBar = ({
   setView,
   showToast,
   activeTasks,
+  isMobile,
+  onToggleSidebar,
+  onToggleRightPanel,
 }: {
   currentView: View,
   setView: (v: View) => void,
   showToast: (type: 'success' | 'error' | 'info', message: string) => void,
   activeTasks?: Array<{ id: string; menuName: string; startedAt: number }>,
+  isMobile: boolean,
+  onToggleSidebar: () => void,
+  onToggleRightPanel: () => void,
 }) => {
   const { hasApiKey } = useApiKey();
   const { tokenInfo, loading, usedPercent, formatQuota } = useTokenQuery();
   const isGenerating = activeTasks && activeTasks.length > 0;
 
   return (
-    <header className="h-16 border-b border-border bg-surface-1 flex items-center justify-between px-8 sticky top-0 z-40">
+    <header className={`h-14 border-b border-border bg-surface-1 flex items-center justify-between ${isMobile ? 'px-3' : 'px-8'} sticky top-0 z-40`}>
       {isGenerating && (
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 rounded-full shadow-lg shadow-indigo-500/10 z-50" style={{ maxWidth: 'calc(100% - 400px)' }}>
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 rounded-full shadow-lg shadow-indigo-500/10 z-50" style={{ maxWidth: isMobile ? 'calc(100% - 2rem)' : 'calc(100% - 400px)' }}>
           <div className="flex items-center gap-2 flex-wrap">
             {activeTasks!.map((task, idx) => (
               <div key={task.id} className="flex items-center gap-2">
@@ -206,8 +264,13 @@ const TopBar = ({
           </div>
         </div>
       )}
-      <div className="flex items-center gap-8">
-        <nav className="flex items-center gap-6">
+      <div className="flex items-center gap-4">
+        {isMobile && (
+          <button onClick={onToggleSidebar} className="p-2 -ml-1 rounded-lg hover:bg-surface-3 transition-colors">
+            <Menu className="w-5 h-5 text-text-secondary" />
+          </button>
+        )}
+        <nav className="flex items-center gap-4">
           <button
             onClick={() => setView('workspace')}
             className={`text-sm font-bold transition-all relative py-1 ${currentView === 'workspace' ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
@@ -225,7 +288,7 @@ const TopBar = ({
         </nav>
       </div>
       <div className="flex items-center gap-4">
-        {!hasApiKey && (
+        {!hasApiKey && !isMobile && (
           <div
             onClick={() => setView('settings')}
             className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/10 rounded-full border border-amber-500/20 cursor-pointer hover:bg-amber-600/20 transition-colors"
@@ -235,7 +298,7 @@ const TopBar = ({
           </div>
         )}
 
-        {hasApiKey && tokenInfo && (
+        {hasApiKey && tokenInfo && !isMobile && (
           <div
             onClick={() => setView('settings')}
             className="flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer hover:bg-bg-subtle-hover transition-colors bg-bg-subtle border-border-subtle"
@@ -257,12 +320,13 @@ const TopBar = ({
           </div>
         )}
 
-        {hasApiKey && loading && !tokenInfo && (
+        {hasApiKey && loading && !tokenInfo && !isMobile && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-subtle border border-border-subtle">
             <RefreshCw className="w-3.5 h-3.5 text-text-muted animate-spin" />
           </div>
         )}
 
+        {!isMobile && (
         <div className="relative group">
           <div
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-600/10 border border-indigo-500/20 cursor-pointer hover:bg-indigo-600/20 transition-colors"
@@ -295,12 +359,15 @@ const TopBar = ({
             </a>
           </div>
         </div>
+        )}
 
         <ThemeToggle />
 
-        <span className="text-xs font-bold text-text-muted">
-          V3.3
-        </span>
+        {!isMobile && (
+          <span className="text-xs font-bold text-text-muted">
+            V3.3
+          </span>
+        )}
       </div>
     </header>
   );
@@ -627,6 +694,9 @@ export default function App() {
   const [view, setView] = useState<View>('workspace');
   const [activeMenuItem, setActiveMenuItem] = useState<MenuItemId>('workspace');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const isMobile = useMobile();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -712,14 +782,20 @@ export default function App() {
         activeMenuItem={activeMenuItem}
         setActiveMenuItem={setActiveMenuItem}
         setModel={setModel}
+        isMobile={isMobile}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col ml-64 overflow-hidden">
+      <div className={`flex-1 flex flex-col ${isMobile ? '' : 'ml-64'} overflow-hidden`}>
         <TopBar
           currentView={view}
           setView={setView}
           showToast={showToast}
           activeTasks={activeTasks}
+          isMobile={isMobile}
+          onToggleSidebar={() => setIsSidebarOpen(true)}
+          onToggleRightPanel={() => setIsRightPanelOpen(!isRightPanelOpen)}
         />
 
         <main className="flex-1 flex flex-col bg-surface-1 overflow-hidden">
@@ -750,6 +826,9 @@ export default function App() {
                     editingImageIndex={editingImageIndex}
                     setEditingImageIndex={setEditingImageIndex}
                     onNavigateSettings={() => setView('settings')}
+                    isMobile={isMobile}
+                    isRightPanelOpen={isRightPanelOpen}
+                    onToggleRightPanel={() => setIsRightPanelOpen(!isRightPanelOpen)}
                   />
                 </Suspense>
               )}
@@ -764,14 +843,14 @@ export default function App() {
               )}
               {view === 'edit' && (
                 <Suspense fallback={<LoadingSpinner className="h-full" />}>
-                  <EditWorkspace apiKey={apiKey} showToast={showToast} setPreviewImage={setPreviewImage} onNavigateSettings={() => setView('settings')} />
+                  <EditWorkspace apiKey={apiKey} showToast={showToast} setPreviewImage={setPreviewImage} onNavigateSettings={() => setView('settings')} isMobile={isMobile} isRightPanelOpen={isRightPanelOpen} onToggleRightPanel={() => setIsRightPanelOpen(!isRightPanelOpen)} />
                 </Suspense>
               )}
             </motion.div>
           </AnimatePresence>
         </main>
 
-        <footer className="py-6 px-8 border-t border-border text-left text-text-muted text-[10px] w-full">
+        <footer className={`py-4 ${isMobile ? 'px-4' : 'px-8'} border-t border-border text-left text-text-muted text-[10px] w-full`}>
           <p>© 2026 Atelier AI. 致力于用 AI 赋能每一位设计师。</p>
         </footer>
       </div>

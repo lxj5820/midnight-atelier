@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Plus, RefreshCw, Zap, Check, Sparkles, FileJson, X, Trash2 } from 'lucide-react';
 import type { VisualPreset } from '../../visualPresetConfig';
 import type { MenuItemId } from '../../menuConfig';
@@ -101,6 +102,9 @@ interface RightPanelProps {
   hasApiKey: boolean;
   onNavigateSettings?: () => void;
   extraContent?: React.ReactNode;
+  isMobile?: boolean;
+  isRightPanelOpen?: boolean;
+  onToggleRightPanel?: () => void;
 }
 
 export const RightPanel: React.FC<RightPanelProps> = ({
@@ -125,10 +129,202 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   hasApiKey,
   onNavigateSettings,
   extraContent,
+  isMobile,
+  isRightPanelOpen,
+  onToggleRightPanel,
 }) => {
   const [showPromptGenerator, setShowPromptGenerator] = useState(false);
 
   const showGeneratorButton = activeMenuItem && ['effects', 'style', 'edit'].includes(activeMenuItem);
+
+  if (isMobile) {
+    return (
+      <>
+        <AnimatePresence>
+          {isRightPanelOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 bg-black/50 z-40"
+                onClick={onToggleRightPanel}
+              />
+              <motion.aside
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="fixed left-2 right-2 bottom-2 bg-surface-2 border border-border flex flex-col z-50 rounded-2xl shadow-2xl"
+                style={{ maxHeight: '75dvh' }}
+              >
+                {/* 拖拽指示条 */}
+                <div className="flex justify-center pt-2.5 pb-1">
+                  <div className="w-8 h-1 bg-text-muted/30 rounded-full" />
+                </div>
+                <div className="flex items-center justify-between px-4 pb-2">
+                  <span className="text-sm font-bold text-text-primary">参数设置</span>
+                  <button onClick={onToggleRightPanel} className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors">
+                    <X className="w-4 h-4 text-text-muted" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4">
+                  {/* 模型 + 比例 + 画质 同一行 */}
+                  <div className="flex gap-2 mb-3">
+                    <div className="flex-[2] min-w-0">
+                      <Dropdown
+                        options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <><img src="/gpt-icon.png" alt="GPT" className="w-3 h-3 inline-block" /> Image 2</> : m }))}
+                        value={model}
+                        onChange={setModel}
+                        className="w-full"
+                        direction="up"
+                      />
+                    </div>
+                    <div className="flex-1 shrink-0">
+                      <Dropdown
+                        options={[
+                          { value: 'auto', label: '自动' },
+                          ...(model === '🍌全能图片V2'
+                            ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
+                            : model === 'GPT Image 2'
+                              ? ['1:1', '2:3', '3:2', '9:16', '16:9'].map(ratio => ({ value: ratio, label: ratio }))
+                              : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
+                          )
+                        ]}
+                        value={aspectRatio}
+                        onChange={setAspectRatio}
+                        className="w-full"
+                        direction="up"
+                      />
+                    </div>
+                    <div className="flex-1 shrink-0">
+                      <Dropdown
+                        options={['1K', '2K', '4K'].map(q => ({ value: q, label: q }))}
+                        value={quality}
+                        onChange={setQuality}
+                        className="w-full"
+                        direction="up"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 效果预设 - 横向滚动，缩小 */}
+                  {presets.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-[10px] font-bold text-text-muted/70 uppercase tracking-wider mb-2">效果预设</p>
+                      <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1 -mx-1 px-1">
+                        {presets.map(preset => {
+                          const isSelected = selectedPreset === preset.label;
+                          return (
+                            <button
+                              key={preset.id}
+                              onClick={() => setSelectedPreset(preset.label)}
+                              className={`preset-card shrink-0 w-24 aspect-video rounded-lg overflow-hidden relative group border-2 ${
+                                isSelected
+                                  ? 'border-indigo-500 ring-1 ring-indigo-500/20'
+                                  : 'border-border-subtle/70 hover:border-indigo-500/40'
+                              }`}
+                            >
+                              <img
+                                src={preset.bgImage}
+                                alt={preset.label}
+                                loading="lazy"
+                                decoding="async"
+                                width={160}
+                                height={90}
+                                className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity duration-300 bg-placeholder-bg"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                              <span className="preset-label absolute inset-0 flex items-center justify-center text-[8px] font-bold uppercase tracking-wider z-[2] drop-shadow">
+                                {preset.label}
+                              </span>
+                              {isSelected && (
+                                <div className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-indigo-500 rounded-full flex items-center justify-center z-[3]">
+                                  <Check className="w-2 h-2 text-white" />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {extraContent}
+
+                  {/* 提示词输入 */}
+                  <div className="bg-surface-1 rounded-xl p-3 mb-3 border border-border-subtle/70">
+                    <textarea
+                      placeholder={placeholder}
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      className="w-full bg-transparent border-none text-sm text-text-primary resize-none outline-none min-h-[60px] placeholder:text-text-muted"
+                    />
+                    <div className="flex justify-end gap-1.5 mt-1.5 pt-1.5 border-t border-border-subtle/70">
+                      {showGeneratorButton && (
+                        <button
+                          onClick={() => setShowPromptGenerator(true)}
+                          className="p-1.5 text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200"
+                          title="提示词生成器"
+                        >
+                          <FileJson className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={handlePolishPrompt}
+                        disabled={isPolishing || !prompt.trim()}
+                        className="p-1.5 text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="润色提示"
+                      >
+                        <Sparkles className={`w-3.5 h-3.5 ${isPolishing ? 'animate-spin' : ''}`} />
+                      </button>
+                      <button
+                        onClick={() => setPrompt('')}
+                        className="p-1.5 text-text-muted hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-200"
+                        title="清空"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 生成按钮 */}
+                  <button
+                    onClick={() => !hasApiKey && onNavigateSettings ? onNavigateSettings() : handleGenerate()}
+                    disabled={isGenerating && hasApiKey}
+                    className={`w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-sm ${
+                      !hasApiKey
+                        ? 'bg-gradient-to-br from-[#3f3a2e] to-[#2e2a22] text-amber-200/80 hover:text-amber-200 border border-amber-500/15 cursor-pointer'
+                        : 'btn-primary text-white disabled:bg-surface-3 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none'
+                    }`}
+                  >
+                    {!hasApiKey ? (
+                      <><Zap className="w-4 h-4 fill-current" />请配置API</>
+                    ) : isGenerating ? (
+                      <><RefreshCw className="w-4 h-4 animate-spin" />生成中...</>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 fill-current" />
+                        {getPrice(model, quality) !== null ? <span className="opacity-70">{getPrice(model, quality) < 0.1 ? getPrice(model, quality).toFixed(2) : getPrice(model, quality)}</span> : null}
+                        立即生成
+                      </>
+                    )}
+                  </button>
+                </div>
+                <PromptGenerator
+                  isOpen={showPromptGenerator}
+                  onClose={() => setShowPromptGenerator(false)}
+                  onApply={(text) => setPrompt(text)}
+                />
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+      </>
+    );
+  }
 
   return (
     <aside className="w-80 bg-surface-2 border-l border-border flex flex-col shrink-0 fixed right-0 top-14 h-[calc(100vh-3.5rem)] z-30">

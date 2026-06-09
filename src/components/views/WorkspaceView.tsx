@@ -25,6 +25,7 @@ import { getPresetsForMenu } from '../../visualPresetConfig';
 import type { MenuItemId } from '../../menuConfig';
 import type { GenerationRecord, PreviewImageData } from '../../types';
 import { RightPanel } from '../layout/RightPanel';
+import { GlowBlob } from '../ui/GlowBlob';
 import { lazy } from 'react';
 import { useCachedImageUrl } from '../../hooks/useCachedImage';
 
@@ -90,6 +91,9 @@ interface WorkspaceViewProps {
   editingImageIndex: number | null;
   setEditingImageIndex: (index: number | null) => void;
   onNavigateSettings?: () => void;
+  isMobile?: boolean;
+  isRightPanelOpen?: boolean;
+  onToggleRightPanel?: () => void;
 }
 
 const getMenuItemLabel = (id: MenuItemId): string => {
@@ -105,7 +109,8 @@ const getMenuItemLabel = (id: MenuItemId): string => {
 export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   activeMenuItem, model, setModel, selectedPreset, setSelectedPreset,
   aspectRatio, setAspectRatio, quality, setQuality, showToast,
-  setPreviewImage, editingImageIndex, setEditingImageIndex, onNavigateSettings
+  setPreviewImage, editingImageIndex, setEditingImageIndex, onNavigateSettings,
+  isMobile, isRightPanelOpen, onToggleRightPanel
 }) => {
   const { apiKey, hasApiKey } = useApiKey();
   const { startGenerating, stopGenerating } = useGeneration();
@@ -615,7 +620,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full">
-      <div className="flex-1 overflow-y-auto p-5 lg:p-6 custom-scrollbar mr-80">
+      <div className={`flex-1 overflow-y-auto p-5 lg:p-6 custom-scrollbar ${isMobile ? '' : 'mr-80'}`}>
         <div className="max-w-5xl mx-auto">
           <div className="mb-5 flex items-center gap-3">
             <div className="px-3.5 py-2 bg-indigo-500/10 rounded-xl flex items-center gap-2 border border-indigo-500/15">
@@ -833,7 +838,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         activeMenuItem={activeMenuItem}
         hasApiKey={hasApiKey}
         onNavigateSettings={onNavigateSettings}
+        isMobile={isMobile}
+        isRightPanelOpen={isRightPanelOpen}
+        onToggleRightPanel={onToggleRightPanel}
       />
+      {isMobile && !isRightPanelOpen && (
+        <GlowBlob
+          size={112}
+          onClick={onToggleRightPanel}
+          className="fixed bottom-16 left-1/2 -translate-x-1/2 z-30"
+        />
+      )}
     </div>
   );
 };

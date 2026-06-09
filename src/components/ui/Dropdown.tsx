@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 
 interface DropdownOption {
@@ -23,13 +24,56 @@ export const Dropdown: React.FC<DropdownProps> = ({
   direction = 'up',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find(opt => opt.value === value);
 
+  const updatePosition = useCallback(() => {
+    if (!dropdownRef.current || !isOpen) return;
+    const rect = dropdownRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const maxW = Math.min(rect.width, vw - 16);
+    const style: React.CSSProperties = {
+      position: 'fixed',
+      width: maxW,
+      maxWidth: vw - 16,
+      boxShadow: '0 10px 40px var(--c-shadow-heavy)',
+    };
+    if (direction === 'up') {
+      style.bottom = Math.max(8, vh - rect.top + 8);
+      style.left = Math.max(8, Math.min(rect.left, vw - maxW - 8));
+    } else {
+      style.top = Math.min(rect.bottom + 8, vh - 8);
+      style.left = Math.max(8, Math.min(rect.left, vw - maxW - 8));
+    }
+    setPanelStyle(style);
+  }, [isOpen, direction]);
+
+  useEffect(() => {
+    updatePosition();
+  }, [updatePosition]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleResize = () => updatePosition();
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleResize, true);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleResize, true);
+    };
+  }, [isOpen, updatePosition]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(target) &&
+        panelRef.current && !panelRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     };
@@ -57,31 +101,33 @@ export const Dropdown: React.FC<DropdownProps> = ({
         />
       </button>
 
-      <div
-        className={`absolute ${direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 right-0 bg-surface-1 border border-border rounded-xl shadow-2xl z-50 overflow-hidden transition-all duration-150 ${
-          isOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible pointer-events-none translate-y-1'
-        }`}
-        style={{ boxShadow: '0 10px 40px var(--c-shadow-heavy)' }}
-      >
-        <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-1.5">
-          {options.map(option => (
-            <div
-              key={option.value}
-              onClick={() => handleSelect(option.value)}
-              className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg cursor-pointer transition-all duration-150 ${
-                option.value === value
-                  ? 'bg-indigo-500/15 text-indigo-500 font-semibold'
-                  : 'text-text-secondary hover:bg-bg-subtle hover:text-text-primary'
-              }`}
-            >
-              <span className="pr-2 truncate flex items-center gap-2">{option.icon}{option.label}</span>
-              {option.value === value && (
-                <Check className="w-3 h-3 text-indigo-500 flex-shrink-0" />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      {isOpen && createPortal(
+        <div
+          ref={panelRef}
+          className="bg-surface-1 border border-border rounded-xl shadow-2xl z-[9999] overflow-hidden transition-all duration-150 opacity-100 visible"
+          style={panelStyle}
+        >
+          <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-1.5">
+            {options.map(option => (
+              <div
+                key={option.value}
+                onClick={() => handleSelect(option.value)}
+                className={`flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg cursor-pointer transition-all duration-150 ${
+                  option.value === value
+                    ? 'bg-indigo-500/15 text-indigo-500 font-semibold'
+                    : 'text-text-secondary hover:bg-bg-subtle hover:text-text-primary'
+                }`}
+              >
+                <span className="pr-2 truncate flex items-center gap-2">{option.icon}{option.label}</span>
+                {option.value === value && (
+                  <Check className="w-3 h-3 text-indigo-500 flex-shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

@@ -10,6 +10,7 @@ import { API_TIMEOUT_MS } from '../utils/constants';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import ImageEditor from './ImageEditor';
 import { RightPanel } from './layout/RightPanel';
+import { GlowBlob } from './ui/GlowBlob';
 import { useCachedImageUrl } from '../hooks/useCachedImage';
 
 // 参考图缩略图 - 解析缓存 key
@@ -67,9 +68,12 @@ interface EditWorkspaceProps {
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
   setPreviewImage: (img: PreviewImageData | null) => void;
   onNavigateSettings?: () => void;
+  isMobile?: boolean;
+  isRightPanelOpen?: boolean;
+  onToggleRightPanel?: () => void;
 }
 
-const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPreviewImage, onNavigateSettings }) => {
+const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPreviewImage, onNavigateSettings, isMobile, isRightPanelOpen, onToggleRightPanel }) => {
   const { hasApiKey } = useApiKey();
   const { startGenerating, stopGenerating } = useGeneration();
   const { markStale } = useTokenQuery();
@@ -455,7 +459,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full" style={{ display: 'flex', flexDirection: 'row' }}>
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar mr-80" style={{ flex: 1, maxWidth: 'calc(100vw - 320px)' }}>
+      <div className={`flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar ${isMobile ? '' : 'mr-80'}`} style={{ flex: 1, maxWidth: isMobile ? '100%' : 'calc(100vw - 320px)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="mb-4 flex items-center gap-3">
             <div className="px-3.5 py-2 bg-indigo-500/10 rounded-xl flex items-center gap-2 border border-indigo-500/15">
@@ -597,6 +601,9 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         hasApiKey={hasApiKey}
         onNavigateSettings={onNavigateSettings}
         extraContent={referenceImageContent}
+        isMobile={isMobile}
+        isRightPanelOpen={isRightPanelOpen}
+        onToggleRightPanel={onToggleRightPanel}
       />
       {/* Image Editor Modal */}
       {editingImageIndex !== null && referenceImages[editingImageIndex] && (
@@ -622,6 +629,13 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             setEditingImageIndex(null);
             showToast('error', message);
           }}
+        />
+      )}
+      {isMobile && !isRightPanelOpen && (
+        <GlowBlob
+          size={112}
+          onClick={onToggleRightPanel}
+          className="fixed bottom-16 left-1/2 -translate-x-1/2 z-30"
         />
       )}
     </div>

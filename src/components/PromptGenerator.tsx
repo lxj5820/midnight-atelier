@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Copy, RotateCcw, Check, Save, Trash2, BookmarkPlus, Bookmark, ChevronDown } from 'lucide-react';
+import { useMobile } from '../hooks/useMobile';
 
 interface PromptGeneratorProps {
   isOpen: boolean;
@@ -222,6 +223,7 @@ function deletePreset(id: string) {
 }
 
 export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClose, onApply }) => {
+  const isMobile = useMobile();
   const [selections, setSelections] = useState<Record<string, number>>({});
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
   const [customButtons, setCustomButtons] = useState<CustomButtonsData>({});
@@ -507,9 +509,9 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose} style={{ paddingLeft: 'calc(16rem + 1rem)', paddingTop: 'calc(3.5rem + 1rem)' }}>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose} style={{ paddingLeft: isMobile ? '1rem' : 'calc(16rem + 1rem)', paddingTop: isMobile ? '1rem' : 'calc(3.5rem + 1rem)' }}>
       <div
-        className="bg-surface-1 rounded-2xl border border-border-subtle w-full max-w-4xl max-h-[calc(100vh-3.5rem-2rem)] overflow-hidden flex flex-col shadow-2xl shadow-black/50"
+        className={`bg-surface-1 rounded-2xl border border-border-subtle w-full ${isMobile ? 'max-w-full' : 'max-w-4xl'} max-h-[calc(100vh-3.5rem-2rem)] overflow-hidden flex flex-col shadow-2xl shadow-black/50`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-border-subtle">
@@ -604,8 +606,8 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
           </div>
         )}
 
-        <div className="flex-1 flex overflow-hidden min-h-0">
-          <div className="w-1/2 border-r border-border-subtle overflow-y-auto p-4 custom-scrollbar">
+        <div className={`flex-1 flex overflow-hidden min-h-0 ${isMobile ? 'flex-col' : 'flex-row'}`}>
+          <div className={`${isMobile ? 'w-full h-1/2 border-b' : 'w-1/2 border-r'} border-border-subtle overflow-y-auto p-4 custom-scrollbar`}>
             {Object.entries(CONFIG).map(([sectionId, section]) => {
               const isToggleable = ['scene', 'light', 'camera'].includes(sectionId);
               const isEnabled = enabledSections.has(sectionId);
@@ -754,7 +756,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
             })}
           </div>
 
-          <div className="w-1/2 flex flex-col">
+          <div className={`${isMobile ? 'w-full flex-1' : 'w-1/2'} flex flex-col`}>
             <div className="flex items-center justify-between p-3 border-b border-border-subtle">
               <div className="text-text-secondary text-[11px] font-medium">实时预览</div>
               <div className="flex gap-1.5">
