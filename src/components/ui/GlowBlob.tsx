@@ -88,10 +88,6 @@ export const GlowBlob: React.FC<GlowBlobProps> = ({ size = 56, onClick, classNam
     };
 
     const animate = () => {
-      if (!visible) {
-        animRef.current = requestAnimationFrame(animate);
-        return;
-      }
       timeRef.current += 0.016;
       const t = timeRef.current;
       const cx = size / 2;
@@ -180,9 +176,11 @@ export const GlowBlob: React.FC<GlowBlobProps> = ({ size = 56, onClick, classNam
       animRef.current = requestAnimationFrame(animate);
     };
 
-    animRef.current = requestAnimationFrame(animate);
+    if (visible) {
+      animRef.current = requestAnimationFrame(animate);
+    }
     return () => cancelAnimationFrame(animRef.current);
-  }, [size]);
+  }, [size, visible]);
 
   const currentPos = pos ?? posRef.current ?? { x: 0, y: 0 };
 
