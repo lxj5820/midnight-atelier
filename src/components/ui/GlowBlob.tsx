@@ -63,6 +63,9 @@ export const GlowBlob: React.FC<GlowBlobProps> = ({ size = 56, onClick, classNam
   }, [onClick]);
 
   // Canvas animation
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -173,6 +176,7 @@ export const GlowBlob: React.FC<GlowBlobProps> = ({ size = 56, onClick, classNam
       ctx.fill();
       ctx.restore();
 
+      if (!visibleRef.current) return; // 不可见时停止调度
       animRef.current = requestAnimationFrame(animate);
     };
 
