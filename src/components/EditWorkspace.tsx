@@ -252,6 +252,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           formData.append('size', imageSize);
           formData.append('quality', currentQuality === '4K' ? 'high' : currentQuality === '2K' ? 'medium' : 'low');
           formData.append('n', '1');
+          formData.append('input_fidelity', '0.5');
 
           for (let i = 0; i < currentRefImages.length; i++) {
             const blob = await getCachedImageBlob(currentRefImages[i]);

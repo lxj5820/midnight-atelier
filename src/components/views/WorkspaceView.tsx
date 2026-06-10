@@ -260,6 +260,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           formData.append('size', imageSize);
           formData.append('quality', quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low');
           formData.append('n', '1');
+          formData.append('input_fidelity', '0.5');
 
           for (let i = 0; i < imageUrls.length; i++) {
             const blob = await getCachedImageBlob(imageUrls[i]);
