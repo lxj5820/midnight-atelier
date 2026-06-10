@@ -27,6 +27,12 @@ export function isCacheKey(url: string): boolean {
   return url.startsWith('cache://');
 }
 
+/** 从 data URL 中提取 MIME type */
+function extractMimeType(dataUrl: string): string {
+  const match = dataUrl.match(/^data:([^;]+)/);
+  return match?.[1] || 'image/png';
+}
+
 /**
  * 将图片（base64 data URL 或 Blob）存入缓存，返回缓存 key
  */
@@ -38,12 +44,17 @@ export async function cacheImage(source: string | Blob, id?: string): Promise<st
   if (source instanceof Blob) {
     blob = source;
   } else if (source.startsWith('data:')) {
-    // base64 data URL -> Blob
+    // base64 data URL -> Blob，确保 MIME type 正确
+    const mimeType = extractMimeType(source);
     const res = await fetch(source);
     blob = await res.blob();
+    if (!blob.type || blob.type === 'application/octet-stream') {
+      blob = new Blob([blob], { type: mimeType });
+    }
   } else {
-    // 外部 URL -> fetch -> Blob
-    const res = await fetch(source);
+    // 外部 URL -> fetch -> Blob（通过代理避免 CORS）
+    const { fetchImage } = await import('./oss');
+    const res = await fetchImage(source);
     blob = await res.blob();
   }
 
@@ -89,9 +100,10 @@ export async function getCachedImage(cacheKey: string): Promise<string | null> {
  */
 export async function getCachedImageBlob(cacheKey: string): Promise<Blob | null> {
   if (!isCacheKey(cacheKey)) {
-    // 非 cache key，尝试 fetch
+    // 非 cache key，通过代理 fetch
     try {
-      const res = await fetch(cacheKey);
+      const { fetchImage } = await import('./oss');
+      const res = await fetchImage(cacheKey);
       return await res.blob();
     } catch {
       return null;

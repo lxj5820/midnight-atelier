@@ -1,6 +1,7 @@
 import { fabric } from 'fabric';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { getCachedImage, isCacheKey } from '../utils/imageCache';
+import { fetchImage } from '../utils/oss';
 import {
   Brush, Eraser, Type,
   Undo2, Redo2, Save, X, Move, Trash2,
@@ -225,21 +226,37 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
     let disposePromise: Promise<void> | null = null;
 
     // 解析 imageUrl：如果是 cache key，从 IndexedDB 读取并转为 data URL
+    // 如果是外部 URL，先 fetch 转为 data URL 避免 CORS 问题
     const resolveImageUrl = async (): Promise<string | null> => {
-      if (!isCacheKey(imageUrl)) return imageUrl;
-      const blobUrl = await getCachedImage(imageUrl);
-      if (!blobUrl) return null;
-      // 将 blob URL 转为 data URL，避免 blob URL 被 revoke 后图片消失
+      if (isCacheKey(imageUrl)) {
+        const blobUrl = await getCachedImage(imageUrl);
+        if (!blobUrl) return null;
+        try {
+          const res = await fetch(blobUrl);
+          const blob = await res.blob();
+          return new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      }
+
+      // 外部 URL：通过代理 fetch 转为 data URL，避免 CORS 阻止
       try {
-        const res = await fetch(blobUrl);
+        const res = await fetchImage(imageUrl);
         const blob = await res.blob();
         return new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(null);
           reader.readAsDataURL(blob);
         });
-      } finally {
-        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // fetch 失败（CORS 等），尝试直接使用原 URL
+        return imageUrl;
       }
     };
 
