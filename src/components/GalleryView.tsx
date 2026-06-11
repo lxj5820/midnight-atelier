@@ -415,7 +415,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
     }
 
     // 排序
-    result.sort((a, b) => {
+    return result.toSorted((a, b) => {
       switch (sortKey) {
         case 'newest':
           return (b.lastModified || '').localeCompare(a.lastModified || '');
@@ -434,7 +434,6 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
       }
     });
 
-    return result;
   }, [images, searchQuery, sortKey, promptFilter]);
 
   const columns = useMemo(
