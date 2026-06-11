@@ -1,9 +1,11 @@
 import { isCacheKey, getCachedImageBlob } from './imageCache';
+import { isOSSUrl } from './oss';
 
-export function getImageProxyUrl(url: string): string {
+export function getImageProxyUrl(url: string, download: boolean = false): string {
   if (url.startsWith('data:')) return url;
   const base = window.location.origin;
-  return `${base}/api/image-proxy?url=${encodeURIComponent(url)}`;
+  const downloadParam = download ? '&download=1' : '';
+  return `${base}/api/image-proxy?url=${encodeURIComponent(url)}${downloadParam}`;
 }
 
 export async function downloadImage(url: string, filename: string) {
@@ -25,7 +27,6 @@ export async function downloadImage(url: string, filename: string) {
       URL.revokeObjectURL(blobUrl);
       return;
     }
-    // 缓存丢失，向上抛错让调用方处理
     throw new Error('图片缓存已失效，无法下载');
   }
 
@@ -39,8 +40,15 @@ export async function downloadImage(url: string, filename: string) {
     return;
   }
 
+  // OSS URL 已设置 Content-Disposition: attachment，直接打开即可触发下载
+  if (isOSSUrl(url)) {
+    window.open(url, '_blank');
+    return;
+  }
+
+  // 非 OSS URL 通过代理下载
   try {
-    const proxyUrl = getImageProxyUrl(url);
+    const proxyUrl = getImageProxyUrl(url, true);
     const response = await fetch(proxyUrl);
     if (!response.ok) throw new Error('Proxy failed');
     const blob = await response.blob();
@@ -53,19 +61,6 @@ export async function downloadImage(url: string, filename: string) {
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
   } catch {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      window.open(url, '_blank');
-    }
+    window.open(url, '_blank');
   }
 }

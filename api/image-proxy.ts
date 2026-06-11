@@ -39,13 +39,28 @@ export default async function handler(req: any, res: any) {
     }
 
     const contentType = response.headers.get('content-type') || 'image/png';
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentLength = response.headers.get('content-length');
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', 'attachment');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.status(200).end(buffer);
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400');
+
+    // 仅对下载请求设置 Content-Disposition: attachment
+    if (req.query.download === '1') {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+
+    // 流式传输，无需等待完整下载
+    if (response.body && typeof response.body.pipe === 'function') {
+      response.body.pipe(res);
+    } else {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.status(200).end(buffer);
+    }
   } catch {
     res.status(500).json({ error: 'Failed to fetch image' });
   }

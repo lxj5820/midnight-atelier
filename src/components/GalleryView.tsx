@@ -22,7 +22,7 @@ interface GalleryViewProps {
 
 const GALLERY_API_URL = '/api/oss-gallery';
 
-// OSS bucket 设置了 Content-Disposition: attachment 且无 CORS 头，需要通过代理访问
+// OSS bucket 无 CORS 头，fetch 请求需要通过代理；<img> 显示可直接访问
 function proxyOSSUrl(url: string): string {
   if (isOSSUrl(url)) return `/api/image-proxy?url=${encodeURIComponent(url)}`;
   return url;
@@ -162,7 +162,7 @@ const LazyGalleryCard: React.FC<{
 
       {isVisible && !hasError && (
         <img
-          src={proxyOSSUrl(getOSSThumbnailUrl(image.url))}
+          src={getOSSThumbnailUrl(image.url)}
           alt={image.name}
           loading="lazy"
           decoding="async"
@@ -362,8 +362,10 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
   }, []);
 
   const handleOpenPreview = useCallback((image: GalleryImage) => {
+    // 预览使用中等分辨率（1200px），而非全尺寸原图，加速加载
+    const previewUrl = getOSSThumbnailUrl(image.url, 1200);
     const previewData: PreviewImageData = {
-      url: proxyOSSUrl(image.url),
+      url: previewUrl,
       name: image.name,
       size: image.size,
       author: 'Interior Masters',
@@ -381,7 +383,8 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
 
   const handleDownload = useCallback(async (url: string, name: string) => {
     try {
-      await downloadImage(proxyOSSUrl(url), name);
+      // 下载直接走 OSS（已设置 Content-Disposition: attachment）
+      await downloadImage(url, name);
       showToast('success', '下载成功');
     } catch {
       showToast('error', '下载失败');
@@ -415,7 +418,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
     }
 
     // 排序
-    return result.toSorted((a, b) => {
+    return [...result].sort((a, b) => {
       switch (sortKey) {
         case 'newest':
           return (b.lastModified || '').localeCompare(a.lastModified || '');

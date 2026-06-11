@@ -795,7 +795,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                       <div className="flex gap-1 mt-1.5">
                         <button onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrl) { setImageUrls([record.referenceImageUrl]); showToast('success', '已复用提示词和参考图'); } else showToast('success', '已复用提示词'); }}
                           className="p-1.5 thumb-btn rounded-md hover:!bg-indigo-500/50 transition-colors" title="复用"><RotateCcw className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: record.prompt || '生成结果', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: getMenuItemLabel(record.type), prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
                         <button onClick={(e) => { e.stopPropagation(); handleDownloadHistory(record); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
                         <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 thumb-btn rounded-md hover:!bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
                       </div>
