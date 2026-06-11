@@ -16,8 +16,24 @@ import { useCachedImageUrl } from '../hooks/useCachedImage';
 // 参考图缩略图 - 解析缓存 key
 const RefImageThumb: React.FC<{ cacheKey: string; alt: string }> = ({ cacheKey, alt }) => {
   const [displayUrl] = useCachedImageUrl(cacheKey);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    if (!displayUrl) { setDimensions(null); return; }
+    getImageDimensions(displayUrl).then(dims => setDimensions(dims));
+  }, [displayUrl]);
+
   if (!displayUrl) return <div className="w-full h-full flex items-center justify-center bg-surface-1 text-text-muted text-[10px]">已失效</div>;
-  return <img src={displayUrl} alt={alt} className="w-full h-full object-cover" referrerPolicy="no-referrer" />;
+  return (
+    <div className="w-full h-full relative">
+      <img src={displayUrl} alt={alt} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+      {dimensions && (
+        <div className="absolute bottom-0.5 left-0.5 px-1 py-0.5 bg-black/60 backdrop-blur-sm text-white text-[8px] font-bold rounded z-[2] leading-none">
+          {getClosestAspectRatio(dimensions.width, dimensions.height)}
+        </div>
+      )}
+    </div>
+  );
 };
 
 // 历史缩略图组件 - 统一处理 cache key 和普通 URL，图片丢失/CORS/ORB 失败时显示占位符
@@ -78,8 +94,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   const { startGenerating, stopGenerating } = useGeneration();
   const { markStale } = useTokenQuery();
   const [prompt, setPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const isGeneratingRef = useRef(false); // 防抖保护 ref
+  const [generatingCount, setGeneratingCount] = useState(0);
   const [result, setResult] = useState<string | null>(null);
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -150,7 +165,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isGenerating) {
+      if (generatingCount > 0) {
         e.preventDefault();
         e.returnValue = '';
         return '';
@@ -158,7 +173,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isGenerating]);
+  }, [generatingCount]);
 
   const handleFiles = async (files: File[]) => {
     setIsUploading(true);
@@ -204,28 +219,24 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   }, []);
 
   const handleGenerate = async () => {
-    // 防抖保护：避免瞬时多次点击重复提交 - 立即锁定
-    if (isGeneratingRef.current) { return; }
-
     if (!apiKey) { showToast('error', '请先在设置中配置 API 密钥'); return; }
     if (!prompt.trim()) { showToast('error', '请输入提示词'); return; }
     if (referenceImages.length === 0) { showToast('error', '请上传至少一张参考图'); return; }
 
-    // 前置检查通过后立即锁定，防止快速点击
-    isGeneratingRef.current = true;
-    setIsGenerating(true);
+    setGeneratingCount(c => c + 1);
     const taskId = startGenerating('全能修改');
 
-    // 保存当前提示词和参考图用于后续处理
+    // 保存当前参数快照，避免并发时参数被修改
     const currentPrompt = prompt;
     const currentRefImages = [...referenceImages];
     const currentQuality = quality;
     const currentAspectRatio = aspectRatio;
+    const currentModel = model;
 
     // 异步执行生成，不阻塞 UI
     (async () => {
       try {
-        if (model === 'GPT Image 2') {
+        if (currentModel === 'GPT Image 2') {
           const gptImage2SizeMap: Record<string, Record<string, string>> = {
             '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720' },
             '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152' },
@@ -303,7 +314,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           markStale();
         } else {
         const modelMap: Record<string, string> = { '🍌全能图片V2': 'gemini-3.1-flash-image-preview', '🍌全能图片PRO': 'gemini-3-pro-image-preview' };
-        const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
+        const apiModel = modelMap[currentModel] || 'gemini-2.5-flash-image-preview';
         const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
 
         // 当 auto 比例且有参考图时，根据参考图实际比例计算
@@ -364,8 +375,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         console.error('Generation error:', error);
         showToast('error', error instanceof Error ? error.message : '生成失败');
       } finally {
-        isGeneratingRef.current = false; // 解除防抖保护
-        setIsGenerating(false);
+        setGeneratingCount(c => c - 1);
         stopGenerating(taskId);
       }
     })();
@@ -467,10 +477,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
               <Sparkles className="w-4 h-4 text-indigo-400" />
               <span className="text-sm font-bold text-indigo-400">全能修改</span>
             </div>
-            {isGenerating && (
+            {generatingCount > 0 && (
               <div className="px-3 py-1.5 bg-indigo-500/10 rounded-lg flex items-center gap-2 text-xs text-indigo-400 border border-indigo-500/15">
                 <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>后台生成中，可继续操作...</span>
+                <span>生成中{generatingCount > 1 ? ` (${generatingCount})` : ''}，可继续操作...</span>
               </div>
             )}
           </div>
@@ -482,7 +492,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                 <img src={displayResult || displayPendingResult || ''} alt="生成结果" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
               </div>
             </div>
-          ) : isGenerating ? (
+          ) : generatingCount > 0 ? (
             <div className="aspect-video rounded-2xl border-2 border-dashed bg-surface-2/50 flex flex-col items-center justify-center group cursor-pointer transition-all mb-6 border-indigo-500/50">
               <div className="w-12 h-12 bg-surface-1 rounded-xl flex items-center justify-center mb-4 shadow-lg animate-pulse border border-border-subtle">
                 <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
@@ -596,7 +606,8 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
         placeholder="输入提示词，描述你想要如何修改这张图片..."
         handlePolishPrompt={handlePolishPrompt}
         handleGenerate={handleGenerate}
-        isGenerating={isGenerating}
+        isGenerating={generatingCount > 0}
+        generatingCount={generatingCount}
         isPolishing={isPolishing}
         activeMenuItem="edit"
         hasApiKey={hasApiKey}

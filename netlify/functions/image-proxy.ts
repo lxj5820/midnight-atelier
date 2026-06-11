@@ -53,7 +53,7 @@ export const handler: Handler = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': 'attachment',
+        'Content-Disposition': contentType.startsWith('image/') ? 'inline' : 'attachment',
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'public, max-age=3600',
       },

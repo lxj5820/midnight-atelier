@@ -3,14 +3,16 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Globe, RefreshCw, Download, Maximize2, Loader2, AlertCircle, Heart, Eye, Upload, Gift } from 'lucide-react';
 import type { PreviewImageData } from '../types';
 import { downloadImage } from '../utils/download';
+import { getOSSThumbnailUrl, isOSSUrl } from '../utils/oss';
 
 interface GalleryImage {
   name: string;
-  download_url: string;
+  url: string;
   size: number;
-  sha: string;
+  id: string;
   aspectRatio?: number;
   promptUrl?: string;
+  lastModified?: string;
 }
 
 interface GalleryViewProps {
@@ -18,7 +20,13 @@ interface GalleryViewProps {
   setPreviewImage: (img: PreviewImageData | null) => void;
 }
 
-const GITHUB_API_URL = 'https://api.github.com/repos/lxj5820/Interior-Masters-Gallery/contents/image';
+const GALLERY_API_URL = '/api/oss-gallery';
+
+// OSS bucket 设置了 Content-Disposition: attachment 且无 CORS 头，需要通过代理访问
+function proxyOSSUrl(url: string): string {
+  if (isOSSUrl(url)) return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+  return url;
+}
 
 const GAP = 8;
 const MAX_ANIMATION_DELAY = 0.5;
@@ -63,7 +71,7 @@ const SkeletonCard = () => (
 const LazyGalleryCard: React.FC<{
   image: GalleryImage;
   isHovered: boolean;
-  onHoverChange: (sha: string | null) => void;
+  onHoverChange: (id: string | null) => void;
   onImageLoad: (name: string, w: number, h: number) => void;
   onOpenPreview: (image: GalleryImage) => void;
   onDownload: (url: string, name: string) => void;
@@ -133,7 +141,7 @@ const LazyGalleryCard: React.FC<{
           ? '0 8px 40px rgba(99, 102, 241, 0.12), 0 2px 12px rgba(0, 0, 0, 0.4)'
           : '0 2px 8px rgba(0, 0, 0, 0.2)',
       }}
-      onMouseEnter={() => onHoverChange(image.sha)}
+      onMouseEnter={() => onHoverChange(image.id)}
       onMouseLeave={() => onHoverChange(null)}
       onClick={() => onOpenPreview(image)}
     >
@@ -154,7 +162,7 @@ const LazyGalleryCard: React.FC<{
 
       {isVisible && !hasError && (
         <img
-          src={image.download_url}
+          src={proxyOSSUrl(getOSSThumbnailUrl(image.url))}
           alt={image.name}
           loading="lazy"
           decoding="async"
@@ -165,7 +173,6 @@ const LazyGalleryCard: React.FC<{
             inset: 0,
           }}
           referrerPolicy="no-referrer"
-          crossOrigin="anonymous"
           onLoad={handleLoad}
           onError={handleError}
         />
@@ -218,7 +225,7 @@ const LazyGalleryCard: React.FC<{
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onDownload(image.download_url, image.name);
+            onDownload(image.url, image.name);
           }}
           className="p-2 bg-black/40 hover:bg-indigo-500/60 backdrop-blur-sm rounded-xl transition-all duration-200"
           title="下载"
@@ -269,35 +276,19 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(GITHUB_API_URL);
+      const response = await fetch(GALLERY_API_URL);
       if (!response.ok) throw new Error(`请求失败 (${response.status})`);
       const data = await response.json();
 
-      const mdFileMap: Record<string, string> = {};
-      for (const item of data) {
-        if (item.type === 'file' && item.name.endsWith('.md')) {
-          const baseName = item.name.replace(/\.md$/i, '');
-          mdFileMap[baseName] = item.download_url;
-        }
-      }
-
-      const imageFiles: GalleryImage[] = data
-        .filter(
-          (item: any) =>
-            item.type === 'file' &&
-            /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(item.name)
-        )
-        .map((item: any) => {
-          const baseName = item.name.replace(/\.[^.]+$/, '');
-          return {
-            name: item.name,
-            download_url: item.download_url,
-            size: item.size,
-            sha: item.sha,
-            aspectRatio: undefined,
-            promptUrl: mdFileMap[baseName],
-          };
-        });
+      const imageFiles: GalleryImage[] = data.map((item: any) => ({
+        name: item.name,
+        url: item.url,
+        size: item.size,
+        id: item.name.replace(/\.[^.]+$/, ''),
+        aspectRatio: undefined,
+        promptUrl: item.promptUrl,
+        lastModified: item.lastModified,
+      }));
       setImages(imageFiles);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
@@ -316,7 +307,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
     if (promptCache[image.name] !== undefined) return promptCache[image.name];
 
     try {
-      const resp = await fetch(image.promptUrl);
+      const resp = await fetch(proxyOSSUrl(image.promptUrl));
       if (!resp.ok) return undefined;
       const text = await resp.text();
       const cleanText = text
@@ -340,7 +331,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
 
   const handleOpenPreview = useCallback((image: GalleryImage) => {
     const previewData: PreviewImageData = {
-      url: image.download_url,
+      url: proxyOSSUrl(image.url),
       name: image.name,
       size: image.size,
       author: 'Interior Masters',
@@ -358,15 +349,15 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
 
   const handleDownload = useCallback(async (url: string, name: string) => {
     try {
-      await downloadImage(url, name);
+      await downloadImage(proxyOSSUrl(url), name);
       showToast('success', '下载成功');
     } catch {
       showToast('error', '下载失败');
     }
   }, [showToast]);
 
-  const handleHoverChange = useCallback((sha: string | null) => {
-    setHoveredImage(sha);
+  const handleHoverChange = useCallback((id: string | null) => {
+    setHoveredImage(id);
   }, []);
 
   const formatFileSize = useCallback((bytes: number) => {
@@ -494,9 +485,9 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
                 <div key={colIdx} className="flex-1 flex flex-col gap-2">
                   {col.map((image, imgIdx) => (
                     <LazyGalleryCard
-                      key={image.sha}
+                      key={image.id}
                       image={image}
-                      isHovered={hoveredImage === image.sha}
+                      isHovered={hoveredImage === image.id}
                       onHoverChange={handleHoverChange}
                       onImageLoad={handleImageLoad}
                       onOpenPreview={handleOpenPreview}

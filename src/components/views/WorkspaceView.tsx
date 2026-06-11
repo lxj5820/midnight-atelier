@@ -116,8 +116,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const { startGenerating, stopGenerating } = useGeneration();
   const { markStale } = useTokenQuery();
   const [prompt, setPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const isGeneratingRef = useRef(false);
+  const [generatingCount, setGeneratingCount] = useState(0);
   const [result, setResult] = useState<string | null>(null);
   const [generationHistory, setGenerationHistory] = useState<GenerationRecord[]>([]);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
@@ -129,11 +128,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [refImageDimensions, setRefImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 解析缓存 key 为可显示的 blob URL
   const [displayResult] = useCachedImageUrl(result);
   const [displayRefImage] = useCachedImageUrl(imageUrls[0]);
+
+  // 获取上传参考图的尺寸
+  useEffect(() => {
+    if (!displayRefImage) { setRefImageDimensions(null); return; }
+    getImageDimensions(displayRefImage).then(dims => setRefImageDimensions(dims));
+  }, [displayRefImage]);
 
   const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
   const filteredPresets = getPresetsForMenu(activeMenuItem);
@@ -151,7 +157,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isGenerating) {
+      if (generatingCount > 0) {
         e.preventDefault();
         e.returnValue = '';
         return '';
@@ -159,7 +165,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isGenerating]);
+  }, [generatingCount]);
 
   useEffect(() => {
     getGenerationHistoryByTypeAsync(activeMenuItem).then(setGenerationHistory);
@@ -209,7 +215,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   }, [showToast, aspectRatio]);
 
   const handleGenerate = async () => {
-    if (isGeneratingRef.current) return;
     if (!apiKey) { showToast('error', '请先在设置中配置 API 密钥'); return; }
 
     const menuItem = menuItemsConfig.find(item => item.id === activeMenuItem);
@@ -223,12 +228,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     const finalPrompt = promptParts.join('，');
     if (!finalPrompt.trim()) { showToast('error', '请输入提示词'); return; }
 
-    isGeneratingRef.current = true;
-    setIsGenerating(true);
+    setGeneratingCount(c => c + 1);
     const taskId = startGenerating(getMenuItemLabel(activeMenuItem));
 
+    // 保存当前参数快照，避免并发时参数被修改
+    const currentPrompt = prompt;
+    const currentImageUrls = [...imageUrls];
+    const currentQuality = quality;
+    const currentAspectRatio = aspectRatio;
+    const currentModel = model;
+
     try {
-      if (model === 'GPT Image 2') {
+      if (currentModel === 'GPT Image 2') {
         const gptImage2SizeMap: Record<string, Record<string, string>> = {
           '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720' },
           '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152' },
@@ -237,33 +248,33 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
         // 当 auto 比例且有参考图时，根据参考图实际比例计算尺寸
         let imageSize: string;
-        if (aspectRatio === 'auto' && imageUrls.length > 0) {
-          const refBlob = await getCachedImageBlob(imageUrls[0]);
+        if (currentAspectRatio === 'auto' && currentImageUrls.length > 0) {
+          const refBlob = await getCachedImageBlob(currentImageUrls[0]);
           if (refBlob) {
             const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
-            imageSize = refDims ? getSizeFromRefImage(refDims.width, refDims.height, quality) : 'auto';
+            imageSize = refDims ? getSizeFromRefImage(refDims.width, refDims.height, currentQuality) : 'auto';
           } else {
             imageSize = 'auto';
           }
         } else {
-          imageSize = gptImage2SizeMap[quality]?.[aspectRatio] || 'auto';
+          imageSize = gptImage2SizeMap[currentQuality]?.[currentAspectRatio] || 'auto';
         }
 
         let gptApiUrl: string;
         let gptRequestBody: any;
 
-        if (imageUrls.length > 0) {
+        if (currentImageUrls.length > 0) {
           gptApiUrl = 'https://newapi.asia/v1/images/edits';
           const formData = new FormData();
           formData.append('model', 'gpt-image-2');
           formData.append('prompt', finalPrompt);
           formData.append('size', imageSize);
-          formData.append('quality', quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low');
+          formData.append('quality', currentQuality === '4K' ? 'high' : currentQuality === '2K' ? 'medium' : 'low');
           formData.append('n', '1');
           formData.append('input_fidelity', '0.5');
 
-          for (let i = 0; i < imageUrls.length; i++) {
-            const blob = await getCachedImageBlob(imageUrls[i]);
+          for (let i = 0; i < currentImageUrls.length; i++) {
+            const blob = await getCachedImageBlob(currentImageUrls[i]);
             if (!blob) continue;
             const fileName = i === 0 ? 'image.png' : `image_${i}.png`;
             formData.append('image', blob, fileName);
@@ -307,17 +318,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
           const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           const resultCacheKey = await cacheImage(imageUrl, recordId);
-          const refCacheKey = imageUrls[0] || undefined;
+          const refCacheKey = currentImageUrls[0] || undefined;
 
           setResult(resultCacheKey);
           setImageUrls([]);
-          const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
+          const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
           const record: GenerationRecord = {
             id: recordId,
-            type: activeMenuItem, prompt, imageUrl: resultCacheKey,
+            type: activeMenuItem, prompt: currentPrompt, imageUrl: resultCacheKey,
             referenceImageUrl: refCacheKey,
             createdAt: new Date().toISOString(),
-            resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
+            resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
           };
           await dbOperations.save(record);
           setHistoryRefreshKey(k => k + 1);
@@ -329,7 +340,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             model: 'gpt-image-2',
             prompt: finalPrompt,
             size: imageSize,
-            quality: quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low',
+            quality: currentQuality === '4K' ? 'high' : currentQuality === '2K' ? 'medium' : 'low',
             n: 1,
             format: 'png'
           };
@@ -375,13 +386,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
           setResult(resultCacheKey);
           setImageUrls([]);
-          const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
+          const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
           const record: GenerationRecord = {
             id: recordId,
-            type: activeMenuItem, prompt, imageUrl: resultCacheKey,
+            type: activeMenuItem, prompt: currentPrompt, imageUrl: resultCacheKey,
             referenceImageUrl: undefined,
             createdAt: new Date().toISOString(),
-            resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
+            resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
           };
           await dbOperations.save(record);
           setHistoryRefreshKey(k => k + 1);
@@ -393,13 +404,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         '🍌全能图片V2': 'gemini-3.1-flash-image-preview',
         '🍌全能图片PRO': 'gemini-3-pro-image-preview'
       };
-      const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
+      const apiModel = modelMap[currentModel] || 'gemini-2.5-flash-image-preview';
       const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
 
       // 当 auto 比例且有参考图时，根据参考图实际比例计算
-      let effectiveAspectRatio = aspectRatio;
-      if (aspectRatio === 'auto' && imageUrls.length > 0) {
-        const refBlob = await getCachedImageBlob(imageUrls[0]);
+      let effectiveAspectRatio = currentAspectRatio;
+      if (currentAspectRatio === 'auto' && currentImageUrls.length > 0) {
+        const refBlob = await getCachedImageBlob(currentImageUrls[0]);
         if (refBlob) {
           const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
           if (refDims) effectiveAspectRatio = getClosestAspectRatio(refDims.width, refDims.height);
@@ -409,9 +420,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       let requestBody: any;
       let hasValidImages = false;
 
-      if (imageUrls.length > 0) {
+      if (currentImageUrls.length > 0) {
         const parts = [];
-        for (const imgUrl of imageUrls) {
+        for (const imgUrl of currentImageUrls) {
           try {
             const blob = await getCachedImageBlob(imgUrl);
             if (!blob) continue;
@@ -424,7 +435,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           parts.push({ text: finalPrompt });
           requestBody = {
             contents: [{ role: "user", parts }],
-            generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: quality } }
+            generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: currentQuality } }
           };
         }
       }
@@ -432,7 +443,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       if (!requestBody) {
         requestBody = {
           contents: [{ role: "user", parts: [{ text: finalPrompt }] }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: quality } }
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: currentQuality } }
         };
       }
 
@@ -470,17 +481,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
       const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const resultCacheKey = await cacheImage(imageUrl, recordId);
-      const refCacheKey = imageUrls[0] || undefined;
+      const refCacheKey = currentImageUrls[0] || undefined;
 
       setResult(resultCacheKey);
       setImageUrls([]);
-      const resolution = aspectRatio !== 'auto' ? getResolution(aspectRatio, quality) : null;
+      const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
       const record: GenerationRecord = {
         id: recordId,
-        type: activeMenuItem, prompt, imageUrl: resultCacheKey,
+        type: activeMenuItem, prompt: currentPrompt, imageUrl: resultCacheKey,
         referenceImageUrl: refCacheKey,
         createdAt: new Date().toISOString(),
-        resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality, aspectRatio },
+        resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
       };
       await dbOperations.save(record);
       setHistoryRefreshKey(k => k + 1);
@@ -494,8 +505,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       if (isTimeout) showToast('error', '请求超时（10分钟），可能是网络问题');
       else showToast('error', `生成失败: ${errorMessage}`);
     } finally {
-      isGeneratingRef.current = false;
-      setIsGenerating(false);
+      setGeneratingCount(c => c - 1);
       stopGenerating(taskId);
     }
   };
@@ -628,10 +638,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               <Sparkles className="w-4 h-4 text-indigo-400" />
               <span className="text-sm font-bold text-indigo-400">{getMenuItemLabel(activeMenuItem)}</span>
             </div>
-            {isGenerating && (
+            {generatingCount > 0 && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/15">
                 <RefreshCw className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
-                <span className="text-xs text-indigo-300 font-medium">生成中...</span>
+                <span className="text-xs text-indigo-300 font-medium">生成中{generatingCount > 1 ? ` (${generatingCount})` : ''}...</span>
               </div>
             )}
           </div>
@@ -656,6 +666,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                 </div>
                 <div className="absolute top-3 left-3 px-2.5 py-1 bg-indigo-500/80 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">生成图</div>
                 <div className="absolute top-3 right-3 px-2.5 py-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">原图</div>
+                {refImageDimensions && (
+                  <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">
+                    {refImageDimensions.width}×{refImageDimensions.height} · {getClosestAspectRatio(refImageDimensions.width, refImageDimensions.height)}
+                  </div>
+                )}
               </div>
             </div>
           ) : result ? (
@@ -682,7 +697,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   <><RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" /><p className="text-text-muted text-sm">上传中...</p></>
                 ) : (
                   <><img src={displayRefImage || ''} alt="参考图" className="w-full h-full object-contain" onClick={handleUpload} />
-                    <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/80 rounded-lg transition-colors backdrop-blur-sm"><X className="w-4 h-4 text-white" /></button></>
+                    <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/80 rounded-lg transition-colors backdrop-blur-sm"><X className="w-4 h-4 text-white" /></button>
+                    {refImageDimensions && (
+                      <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">
+                        {refImageDimensions.width}×{refImageDimensions.height} · {getClosestAspectRatio(refImageDimensions.width, refImageDimensions.height)}
+                      </div>
+                    )}</>
                 )}
               </div>
               {activeMenuItem === 'panorama' && (
@@ -834,7 +854,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         placeholder={promptPlaceholder}
         handlePolishPrompt={handlePolishPrompt}
         handleGenerate={handleGenerate}
-        isGenerating={isGenerating}
+        isGenerating={generatingCount > 0}
+        generatingCount={generatingCount}
         isPolishing={isPolishing}
         activeMenuItem={activeMenuItem}
         hasApiKey={hasApiKey}

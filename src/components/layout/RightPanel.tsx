@@ -97,6 +97,7 @@ interface RightPanelProps {
   handlePolishPrompt: () => void;
   handleGenerate: () => void;
   isGenerating: boolean;
+  generatingCount?: number;
   isPolishing: boolean;
   activeMenuItem?: MenuItemId;
   hasApiKey: boolean;
@@ -124,6 +125,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   handlePolishPrompt,
   handleGenerate,
   isGenerating,
+  generatingCount = 0,
   isPolishing,
   activeMenuItem,
   hasApiKey,
@@ -293,17 +295,16 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   {/* 生成按钮 */}
                   <button
                     onClick={() => !hasApiKey && onNavigateSettings ? onNavigateSettings() : handleGenerate()}
-                    disabled={isGenerating && hasApiKey}
                     className={`w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-sm ${
                       !hasApiKey
                         ? 'bg-gradient-to-br from-[#3f3a2e] to-[#2e2a22] text-amber-200/80 hover:text-amber-200 border border-amber-500/15 cursor-pointer'
-                        : 'btn-primary text-white disabled:bg-surface-3 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none'
+                        : 'btn-primary text-white'
                     }`}
                   >
                     {!hasApiKey ? (
                       <><Zap className="w-4 h-4 fill-current" />请配置API</>
                     ) : isGenerating ? (
-                      <><RefreshCw className="w-4 h-4 animate-spin" />生成中...</>
+                      <><RefreshCw className="w-4 h-4 animate-spin" />生成中{generatingCount > 1 ? ` (${generatingCount})` : ''}...</>
                     ) : (
                       <>
                         <Zap className="w-4 h-4 fill-current" />
@@ -456,11 +457,10 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         </div>
         <button
           onClick={() => !hasApiKey && onNavigateSettings ? onNavigateSettings() : handleGenerate()}
-          disabled={isGenerating && hasApiKey}
           className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
             !hasApiKey
               ? 'bg-gradient-to-br from-[#3f3a2e] to-[#2e2a22] text-amber-200/80 hover:text-amber-200 border border-amber-500/15 hover:border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.06)] hover:shadow-[0_0_20px_rgba(245,158,11,0.10)] cursor-pointer'
-              : 'btn-primary text-white disabled:bg-surface-3 disabled:cursor-not-allowed disabled:shadow-none disabled:transform-none'
+              : 'btn-primary text-white'
           }`}
         >
           {!hasApiKey ? (
@@ -471,7 +471,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           ) : isGenerating ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              生成中...
+              生成中{generatingCount > 1 ? ` (${generatingCount})` : ''}...
             </>
           ) : (
             <>
