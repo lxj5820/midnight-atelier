@@ -566,7 +566,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                       onMissing={() => handleDeleteHistory(record.id, true)}
                     />
                     <div className="thumb-overlay absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
-                      <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
+                      <p className="text-[10px] text-white font-medium truncate">全能修改</p>
                       <p className="text-[9px] text-text-secondary mt-0.5">
                         {new Date(record.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>

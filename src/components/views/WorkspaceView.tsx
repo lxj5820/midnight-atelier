@@ -787,7 +787,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                       onMissing={() => handleDeleteHistory(record.id, true)}
                     />
                     <div className={`thumb-overlay absolute inset-0 flex flex-col justify-end p-2.5 ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity duration-300`}>
-                      <p className="text-[10px] text-white font-medium truncate">{record.prompt || '无描述'}</p>
+                      <p className="text-[10px] text-white font-medium truncate">{getMenuItemLabel(record.type) || record.prompt || '无描述'}</p>
                       <p className="text-[9px] text-text-secondary mt-0.5">
                         {new Date(record.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         {record.resolution && <span className="ml-1 text-indigo-500">{record.resolution.width > 0 ? `${record.resolution.width}×${record.resolution.height} ` : ''}{record.resolution.quality}</span>}

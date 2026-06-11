@@ -669,6 +669,9 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
     fc.setActiveObject(text);
     fc.renderAll();
     saveState();
+
+    // 添加文字后立即切换到选择/移动工具
+    setTool('select');
   };
 
   // ── 删除选中 ──
