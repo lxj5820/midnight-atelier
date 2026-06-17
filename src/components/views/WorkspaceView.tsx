@@ -42,10 +42,17 @@ const HistoryThumbnail: React.FC<{
 }> = ({ cacheKey, alt, className, onClick, onMissing }) => {
   const [displayUrl, state] = useCachedImageUrl(cacheKey);
   const [imgError, setImgError] = useState(false);
+  const onMissingRef = useRef(onMissing);
+  onMissingRef.current = onMissing;
 
   useEffect(() => {
-    if (state === 'missing' && isCacheKey(cacheKey) && onMissing) onMissing();
-  }, [state, cacheKey, onMissing]);
+    if (state !== 'missing' || !isCacheKey(cacheKey)) return;
+    // 延迟触发 onMissing，避免与缓存写入竞态导致新记录被误删
+    const timer = setTimeout(() => {
+      onMissingRef.current?.();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [state, cacheKey]);
   useEffect(() => { setImgError(false); }, [displayUrl]);
 
   if (state !== 'loaded' || imgError || !displayUrl) {
@@ -168,7 +175,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   }, [generatingCount]);
 
   useEffect(() => {
-    getGenerationHistoryByTypeAsync(activeMenuItem).then(setGenerationHistory);
+    let cancelled = false;
+    getGenerationHistoryByTypeAsync(activeMenuItem).then(history => {
+      if (!cancelled) setGenerationHistory(history);
+    });
+    return () => { cancelled = true; };
   }, [activeMenuItem, historyRefreshKey]);
 
   useEffect(() => {
@@ -330,9 +341,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             createdAt: new Date().toISOString(),
             resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
           };
-          await dbOperations.save(record);
-          setHistoryRefreshKey(k => k + 1);
-          showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+          const saved = await dbOperations.save(record);
+          if (saved) {
+            setHistoryRefreshKey(k => k + 1);
+            showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+          } else {
+            showToast('error', '图片已生成，但保存历史记录失败');
+          }
           markStale();
         } else {
           gptApiUrl = 'https://newapi.asia/v1/images/generations';
@@ -394,9 +409,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             createdAt: new Date().toISOString(),
             resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
           };
-          await dbOperations.save(record);
-          setHistoryRefreshKey(k => k + 1);
-          showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+          const saved = await dbOperations.save(record);
+          if (saved) {
+            setHistoryRefreshKey(k => k + 1);
+            showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+          } else {
+            showToast('error', '图片已生成，但保存历史记录失败');
+          }
           markStale();
         }
       } else {
@@ -493,9 +512,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         createdAt: new Date().toISOString(),
         resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
       };
-      await dbOperations.save(record);
-      setHistoryRefreshKey(k => k + 1);
-      showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+      const saved = await dbOperations.save(record);
+      if (saved) {
+        setHistoryRefreshKey(k => k + 1);
+        showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
+      } else {
+        showToast('error', '图片已生成，但保存历史记录失败');
+      }
       markStale();
       }
     } catch (error) {

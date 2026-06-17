@@ -158,9 +158,11 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
   // 加载历史记录
   useEffect(() => {
+    let cancelled = false;
     getGenerationHistoryAsync().then(history => {
-      setGenerationHistory(history.filter(h => h.type === 'edit'));
+      if (!cancelled) setGenerationHistory(history.filter(h => h.type === 'edit'));
     });
+    return () => { cancelled = true; };
   }, [historyRefreshKey]);
 
   useEffect(() => {
@@ -306,11 +308,15 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             createdAt: new Date().toISOString(),
             resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
           };
-          await dbOperations.save(record);
-          setResult(resultCacheKey);
-          setPendingResult(resultCacheKey);
-          setHistoryRefreshKey(k => k + 1);
-          showToast('success', '生成成功！');
+          const saved = await dbOperations.save(record);
+          if (saved) {
+            setResult(resultCacheKey);
+            setPendingResult(resultCacheKey);
+            setHistoryRefreshKey(k => k + 1);
+            showToast('success', '生成成功！');
+          } else {
+            showToast('error', '图片已生成，但保存历史记录失败');
+          }
           markStale();
         } else {
         const modelMap: Record<string, string> = { '🍌全能图片V2': 'gemini-3.1-flash-image-preview', '🍌全能图片PRO': 'gemini-3-pro-image-preview' };
@@ -363,12 +369,15 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           createdAt: new Date().toISOString(),
           resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
         };
-        await dbOperations.save(record);
-
-        setResult(resultCacheKey);
-        setPendingResult(resultCacheKey);
-        setHistoryRefreshKey(k => k + 1);
-        showToast('success', '生成成功！');
+        const saved = await dbOperations.save(record);
+        if (saved) {
+          setResult(resultCacheKey);
+          setPendingResult(resultCacheKey);
+          setHistoryRefreshKey(k => k + 1);
+          showToast('success', '生成成功！');
+        } else {
+          showToast('error', '图片已生成，但保存历史记录失败');
+        }
         markStale();
         }
       } catch (error) {

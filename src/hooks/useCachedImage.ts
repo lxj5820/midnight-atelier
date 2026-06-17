@@ -18,23 +18,40 @@ export function useCachedImageUrl(cacheKey: string | null | undefined): [string 
 
     let revoked = false;
     let currentBlobUrl: string | undefined;
-    setState('loading');
-    getCachedImage(cacheKey).then(blobUrl => {
-      if (revoked) {
-        if (blobUrl) URL.revokeObjectURL(blobUrl);
-        return;
-      }
-      if (blobUrl) {
-        currentBlobUrl = blobUrl;
-        setUrl(blobUrl);
-        setState('loaded');
-      } else {
-        setUrl(null);
-        setState('missing');
-      }
-    });
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    const MAX_ATTEMPTS = 3;
+
+    const tryResolve = () => {
+      if (revoked) return;
+      setState('loading');
+      getCachedImage(cacheKey).then(blobUrl => {
+        if (revoked) {
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          return;
+        }
+        if (blobUrl) {
+          currentBlobUrl = blobUrl;
+          setUrl(blobUrl);
+          setState('loaded');
+        } else {
+          // 缓存读取返回 null —— 可能是瞬时错误，重试几次后再判定为 missing
+          attempt += 1;
+          if (attempt < MAX_ATTEMPTS) {
+            retryTimer = setTimeout(tryResolve, 200 * attempt);
+          } else {
+            setUrl(null);
+            setState('missing');
+          }
+        }
+      });
+    };
+
+    tryResolve();
+
     return () => {
       revoked = true;
+      if (retryTimer) clearTimeout(retryTimer);
       if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
     };
   }, [cacheKey]);
