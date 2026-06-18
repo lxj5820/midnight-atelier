@@ -594,7 +594,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
     setIsPolishing(true);
     try {
-      const apiUrl = 'https://newapi.asia/v1beta/models/gemini-3.1-flash-lite-preview:generateContent';
+      const apiUrl = 'https://newapi.asia/v1beta/models/gemini-3.5-flash:generateContent';
       const requestBody = {
         contents: [{ parts: [{ text: `请润色并优化以下提示词：${prompt}` }] }],
         systemInstruction: { parts: [{ text: POLISH_SYSTEM_PROMPT }] },
@@ -611,16 +611,25 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       });
       clearTimeout(timeoutId);
 
-      if (!response.ok) throw new Error('API 请求失败');
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        let errMsg = `API 请求失败 (${response.status})`;
+        try { const errJson = JSON.parse(errText); errMsg = errJson.error?.message || errMsg; } catch { if (errText) errMsg += `: ${errText.slice(0, 100)}`; }
+        throw new Error(errMsg);
+      }
       const data = await response.json();
       const polishedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (polishedText) {
         const cleanText = polishedText.replace(/```markdown\n?|\n?```/g, '').trim();
         setPrompt(cleanText);
         showToast('success', '提示词已润色');
+      } else {
+        const blockReason = data.promptFeedback?.blockReason;
+        throw new Error(blockReason ? `内容被拦截: ${blockReason}` : 'API 返回内容为空');
       }
     } catch (err) {
-      showToast('error', err instanceof Error && err.message === 'AbortError' ? '润色超时' : '润色失败');
+      const msg = err instanceof Error ? (err.name === 'AbortError' ? '润色超时' : err.message) : '润色失败';
+      showToast('error', `润色失败: ${msg}`);
     } finally {
       setIsPolishing(false);
     }
