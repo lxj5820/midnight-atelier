@@ -136,11 +136,14 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [refImageDimensions, setRefImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [customRefImage, setCustomRefImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const customFileInputRef = useRef<HTMLInputElement>(null);
 
   // 解析缓存 key 为可显示的 blob URL
   const [displayResult] = useCachedImageUrl(result);
   const [displayRefImage] = useCachedImageUrl(imageUrls[0]);
+  const [displayCustomRefImage] = useCachedImageUrl(customRefImage);
 
   // 获取上传参考图的尺寸
   useEffect(() => {
@@ -232,10 +235,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     const builtInPrompt = menuItem?.prompt || '';
     const presetItem = filteredPresets.find(p => p.label === selectedPreset);
     const presetPrompt = presetItem?.prompt || '';
+    const isCustomPreset = selectedPreset === '自定义';
+    const hasCustomRef = isCustomPreset && !!customRefImage;
     let promptParts = [];
     if (builtInPrompt) promptParts.push(builtInPrompt);
     if (presetPrompt) promptParts.push(presetPrompt);
     if (prompt.trim()) promptParts.push(prompt.trim());
+    if (hasCustomRef) promptParts.push('参考图2的风格');
     const finalPrompt = promptParts.join('，');
     if (!finalPrompt.trim()) { showToast('error', '请输入提示词'); return; }
 
@@ -244,7 +250,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
     // 保存当前参数快照，避免并发时参数被修改
     const currentPrompt = prompt;
-    const currentImageUrls = [...imageUrls];
+    const currentImageUrls = hasCustomRef && customRefImage
+      ? [...imageUrls, customRefImage]
+      : [...imageUrls];
     const currentQuality = quality;
     const currentAspectRatio = aspectRatio;
     const currentModel = model;
@@ -332,7 +340,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           const refCacheKey = currentImageUrls[0] || undefined;
 
           setResult(resultCacheKey);
-          setImageUrls([]);
+          setImageUrls([resultCacheKey]);
           const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
           const record: GenerationRecord = {
             id: recordId,
@@ -400,7 +408,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           const resultCacheKey = await cacheImage(imageUrl, recordId);
 
           setResult(resultCacheKey);
-          setImageUrls([]);
+          setImageUrls([resultCacheKey]);
           const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
           const record: GenerationRecord = {
             id: recordId,
@@ -503,7 +511,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       const refCacheKey = currentImageUrls[0] || undefined;
 
       setResult(resultCacheKey);
-      setImageUrls([]);
+      setImageUrls([resultCacheKey]);
       const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
       const record: GenerationRecord = {
         id: recordId,
@@ -651,6 +659,53 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       showToast('error', `上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally { setIsUploading(false); }
   };
+
+  const handleCustomRefUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) { showToast('error', '不支持的文件类型'); return; }
+    if (file.size > 20 * 1024 * 1024) { showToast('error', '文件大小超过 20MB'); return; }
+    try {
+      const base64 = await blobToBase64(file);
+      const base64Url = `data:${file.type};base64,${base64}`;
+      const cacheKey = await cacheImage(base64Url);
+      setCustomRefImage(cacheKey);
+      showToast('success', '自定义参考图已添加');
+    } catch (error) {
+      showToast('error', `上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
+  // 自定义预设参考图上传区域
+  const customPresetExtra = selectedPreset === '自定义' ? (
+    <div className="mb-3">
+      <p className="text-[10px] font-bold text-text-muted/70 uppercase tracking-wider mb-2">自定义参考图（作为第2张图）</p>
+      <input type="file" ref={customFileInputRef} onChange={handleCustomRefUpload} accept="image/jpeg,image/png,image/webp" className="hidden" />
+      {customRefImage ? (
+        <div className="relative rounded-xl overflow-hidden border border-indigo-500/30 group">
+          <img src={displayCustomRefImage || ''} alt="自定义参考图" className="w-full aspect-video object-cover" referrerPolicy="no-referrer" />
+          <button
+            onClick={() => setCustomRefImage(null)}
+            className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-rose-500/80 rounded-lg transition-colors backdrop-blur-sm"
+            title="移除参考图"
+          >
+            <X className="w-3.5 h-3.5 text-white" />
+          </button>
+          <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-indigo-500/80 text-white text-[10px] font-bold rounded">参考图2</div>
+        </div>
+      ) : (
+        <button
+          onClick={() => customFileInputRef.current?.click()}
+          className="w-full aspect-video rounded-xl border-2 border-dashed border-border-subtle hover:border-indigo-500/40 hover:bg-surface-1 flex flex-col items-center justify-center transition-all"
+        >
+          <Upload className="w-5 h-5 text-text-muted mb-1.5" />
+          <span className="text-[11px] text-text-muted">点击上传参考图</span>
+        </button>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div className="flex flex-row flex-1 overflow-hidden w-full h-full">
@@ -886,6 +941,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         isMobile={isMobile}
         isRightPanelOpen={isRightPanelOpen}
         onToggleRightPanel={onToggleRightPanel}
+        extraContent={customPresetExtra}
       />
       {isMobile && (
         <GlowBlob
