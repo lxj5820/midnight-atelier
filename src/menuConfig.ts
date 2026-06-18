@@ -17,7 +17,7 @@ export const menuItemsConfig: MenuItemConfig[] = [
   { id: 'workspace', icon: LayoutGrid, label: '生成布置图', group: '平面操作', prompt: '这是一个{{室内住宅空间，房间是四室两厅两卫}}，风格为线稿图，保持平面墙体，轮廓不变。根据图中的文字信息生成对应合理的平面布局图。禁止文字！', model: '🍌全能图片PRO' },
   { id: 'colors', icon: Palette, label: '生成彩平图', group: '平面操作', prompt: '90度垂直正俯视，无任何透视畸变，3D写实住宅彩色平面图，[现代简约风格]，完整展示所有空间布局，深灰色细描边墙体，墙体厚度准确，带柔和自然的短投影，纯白色背景。简约低饱和配色，{{四室两厅两卫，公共区域通铺白色大花白大理石瓷砖，卧室地面浅原木色实木地板，厨卫地面深灰色哑光瓷砖}}，软装统一用米白、浅灰、浅木色、深木色，少量深灰点缀，色彩干净舒适家具陈设比例符合顶视图逻辑，无多余杂物。禁止文字', model: '🍌全能图片V2' },
   { id: '3d', icon: Box, label: '生成3D轴测图', group: '平面操作', prompt: '保持户型轮廓，Generate a 3D axonometric view tilted 30 degrees to the left with an oblique top-down perspective，{{现代简约风格}}，完全匹配原有的户型布局、材质配色、地面区域颜色，全屋无屋顶、顶部完全掏空，清晰展示所有室内空间，保留原图的户型布局、软装位置，匹配风格的实体墙体，带柔和自然投影，纯白色背景。超写实渲染，细节清晰，无多余杂物、无文字标注水印', model: '🍌全能图片V2' },
-  { id: 'effects', icon: ImageIcon, label: '模型生成效果图', group: '效果图操作', prompt: '这是一个{{客厅空间}}，将这张3D线框图转化为照片级真实感的室内效果图，保持原有空间布局和家具摆放完全不变。{{摄影：35mm镜头，f/2.8，人眼平视高度，主体锐利清晰，Architectural Digest杂志摄影风格。}}8K超高清，细节丰富，真实物理材质，避免CG感。', model: '🍌全能图片V2' },
+  { id: 'effects', icon: ImageIcon, label: '生成效果图', group: '效果图操作', prompt: '这是一个{{客厅空间}}，将这张3D线框图转化为照片级真实感的室内效果图，保持原有空间布局和家具摆放完全不变。{{摄影：35mm镜头，f/2.8，人眼平视高度，主体锐利清晰，Architectural Digest杂志摄影风格。}}8K超高清，细节丰富，真实物理材质，避免CG感。', model: '🍌全能图片V2' },
   { id: 'style', icon: RefreshCw, label: '风格替换', group: '效果图操作', prompt: '保持方案主体布局一致性不变，将风格改为{{简约风格}}，并修改对应风格的地面、家具、软装、装饰品，风格迁移渲染', model: '🍌全能图片V2' },
   { id: 'lighting', icon: Sun, label: '光影替换', group: '效果图操作', prompt: '保持场景中主体物品100%不变，请为上传的室内效果图添加生动、真实的光影效果，自然柔和。{{风格：}}', model: '🍌全能图片V2' },
   { id: 'storyboard', icon: Film, label: '分镜生成', group: '效果图操作', prompt: '保持方案主体布局一致性不变，生成9个不同环绕角度的效果图，集合成一张9宫格图片', model: '🍌全能图片V2' },
