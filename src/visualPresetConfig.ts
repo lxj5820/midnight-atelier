@@ -271,6 +271,9 @@ export const MENU_PRESET_MAP: Record<MenuItemId, string[]> = {
 
   // 全能修改 - 无预设
   edit: [],
+
+  // 视频生成 - 无预设
+  video: [],
 };
 
 // 自定义风格预设

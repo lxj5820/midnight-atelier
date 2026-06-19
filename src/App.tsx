@@ -37,11 +37,12 @@ import type { PreviewImageData } from './types';
 import { useMobile } from './hooks/useMobile';
 
 import EditWorkspace from './components/EditWorkspace';
+import VideoView from './components/views/VideoView';
 import GalleryView from './components/GalleryView';
 import ImagePreviewModal from './components/ImagePreviewModal';
 import { WorkspaceView } from './components/views/WorkspaceView';
 
-type View = 'workspace' | 'gallery' | 'settings' | 'edit';
+type View = 'workspace' | 'gallery' | 'settings' | 'edit' | 'video';
 
 interface ToastMessage {
   id: string;
@@ -106,6 +107,8 @@ const Sidebar = ({
     setModel(item.model);
     if (item.id === 'edit') {
       setView('edit');
+    } else if (item.id === 'video') {
+      setView('video');
     } else {
       setView('workspace');
     }
@@ -835,6 +838,9 @@ export default function App() {
                 <Suspense fallback={<LoadingSpinner className="h-full" />}>
                   <EditWorkspace apiKey={apiKey} showToast={showToast} setPreviewImage={setPreviewImage} onNavigateSettings={() => setView('settings')} isMobile={isMobile} isRightPanelOpen={isRightPanelOpen} onToggleRightPanel={() => setIsRightPanelOpen(!isRightPanelOpen)} />
                 </Suspense>
+              )}
+              {view === 'video' && (
+                <VideoView apiKey={apiKey} showToast={showToast} setPreviewImage={setPreviewImage} onNavigateSettings={() => setView('settings')} isMobile={isMobile} />
               )}
             </motion.div>
           </AnimatePresence>

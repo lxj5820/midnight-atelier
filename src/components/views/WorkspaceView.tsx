@@ -108,7 +108,7 @@ const getMenuItemLabel = (id: MenuItemId): string => {
     'workspace': '布置图', 'colors': '色彩平图', '3d': '3D轴测图',
     'effects': '效果图', 'style': '风格替换', 'lighting': '光阴替换',
     'storyboard': '分镜生成', 'panorama': '360全景', 'analysis': '材料分析图',
-    'board': '设计展板', 'mood': '情绪材料版', 'explode': '空间爆炸图', 'edit': '全能修改'
+    'board': '设计展板', 'mood': '情绪材料版', 'explode': '空间爆炸图', 'edit': '全能修改', 'video': '视频生成'
   };
   return items[id];
 };
@@ -136,6 +136,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [refImageDimensions, setRefImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [resultDimensions, setResultDimensions] = useState<{ width: number; height: number } | null>(null);
   const [customRefImage, setCustomRefImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const customFileInputRef = useRef<HTMLInputElement>(null);
@@ -150,6 +151,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     if (!displayRefImage) { setRefImageDimensions(null); return; }
     getImageDimensions(displayRefImage).then(dims => setRefImageDimensions(dims));
   }, [displayRefImage]);
+
+  // 获取生成结果的尺寸
+  useEffect(() => {
+    if (!displayResult) { setResultDimensions(null); return; }
+    getImageDimensions(displayResult).then(dims => setResultDimensions(dims));
+  }, [displayResult]);
 
   const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
   const filteredPresets = getPresetsForMenu(activeMenuItem);
@@ -340,7 +347,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           const refCacheKey = currentImageUrls[0] || undefined;
 
           setResult(resultCacheKey);
-          setImageUrls([resultCacheKey]);
           const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
           const record: GenerationRecord = {
             id: recordId,
@@ -408,7 +414,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           const resultCacheKey = await cacheImage(imageUrl, recordId);
 
           setResult(resultCacheKey);
-          setImageUrls([resultCacheKey]);
           const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
           const record: GenerationRecord = {
             id: recordId,
@@ -511,7 +516,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       const refCacheKey = currentImageUrls[0] || undefined;
 
       setResult(resultCacheKey);
-      setImageUrls([resultCacheKey]);
       const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
       const record: GenerationRecord = {
         id: recordId,
@@ -764,6 +768,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             <div className="mb-6 relative">
               <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2 relative group shadow-2xl shadow-black/30 border border-border-subtle/70">
                 <img src={displayResult || ''} alt="Generated Result" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                {resultDimensions && (
+                  <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">
+                    {resultDimensions.width}×{resultDimensions.height} · {getClosestAspectRatio(resultDimensions.width, resultDimensions.height)}
+                  </div>
+                )}
                 {activeMenuItem === 'panorama' && (
                   <button
                     onClick={() => { setPanoramaImageUrl(result); setShowPanoramaViewer(true); }}

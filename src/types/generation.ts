@@ -40,7 +40,7 @@ export interface GalleryItem {
   prompt?: string;
 }
 
-export type View = 'workspace' | 'gallery' | 'settings' | 'admin' | 'edit';
+export type View = 'workspace' | 'gallery' | 'settings' | 'admin' | 'edit' | 'video';
 
 export type GalleryCategory = 'hot' | 'latest' | 'style';
 

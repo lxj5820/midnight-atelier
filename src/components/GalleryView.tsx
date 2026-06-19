@@ -597,7 +597,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
 
                 <div className="relative group">
                   <a
-                    href="https://ucnuixcl6oxb.feishu.cn/share/base/form/shrcnhwD9doY4ZaTDfYPrdAVOzb"
+                    href="https://rcn38j826h3o.feishu.cn/share/base/form/shrcnPGWK7A7DFG9q28nPSTuAyd"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-400 hover:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-500/20 hover:border-indigo-500/30 transition-all duration-200"
