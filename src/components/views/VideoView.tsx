@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, X, Loader2, Download, Trash2, Video, Play, Film } from 'lucide-react';
+import { Upload, X, Loader2, Download, Trash2, Video, Play, Film, Sparkles, RefreshCw } from 'lucide-react';
 import { useGeneration } from '../../GenerationContext';
 import { submitVideoTask, pollVideoTask, type VideoTaskStatus } from '../../utils/videoApi';
 import { cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, blobToBase64, dbOperations, getGenerationHistoryByTypeAsync, deleteGenerationRecordFromDB } from '../../utils';
@@ -16,10 +16,34 @@ const ImageThumb: React.FC<{
   className?: string;
 }> = ({ cacheKey, index, onRemove, large, className = '' }) => {
   const [url] = useCachedImageUrl(cacheKey);
+  const [ratio, setRatio] = useState<number | null>(null);
+
+  // 读取图片自身宽高比
+  useEffect(() => {
+    if (!url) { setRatio(null); return; }
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight) {
+        setRatio(img.naturalWidth / img.naturalHeight);
+      }
+    };
+    img.src = url;
+  }, [url]);
+
+  // 单图 large 模式：填满网格区域，图片自适应缩放（不再固定比例）
+  // 多图模式：填满网格行，图片 contain 不裁剪
+  const containerStyle = undefined;
+  const containerClass = large
+    ? 'w-full h-full'
+    : 'w-full h-full';
+
   return (
-    <div className={`relative rounded-lg overflow-hidden bg-surface-2 border border-border-subtle group ${large ? 'aspect-[16/10] w-full' : 'aspect-square'} ${className}`}>
+    <div
+      className={`relative rounded-lg overflow-hidden bg-surface-2 border border-border-subtle group ${containerClass} ${className}`}
+      style={containerStyle}
+    >
       {url ? (
-        <img src={url} alt={`参考图 ${index + 1}`} className="w-full h-full object-cover" />
+        <img src={url} alt={`参考图 ${index + 1}`} className="w-full h-full object-contain" />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-text-muted">
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -102,6 +126,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
   const [ratio, setRatio] = useState('16:9');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [displayResult] = useCachedImageUrl(result);
@@ -114,6 +139,10 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
         const sorted = [...records].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setHistory(sorted);
       }
+    }).catch(error => {
+      if (cancelled) return;
+      console.error('Failed to load video history:', error);
+      showToast('error', '加载历史记录失败');
     });
     return () => { cancelled = true; };
   }, [historyRefreshKey]);
@@ -147,9 +176,6 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
   }, [imageUrls.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasImage = imageUrls.length > 0;
-  const modelLabel = hasImage
-    ? `图生视频 · happyhorse-1.0-r2v（${imageUrls.length} 张参考图）`
-    : '文生视频 · happyhorse-1.0-t2v';
 
   // 上传处理
   const handleUpload = () => fileInputRef.current?.click();
@@ -296,6 +322,26 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
     setPrompt('');
   };
 
+  // 在光标处插入 [Image N] 标签
+  const insertImageTag = (index: number) => {
+    const tag = `[Image ${index + 1}]`;
+    const textarea = promptRef.current;
+    if (!textarea) {
+      setPrompt(prev => prev + (prev ? ' ' : '') + tag);
+      return;
+    }
+    const start = textarea.selectionStart ?? prompt.length;
+    const end = textarea.selectionEnd ?? prompt.length;
+    const next = prompt.slice(0, start) + tag + prompt.slice(end);
+    setPrompt(next);
+    // 让光标停在插入的 tag 之后
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const pos = start + tag.length;
+      textarea.setSelectionRange(pos, pos);
+    });
+  };
+
   const handleRemoveImage = (index?: number) => {
     if (index === undefined) {
       setImageUrls([]);
@@ -341,15 +387,22 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar">
-      <div className={`mx-auto w-full ${isMobile ? 'px-4 py-4' : 'px-8 py-6'} max-w-5xl`}>
-        {/* 标题 */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-text-primary font-headline">视频生成</h2>
-            <p className="text-sm text-text-muted mt-1">{modelLabel}</p>
+    <div className="flex flex-row flex-1 overflow-hidden w-full h-full">
+      <div className={`flex-1 overflow-y-auto custom-scrollbar ${isMobile ? 'p-4' : 'p-5 lg:p-6'}`}>
+        <div className="max-w-5xl mx-auto">
+          {/* 标题 */}
+          <div className="mb-5 flex items-center gap-3">
+            <div className="px-3.5 py-2 bg-indigo-500/10 rounded-xl flex items-center gap-2 border border-indigo-500/15">
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+              <span className="text-sm font-bold text-indigo-400">视频生成</span>
+            </div>
+            {generating && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/15">
+                <RefreshCw className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                <span className="text-xs text-indigo-300 font-medium">生成中...</span>
+              </div>
+            )}
           </div>
-        </div>
 
         {/* 生成中状态 */}
         {generating && (
@@ -379,80 +432,81 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
                 className="w-full max-h-[500px] object-contain"
               />
             </div>
-            <div className="mt-3 flex items-center gap-3">
+            <div className="mt-3 flex items-center gap-3 justify-end">
               <button
                 onClick={handleDownload}
-                className="flex items-center gap-2 px-4 py-2 bg-surface-2 hover:bg-surface-3 text-text-primary text-sm font-bold rounded-xl transition-colors"
+                className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle"
               >
-                <Download className="w-4 h-4" /> 下载视频
+                <Download className="w-3.5 h-3.5" /> 下载视频
               </button>
               <button
                 onClick={handleClear}
-                className="flex items-center gap-2 px-4 py-2 bg-surface-2 hover:bg-surface-3 text-text-muted text-sm font-bold rounded-xl transition-colors"
+                className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-border-subtle hover:border-rose-500/20 transition-all duration-200"
               >
-                <Trash2 className="w-4 h-4" /> 清除
+                <Trash2 className="w-3.5 h-3.5" /> 清除生成结果
               </button>
             </div>
           </div>
         ) : !generating && (
           <div className="mb-6">
-            {/* 预览框：同时作为拖放区 & 参考图网格容器 */}
-            <div
-              className={`rounded-2xl overflow-hidden bg-surface-2/50 flex flex-col transition-all border-2 border-dashed ${
-                isDragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-border-subtle hover:border-indigo-500/30 hover:bg-surface-2'
-              }`}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
-            >
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                className="hidden"
-              />
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="hidden"
+            />
 
-              {/* 顶部信息栏 */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-subtle/30">
-                <p className="text-xs font-bold text-text-muted">
-                  参考图 {imageUrls.length}/9
-                  {imageUrls.length > 0 && (
-                    <span className="ml-2 text-text-muted/70 font-normal">在 prompt 中用 [Image 1]、[Image 2]... 引用</span>
-                  )}
-                </p>
-                {imageUrls.length > 0 && imageUrls.length < 9 && (
-                  <button
-                    onClick={handleUpload}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-surface-2 hover:bg-surface-3 text-text-primary rounded-lg transition-colors"
-                  >
-                    <Upload className="w-3.5 h-3.5" /> 添加
-                  </button>
-                )}
+            {isUploading ? (
+              <div className="aspect-video rounded-2xl overflow-hidden bg-surface-2/50 flex flex-col items-center justify-center border-2 border-dashed border-border-subtle">
+                <RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" />
+                <p className="text-text-muted text-sm">上传中...</p>
               </div>
+            ) : imageUrls.length === 0 ? (
+              <div
+                className={`upload-zone aspect-video flex flex-col items-center justify-center group cursor-pointer shadow-lg ${isDragging ? 'dragging' : 'border-border-subtle'}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                onClick={handleUpload}
+              >
+                <div className="w-14 h-14 bg-surface-2 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-border-subtle">
+                  <Upload className="w-6 h-6 text-indigo-500" />
+                </div>
+                <h3 className="text-base font-bold text-text-primary mb-1.5">点击或拖拽图片上传</h3>
+                <p className="text-text-muted text-xs">支持 JPG, PNG, WEBP · 也可 Ctrl+V 粘贴</p>
+              </div>
+            ) : (
+              <div
+                className="aspect-video rounded-2xl overflow-hidden bg-surface-2/50 flex flex-col transition-all border-2 border-dashed border-border-subtle"
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+              >
+                {/* 顶部信息栏 */}
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-subtle/30">
+                  <p className="text-xs font-bold text-text-muted">
+                    参考图 {imageUrls.length}/9
+                    <span className="ml-2 text-text-muted/70 font-normal">在 prompt 中用 [Image 1]、[Image 2]... 引用</span>
+                  </p>
+                  {imageUrls.length < 9 && (
+                    <button
+                      onClick={handleUpload}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-surface-2 hover:bg-surface-3 text-text-primary rounded-lg transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> 添加
+                    </button>
+                  )}
+                </div>
 
-              {isUploading ? (
-                <div className="flex-1 flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-                </div>
-              ) : imageUrls.length === 0 ? (
-                <div
-                  className="flex-1 flex flex-col items-center justify-center py-12 cursor-pointer"
-                  onClick={handleUpload}
-                >
-                  <Upload className="w-8 h-8 text-text-muted mx-auto mb-2" />
-                  <p className="text-sm text-text-muted">上传参考图（可选，最多 9 张）</p>
-                  <p className="text-xs text-text-muted mt-1">支持拖拽、点击或 Ctrl+V 粘贴 · 不上传则使用文生视频</p>
-                </div>
-              ) : (
-                <div className="p-3">
+                <div className="flex-1 min-h-0 p-3 overflow-hidden">
                   {(() => {
                     const n = imageUrls.length;
-                    // 1 张：最大化（16:10 占满整行）
+                    // 1 张：最大化（填满网格区域，图片自适应缩放）
                     if (n === 1) {
                       return (
-                        <div className="grid grid-cols-1 gap-2">
+                        <div className="grid grid-cols-1 gap-2 h-full">
                           {imageUrls.map((url, idx) => (
                             <ImageThumb key={url + idx} cacheKey={url} index={idx} onRemove={handleRemoveImage} large />
                           ))}
@@ -462,7 +516,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
                     // 2-3 张：并排显示
                     if (n <= 3) {
                       return (
-                        <div className={`grid ${n === 2 ? 'grid-cols-2' : 'grid-cols-3'} gap-2`}>
+                        <div className={`grid ${n === 2 ? 'grid-cols-2' : 'grid-cols-3'} gap-2 h-full`}>
                           {imageUrls.map((url, idx) => (
                             <ImageThumb key={url + idx} cacheKey={url} index={idx} onRemove={handleRemoveImage} />
                           ))}
@@ -472,7 +526,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
                     // 4 张：2x2
                     if (n === 4) {
                       return (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 grid-rows-2 gap-2 h-full">
                           {imageUrls.map((url, idx) => (
                             <ImageThumb key={url + idx} cacheKey={url} index={idx} onRemove={handleRemoveImage} />
                           ))}
@@ -482,7 +536,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
                     // 5 张：上 2 下 3（用 6 列，前 2 张各占 3 列，后 3 张各占 2 列）
                     if (n === 5) {
                       return (
-                        <div className="grid grid-cols-6 gap-2">
+                        <div className="grid grid-cols-6 grid-rows-2 gap-2 h-full">
                           {imageUrls.map((url, idx) => (
                             <ImageThumb
                               key={url + idx}
@@ -498,7 +552,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
                     // 6 张：3x2
                     if (n === 6) {
                       return (
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-3 grid-rows-2 gap-2 h-full">
                           {imageUrls.map((url, idx) => (
                             <ImageThumb key={url + idx} cacheKey={url} index={idx} onRemove={handleRemoveImage} />
                           ))}
@@ -507,7 +561,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
                     }
                     // 7-9 张：3x3
                     return (
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-3 grid-rows-3 gap-2 h-full">
                         {imageUrls.map((url, idx) => (
                           <ImageThumb key={url + idx} cacheKey={url} index={idx} onRemove={handleRemoveImage} />
                         ))}
@@ -515,13 +569,33 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
                     );
                   })()}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* 参数选择 */}
         <div className="mb-4 space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-text-muted">时长：{duration} 秒</label>
+              <span className="text-xs font-bold text-indigo-300">
+                预计 {(duration * (resolution === '1080P' ? 2.24 : 1.26)).toFixed(2)} 元
+              </span>
+            </div>
+            <input
+              type="range"
+              min="3"
+              max="15"
+              value={duration}
+              onChange={(e) => setDuration(Number(e.target.value))}
+              className="w-full accent-indigo-500"
+            />
+            <p className="text-[10px] text-text-muted/70 mt-1">
+              按 {resolution === '1080P' ? '2.240' : '1.260'} 元/秒 计费
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-text-muted mb-2 block">分辨率</label>
@@ -557,23 +631,28 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
               </div>
             </div>
           </div>
-
-          <div>
-            <label className="text-xs font-bold text-text-muted mb-2 block">时长：{duration} 秒</label>
-            <input
-              type="range"
-              min={3}
-              max={15}
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              className="w-full accent-indigo-500"
-            />
-          </div>
         </div>
 
         {/* 提示词输入 */}
         <div className="mb-4">
+          {imageUrls.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-text-muted/70 mr-1">插入引用：</span>
+              {imageUrls.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => insertImageTag(idx)}
+                  className="px-2 py-0.5 text-[10px] font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 rounded transition-colors font-mono"
+                  title={`在光标处插入 [Image ${idx + 1}]`}
+                >
+                  [Image {idx + 1}]
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
+            ref={promptRef}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="描述你想要生成的视频内容..."
@@ -608,6 +687,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

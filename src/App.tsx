@@ -26,6 +26,7 @@ import {
   Moon,
   Menu,
   Settings,
+  Video,
 } from 'lucide-react';
 import { useApiKey } from './ApiKeyContext';
 import { useTokenQuery } from './context/TokenQueryContext';
@@ -634,7 +635,7 @@ const SettingsView = ({
                 <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
             </div>
-            <h2 className="text-lg font-bold font-headline text-text-primary">价格总览</h2>
+            <h2 className="text-lg font-bold font-headline text-text-primary">图片生成价格</h2>
           </div>
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -676,6 +677,39 @@ const SettingsView = ({
               </table>
             </div>
           </div>
+        </section>
+
+        {/* 视频生成价格 */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-500/15 rounded-lg flex items-center justify-center">
+              <Video className="w-4 h-4 text-indigo-400" />
+            </div>
+            <h2 className="text-lg font-bold font-headline text-text-primary">视频生成价格</h2>
+          </div>
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[500px]">
+                <thead>
+                  <tr className="border-b border-border-subtle bg-bg-subtle">
+                    <th className="text-left p-4 text-xs font-bold text-text-secondary tracking-wider w-40">模型</th>
+                    <th className="text-center p-4 text-xs font-bold text-text-secondary tracking-wider border-l border-border-subtle">720P</th>
+                    <th className="text-center p-4 text-xs font-bold text-text-secondary tracking-wider border-l border-border-subtle">1080P</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="hover:bg-bg-subtle transition-colors">
+                    <td className="p-4">
+                      <span className="text-sm font-bold text-text-primary">视频生成</span>
+                    </td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">¥1.260<span className="text-xs text-text-muted font-normal">/秒</span></td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">¥2.240<span className="text-xs text-text-muted font-normal">/秒</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p className="text-xs text-text-muted px-1">视频价格按生成时长计费，例如 720P 生成 5 秒 = ¥6.30，1080P 生成 10 秒 = ¥22.40。</p>
         </section>
       </div>
     </div>
