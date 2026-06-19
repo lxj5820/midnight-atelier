@@ -702,8 +702,8 @@ const SettingsView = ({
                     <td className="p-4">
                       <span className="text-sm font-bold text-text-primary">视频生成</span>
                     </td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">¥1.260<span className="text-xs text-text-muted font-normal">/秒</span></td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">¥2.240<span className="text-xs text-text-muted font-normal">/秒</span></td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">¥1.26<span className="text-xs text-text-muted font-normal">/秒</span></td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">¥2.24<span className="text-xs text-text-muted font-normal">/秒</span></td>
                   </tr>
                 </tbody>
               </table>

@@ -30,9 +30,8 @@ const ImageThumb: React.FC<{
     img.src = url;
   }, [url]);
 
-  // 单图 large 模式：填满网格区域，图片自适应缩放（不再固定比例）
-  // 多图模式：填满网格行，图片 contain 不裁剪
-  const containerStyle = undefined;
+  // 单图 large 模式：按图片原比例自适应；多图模式：填满网格行
+  const containerStyle = large && ratio ? { aspectRatio: ratio, maxHeight: '100%', maxWidth: '100%' } : undefined;
   const containerClass = large
     ? 'w-full h-full'
     : 'w-full h-full';
