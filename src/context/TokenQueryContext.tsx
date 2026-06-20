@@ -25,6 +25,7 @@ export function TokenQueryProvider({ children }: { children: React.ReactNode }) 
   const [error, setError] = useState<string | null>(null);
   const refreshingRef = useRef(false);
   const lastKeyRef = useRef('');
+  const staleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadTokenData = useCallback(async (key: string) => {
     if (!key || refreshingRef.current) return;
@@ -67,8 +68,20 @@ export function TokenQueryProvider({ children }: { children: React.ReactNode }) 
     }
   }, [hasApiKey, apiKey, loadTokenData]);
 
-  // 标记数据已过期：生成完成后立即刷新一次（复用 refresh，受 refreshingRef 防抖保护）
-  const markStale = refresh;
+  // 标记数据已过期：生成完成后延迟刷新，避免 API 侧数据尚未同步
+  const markStale = useCallback(() => {
+    if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
+    staleTimerRef.current = setTimeout(() => {
+      staleTimerRef.current = null;
+      refresh();
+    }, 3000);
+  }, [refresh]);
+
+  useEffect(() => {
+    return () => {
+      if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
+    };
+  }, []);
 
   const usedPercent = tokenInfo && !tokenInfo.unlimited_quota && tokenInfo.total_granted > 0
     ? Math.min((tokenInfo.total_used / tokenInfo.total_granted) * 100, 100)

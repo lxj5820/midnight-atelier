@@ -61,15 +61,22 @@ export function useCachedImageUrl(cacheKey: string | null | undefined): [string 
 
 /**
  * Hook: 批量解析 cache keys 为 blob URLs
- * 内部缓存 cacheKeys 的字符串表示，避免每次渲染产生新引用导致 effect 重复执行
+ * 使用 JSON 序列化比较 key 内容，只在数组内容变化时重新解析，避免新数组引用导致 effect 重复执行
  */
 export function useCachedImageUrls(cacheKeys: (string | null | undefined)[]): (string | null)[] {
   const [urls, setUrls] = useState<(string | null)[]>(cacheKeys.map(() => null));
 
-  // 缓存字符串形式的 key 列表，用于做引用稳定的依赖
-  const cacheKeysKey = useMemo(() => cacheKeys.map(k => k ?? '').join('|'), [cacheKeys]);
-  // 缓存实际数组（按字符串拆分还原），让 effect 内部访问的是稳定引用
-  const stableKeys = useMemo(() => cacheKeysKey.split('|'), [cacheKeysKey]);
+  // 用 ref 保存序列化后的 key 和实际数组，只在内容真正变化时更新引用
+  const serializedRef = useRef(JSON.stringify(cacheKeys));
+  const keysRef = useRef(cacheKeys);
+
+  const currentSerialized = JSON.stringify(cacheKeys);
+  if (currentSerialized !== serializedRef.current) {
+    serializedRef.current = currentSerialized;
+    keysRef.current = cacheKeys;
+  }
+
+  const stableKeys = keysRef.current;
 
   // 用 ref 跟踪当前已 resolve 的 blob URL，确保 cleanup 能正确 revoke
   const resolvedUrlsRef = useRef<string[]>([]);
@@ -111,7 +118,7 @@ export function useCachedImageUrls(cacheKeys: (string | null | undefined)[]): (s
       }
       resolvedUrlsRef.current = [];
     };
-  }, [cacheKeysKey]);
+  }, [stableKeys]);
 
   return urls;
 }

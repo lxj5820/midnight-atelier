@@ -250,6 +250,6 @@ function stringValue(value: FormDataEntryValue | null): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
 }
 
-function isBlobLike(value: FormDataEntryValue | null): value is Blob {
+function isBlobLike(value: FormDataEntryValue | null): value is File {
   return !!value && typeof value !== 'string' && typeof value.arrayBuffer === 'function';
 }

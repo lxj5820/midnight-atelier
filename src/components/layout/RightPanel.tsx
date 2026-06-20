@@ -167,7 +167,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 </div>
                 <div className="flex items-center justify-between px-4 pb-2">
                   <span className="text-sm font-bold text-text-primary">参数设置</span>
-                  <button onClick={onToggleRightPanel} className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors">
+                  <button type="button" onClick={onToggleRightPanel} className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors">
                     <X className="w-4 h-4 text-text-muted" />
                   </button>
                 </div>
@@ -219,7 +219,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                         {presets.map(preset => {
                           const isSelected = selectedPreset === preset.label;
                           return (
-                            <button
+                            <button type="button"
                               key={preset.id}
                               onClick={() => setSelectedPreset(preset.label)}
                               className={`preset-card shrink-0 w-24 aspect-video rounded-lg overflow-hidden relative group border-2 ${
@@ -266,7 +266,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                     />
                     <div className="flex justify-end gap-1.5 mt-1.5 pt-1.5 border-t border-border-subtle/70">
                       {showGeneratorButton && (
-                        <button
+                        <button type="button"
                           onClick={() => setShowPromptGenerator(true)}
                           className="p-1.5 text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200"
                           title="提示词生成器"
@@ -274,7 +274,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                           <FileJson className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      <button
+                      <button type="button"
                         onClick={handlePolishPrompt}
                         disabled={isPolishing || !prompt.trim()}
                         className="p-1.5 text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -282,7 +282,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                       >
                         <Sparkles className={`w-3.5 h-3.5 ${isPolishing ? 'animate-spin' : ''}`} />
                       </button>
-                      <button
+                      <button type="button"
                         onClick={() => setPrompt('')}
                         className="p-1.5 text-text-muted hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-200"
                         title="清空"
@@ -293,7 +293,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   </div>
 
                   {/* 生成按钮 */}
-                  <button
+                  <button type="button"
                     onClick={() => !hasApiKey && onNavigateSettings ? onNavigateSettings() : handleGenerate()}
                     className={`w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all text-sm ${
                       !hasApiKey
@@ -350,7 +350,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             {presets.map(preset => {
               const isSelected = selectedPreset === preset.label;
               return (
-                <button
+                <button type="button"
                   key={preset.id}
                   onClick={() => setSelectedPreset(preset.label)}
                   className={`preset-card aspect-video rounded-xl overflow-hidden relative group border-2 ${
@@ -430,7 +430,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           />
           <div className="flex justify-end gap-1.5 mt-2 pt-2 border-t border-border-subtle/70">
             {showGeneratorButton && (
-              <button
+              <button type="button"
                 onClick={() => setShowPromptGenerator(true)}
                 className="p-2 text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200"
                 title="提示词生成器"
@@ -438,7 +438,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 <FileJson className="w-4 h-4" />
               </button>
             )}
-            <button
+            <button type="button"
               onClick={handlePolishPrompt}
               disabled={isPolishing || !prompt.trim()}
               className="p-2 text-text-muted hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-muted"
@@ -446,7 +446,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             >
               <Sparkles className={`w-4 h-4 ${isPolishing ? 'animate-spin' : ''}`} />
             </button>
-            <button
+            <button type="button"
               onClick={() => setPrompt('')}
               className="p-2 text-text-muted hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-200"
               title="清空"
@@ -455,7 +455,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             </button>
           </div>
         </div>
-        <button
+        <button type="button"
           onClick={() => !hasApiKey && onNavigateSettings ? onNavigateSettings() : handleGenerate()}
           className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
             !hasApiKey

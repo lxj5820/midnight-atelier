@@ -55,8 +55,21 @@ export default async function handler(req: any, res: any) {
     }
 
     // 流式传输，无需等待完整下载
-    if (response.body && typeof response.body.pipe === 'function') {
-      response.body.pipe(res);
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+        res.end();
+      } catch {
+        const buffer = Buffer.from(await response.arrayBuffer());
+        res.status(200).end(buffer);
+      } finally {
+        reader.releaseLock();
+      }
     } else {
       const buffer = Buffer.from(await response.arrayBuffer());
       res.status(200).end(buffer);

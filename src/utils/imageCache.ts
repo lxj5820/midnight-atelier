@@ -1,3 +1,5 @@
+import { fetchImage } from './oss';
+
 /**
  * 图片缓存工具 - 使用 IndexedDB 存储 Blob，避免 base64 占用过多空间
  * 缓存 key 格式: cache://{id}
@@ -53,7 +55,6 @@ export async function cacheImage(source: string | Blob, id?: string): Promise<st
     }
   } else {
     // 外部 URL -> fetch -> Blob（通过代理避免 CORS）
-    const { fetchImage } = await import('./oss');
     const res = await fetchImage(source);
     blob = await res.blob();
   }
@@ -102,7 +103,6 @@ export async function getCachedImageBlob(cacheKey: string): Promise<Blob | null>
   if (!isCacheKey(cacheKey)) {
     // 非 cache key，通过代理 fetch
     try {
-      const { fetchImage } = await import('./oss');
       const res = await fetchImage(cacheKey);
       return await res.blob();
     } catch {

@@ -104,7 +104,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
         className={`${isMobile ? 'h-[50vh] w-full' : 'flex-1'} flex items-center justify-center relative overflow-hidden`}
       >
         {/* Close button - top right of image area */}
-        <button
+        <button type="button"
           onClick={onClose}
           className="absolute top-4 right-4 z-10 p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-colors backdrop-blur-sm"
         >
@@ -113,7 +113,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
 
         {/* Prev/Next arrows */}
         {hasPrev && onPrev && (
-          <button
+          <button type="button"
             onClick={(e) => {
               e.stopPropagation();
               onPrev();
@@ -124,7 +124,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
           </button>
         )}
         {hasNext && onNext && (
-          <button
+          <button type="button"
             onClick={(e) => {
               e.stopPropagation();
               onNext();
@@ -179,7 +179,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
                 <p className="text-[10px] text-text-muted">室内大师创作者</p>
               </div>
             </div>
-            <button
+            <button type="button"
               onClick={() => setIsLiked(!isLiked)}
               className={`p-2 rounded-lg transition-all duration-200 ${
                 isLiked
@@ -223,7 +223,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
               <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
                 图片提示词
               </h3>
-              <button
+              <button type="button"
                 onClick={handleCopyPrompt}
                 className="flex items-center gap-1.5 px-2.5 py-1 bg-bg-subtle hover:bg-bg-subtle-hover text-text-secondary hover:text-text-primary text-[11px] rounded-md transition-all"
               >
@@ -253,7 +253,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
               )}
             </div>
             {prompt.length > 120 && (
-              <button
+              <button type="button"
                 onClick={() => setShowMore(!showMore)}
                 className="mt-2 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
               >
@@ -265,14 +265,14 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
 
         {/* Actions */}
         <div className="p-5 mt-auto space-y-2.5">
-          <button
+          <button type="button"
             onClick={handleDownload}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-bg-subtle-hover hover:bg-bg-subtle-hover text-text-primary text-xs font-medium rounded-xl border border-border-subtle transition-all duration-200"
           >
             <Download className="w-3.5 h-3.5" />
             下载原图
           </button>
-          <button
+          <button type="button"
             onClick={() => {
               navigator.clipboard.writeText(imageUrl);
             }}

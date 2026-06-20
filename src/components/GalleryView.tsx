@@ -212,7 +212,7 @@ const LazyGalleryCard: React.FC<{
             : 'translateY(-8px)',
         }}
       >
-        <button
+        <button type="button"
           onClick={(e) => {
             e.stopPropagation();
             onOpenPreview(image);
@@ -222,7 +222,7 @@ const LazyGalleryCard: React.FC<{
         >
           <Maximize2 className="w-3.5 h-3.5 text-white" />
         </button>
-        <button
+        <button type="button"
           onClick={(e) => {
             e.stopPropagation();
             onDownload(image.url, image.name);
@@ -491,7 +491,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
             </div>
             <h2 className="text-xl font-bold text-text-primary mb-2">加载失败</h2>
             <p className="text-text-muted text-sm mb-4">{error}</p>
-            <button
+            <button type="button"
               onClick={fetchImages}
               className="btn-primary px-6 py-2.5 rounded-xl text-white text-sm font-bold flex items-center gap-2"
             >
@@ -525,7 +525,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
                     className="w-full pl-9 pr-8 py-2 bg-surface-2 border border-border-subtle rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all"
                   />
                   {searchQuery && (
-                    <button
+                    <button type="button"
                       onClick={() => setSearchQuery('')}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-text-primary transition-colors"
                     >
@@ -534,7 +534,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
                   )}
                 </div>
 
-                <button
+                <button type="button"
                   onClick={() => setShowFilters(v => !v)}
                   className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border transition-all duration-200 ${
                     showFilters || promptFilter !== 'all'
@@ -550,7 +550,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
                 </button>
 
                 <div className="relative" ref={sortDropdownRef}>
-                  <button
+                  <button type="button"
                     onClick={() => setSortOpen(v => !v)}
                     className="flex items-center gap-2 px-3 py-2 bg-surface-2 border border-border-subtle rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-border-default transition-all duration-200"
                   >
@@ -568,7 +568,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
                         className="absolute top-full left-0 mt-1.5 py-1 bg-surface-2 border border-border-subtle rounded-lg shadow-xl shadow-black/30 z-30 min-w-[140px]"
                       >
                         {SORT_OPTIONS.map(opt => (
-                          <button
+                          <button type="button"
                             key={opt.key}
                             onClick={() => { setSortKey(opt.key); setSortOpen(false); }}
                             className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
@@ -587,7 +587,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
 
                 <div className="flex-1" />
 
-                <button
+                <button type="button"
                   onClick={fetchImages}
                   className="flex items-center gap-2 px-3 py-1.5 bg-surface-2 hover:bg-surface-3 text-text-secondary hover:text-text-primary text-xs font-medium rounded-lg border border-border-subtle transition-all duration-200"
                 >
@@ -632,7 +632,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
                           { key: 'with-prompt' as PromptFilter, label: '含提示词' },
                           { key: 'without-prompt' as PromptFilter, label: '无提示词' },
                         ]).map(opt => (
-                          <button
+                          <button type="button"
                             key={opt.key}
                             onClick={() => setPromptFilter(opt.key)}
                             className={`px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
@@ -679,7 +679,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ showToast, setPreviewImage })
                 </div>
                 <h3 className="text-lg font-bold text-text-primary mb-1">未找到匹配作品</h3>
                 <p className="text-text-muted text-sm mb-4">尝试调整搜索词或筛选条件</p>
-                <button
+                <button type="button"
                   onClick={() => { setSearchQuery(''); setPromptFilter('all'); }}
                   className="px-4 py-2 bg-surface-2 hover:bg-surface-3 text-text-secondary hover:text-text-primary text-xs font-medium rounded-lg border border-border-subtle transition-all"
                 >

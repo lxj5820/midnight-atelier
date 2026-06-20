@@ -518,7 +518,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
           <div className="flex items-center gap-3">
             <h3 className="text-text-primary font-bold text-base">AI 提示词生成器</h3>
             <div className="relative" ref={presetMenuRef}>
-              <button
+              <button type="button"
                 onClick={() => { setShowPresetMenu(!showPresetMenu); setShowSaveDialog(false); }}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-2 hover:bg-surface-3 text-text-secondary hover:text-text-primary text-[11px] font-medium rounded-lg border border-border-subtle transition-all"
               >
@@ -531,7 +531,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
               {showPresetMenu && (
                 <div className="absolute top-full left-0 mt-1.5 w-64 bg-surface-2 border border-border-subtle rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
                   <div className="p-2">
-                    <button
+                    <button type="button"
                       onClick={() => { setShowSaveDialog(true); setShowPresetMenu(false); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors"
                     >
@@ -554,7 +554,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                               {new Date(preset.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </div>
-                          <button
+                          <button type="button"
                             onClick={(e) => { e.stopPropagation(); handleDeletePreset(preset.id); }}
                             className="p-1 text-text-muted hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all rounded"
                           >
@@ -573,7 +573,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-bg-subtle rounded-lg transition-all">
+          <button type="button" onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-bg-subtle rounded-lg transition-all">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -590,14 +590,14 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
               className="input-field flex-1 py-1.5 px-2.5 text-xs"
               autoFocus
             />
-            <button
+            <button type="button"
               onClick={handleSavePreset}
               disabled={!presetName.trim()}
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-surface-3 disabled:cursor-not-allowed text-white text-[11px] font-medium rounded-lg transition-colors"
             >
               保存
             </button>
-            <button
+            <button type="button"
               onClick={() => { setShowSaveDialog(false); setPresetName(''); }}
               className="px-3 py-1.5 bg-surface-3 hover:bg-surface-2 text-text-secondary text-[11px] font-medium rounded-lg transition-colors"
             >
@@ -674,7 +674,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                             <label className="text-text-secondary text-[11px] font-medium mb-1 block">{field.label}</label>
                             <div className="flex flex-wrap gap-1">
                               {options.slice(0, -1).map((opt, idx) => (
-                                <button
+                                <button type="button"
                                   key={`built-in-${idx}`}
                                   onClick={() => handleSelect(sectionId, field.key, idx)}
                                   className={`px-2 py-0.5 rounded-md text-[11px] transition-all ${
@@ -688,7 +688,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                               ))}
 
                               {customBtns.map((btn, idx) => (
-                                <button
+                                <button type="button"
                                   key={`custom-${idx}`}
                                   onClick={() => {
                                     handleSelect(sectionId, field.key, builtInCount + idx);
@@ -713,7 +713,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                                 </button>
                               ))}
 
-                              <button
+                              <button type="button"
                                 onClick={() => handleSelect(sectionId, field.key, options.length - 1)}
                                 className={`px-2 py-0.5 rounded-md text-[11px] transition-all ${
                                   isCustom
@@ -735,7 +735,7 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
                                   className="input-field flex-1 py-1.5 px-2.5 text-xs"
                                 />
                                 {isCustom && (
-                                  <button
+                                  <button type="button"
                                     onClick={() => handleSaveCustomButton(sectionId, field.key)}
                                     className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] flex items-center gap-1 transition-colors whitespace-nowrap"
                                   >
@@ -760,14 +760,14 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
             <div className="flex items-center justify-between p-3 border-b border-border-subtle">
               <div className="text-text-secondary text-[11px] font-medium">实时预览</div>
               <div className="flex gap-1.5">
-                <button
+                <button type="button"
                   onClick={handleCopy}
                   className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-bg-subtle rounded-lg transition-all"
                   title="复制"
                 >
                   <Copy className="w-3.5 h-3.5" />
                 </button>
-                <button
+                <button type="button"
                   onClick={handleReset}
                   className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-bg-subtle rounded-lg transition-all"
                   title="重置"
@@ -786,13 +786,13 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ isOpen, onClos
         </div>
 
         <div className="flex items-center justify-end gap-2.5 p-3 border-t border-border-subtle">
-          <button
+          <button type="button"
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-surface-3 text-text-primary text-sm font-medium hover:bg-surface-2 transition-all border border-border-subtle/70"
           >
             取消
           </button>
-          <button
+          <button type="button"
             onClick={handleApply}
             className="btn-primary px-4 py-2 rounded-xl text-white text-sm font-medium flex items-center gap-2"
           >

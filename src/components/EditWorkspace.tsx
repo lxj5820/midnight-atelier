@@ -1,17 +1,18 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, Suspense, lazy } from 'react';
 import { Upload, X, Loader2, Download, Quote, Trash2, Sparkles, RefreshCw, Maximize2, Wand2, Pencil, ImageOff } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { useTokenQuery } from '../context/TokenQueryContext';
 import { downloadImage } from '../utils/download';
-import { getGenerationHistoryAsync, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getSizeFromRefImage, getClosestAspectRatio, dbOperations } from '../utils';
-import { API_TIMEOUT_MS } from '../utils/constants';
+import { getGenerationHistoryAsync, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getClosestAspectRatio, dbOperations } from '../utils';
+import { generateImage } from '../services/generation';
 import type { GenerationRecord, PreviewImageData } from '../types';
-import ImageEditor from './ImageEditor';
 import { RightPanel } from './layout/RightPanel';
 import { GlowBlob } from './ui/GlowBlob';
 import { useCachedImageUrl } from '../hooks/useCachedImage';
+
+const ImageEditor = lazy(() => import('./ImageEditor'));
 
 // 参考图缩略图 - 解析缓存 key
 const RefImageThumb: React.FC<{ cacheKey: string; alt: string }> = ({ cacheKey, alt }) => {
@@ -247,126 +248,17 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
     // 异步执行生成，不阻塞 UI
     (async () => {
       try {
-        if (currentModel === 'GPT Image 2') {
-          const gptImage2SizeMap: Record<string, Record<string, string>> = {
-            '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720' },
-            '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152' },
-            '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160' }
-          };
-
-          // 当 auto 比例且有参考图时，根据参考图实际比例计算尺寸
-          let imageSize: string;
-          if (currentAspectRatio === 'auto' && currentRefImages.length > 0) {
-            const refBlob = await getCachedImageBlob(currentRefImages[0]);
-            if (refBlob) {
-              const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
-              imageSize = refDims ? getSizeFromRefImage(refDims.width, refDims.height, currentQuality) : 'auto';
-            } else {
-              imageSize = 'auto';
-            }
-          } else {
-            imageSize = gptImage2SizeMap[currentQuality]?.[currentAspectRatio] || 'auto';
-          }
-          const gptApiUrl = 'https://newapi.asia/v1/images/edits';
-          const formData = new FormData();
-          formData.append('model', 'gpt-image-2');
-          formData.append('prompt', currentPrompt);
-          formData.append('size', imageSize);
-          formData.append('quality', currentQuality === '4K' ? 'high' : currentQuality === '2K' ? 'medium' : 'low');
-          formData.append('n', '1');
-          formData.append('input_fidelity', '0.5');
-
-          for (let i = 0; i < currentRefImages.length; i++) {
-            const blob = await getCachedImageBlob(currentRefImages[i]);
-            if (!blob) continue;
-            const fileName = i === 0 ? 'image.png' : `image_${i}.png`;
-            formData.append('image', blob, fileName);
-          }
-
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-          const response = await fetch(gptApiUrl, { method: 'POST', headers: { 'Authorization': `Bearer ${apiKey}` }, body: formData, signal: controller.signal });
-          clearTimeout(timeoutId);
-
-          if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error?.message || `请求失败 (${response.status})`); }
-          const data = await response.json();
-          if (data.error) throw new Error(data.error.message || 'API 返回错误');
-          let imageUrl = '';
-          if (data.data?.b64_json) {
-            imageUrl = `data:image/png;base64,${data.data.b64_json}`;
-          } else if (Array.isArray(data.data) && data.data.length > 0) {
-            const imgData = data.data[0];
-            if (imgData.b64_json) imageUrl = `data:image/png;base64,${imgData.b64_json}`;
-            else if (imgData.url) imageUrl = imgData.url;
-          } else if (data.choices && data.choices.length > 0) {
-            const content = data.choices[0].message?.content;
-            if (content) imageUrl = content.startsWith('data:') ? content : `data:image/png;base64,${content}`;
-          }
-          if (!imageUrl) throw new Error('响应中未找到图片');
-
-          const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const resultCacheKey = await cacheImage(imageUrl, recordId);
-
-          const record: GenerationRecord = {
-            id: recordId,
-            type: 'edit',
-            prompt: currentPrompt,
-            imageUrl: resultCacheKey,
-            referenceImageUrl: currentRefImages[0],
-            referenceImageUrls: currentRefImages,
-            createdAt: new Date().toISOString(),
-            resolution: { width: 0, height: 0, quality: currentQuality, aspectRatio: currentAspectRatio },
-          };
-          const saved = await dbOperations.save(record);
-          if (saved) {
-            setResult(resultCacheKey);
-            setPendingResult(resultCacheKey);
-            setHistoryRefreshKey(k => k + 1);
-            showToast('success', '生成成功！');
-          } else {
-            showToast('error', '图片已生成，但保存历史记录失败');
-          }
-          markStale();
-        } else {
-        const modelMap: Record<string, string> = { '🍌全能图片V2': 'gemini-3.1-flash-image-preview', '🍌全能图片PRO': 'gemini-3-pro-image-preview' };
-        const apiModel = modelMap[currentModel] || 'gemini-2.5-flash-image-preview';
-        const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
-
-        // 当 auto 比例且有参考图时，根据参考图实际比例计算
-        let effectiveAspectRatio = currentAspectRatio;
-        if (currentAspectRatio === 'auto' && currentRefImages.length > 0) {
-          const refBlob = await getCachedImageBlob(currentRefImages[0]);
-          if (refBlob) {
-            const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
-            if (refDims) effectiveAspectRatio = getClosestAspectRatio(refDims.width, refDims.height);
-          }
-        }
-
-        const parts: any[] = [];
-        for (const imgUrl of currentRefImages) {
-          const blob = await getCachedImageBlob(imgUrl);
-          if (!blob) continue;
-          const base64 = await blobToBase64(blob);
-          parts.push({ inline_data: { mime_type: blob.type || 'image/jpeg', data: base64 } });
-        }
-        parts.push({ text: currentPrompt });
-
-        const requestBody = { contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: currentQuality } } };
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify(requestBody), signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error?.message || `请求失败 (${response.status})`); }
-        const data = await response.json();
-        const resultParts = data.candidates?.[0]?.content?.parts || [];
-        let imageUrl = '';
-        for (const part of resultParts) { if (part.inlineData) { imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`; break; } }
-        if (!imageUrl) throw new Error('响应中未找到图片');
+        const genResult = await generateImage({
+          apiKey,
+          model: currentModel,
+          prompt: currentPrompt,
+          quality: currentQuality,
+          aspectRatio: currentAspectRatio,
+          referenceImageUrls: currentRefImages,
+        });
 
         const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const resultCacheKey = await cacheImage(imageUrl, recordId);
+        const resultCacheKey = await cacheImage(genResult.imageUrl, recordId);
 
         const record: GenerationRecord = {
           id: recordId,
@@ -388,7 +280,6 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           showToast('error', '图片已生成，但保存历史记录失败');
         }
         markStale();
-        }
       } catch (error) {
         console.error('Generation error:', error);
         showToast('error', error instanceof Error ? error.message : '生成失败');
@@ -446,14 +337,14 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
             <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-surface-1 relative group">
               <RefImageThumb cacheKey={img} alt={`参考图 ${idx + 1}`} />
               <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/60 dark:bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
+                <button type="button"
                   onClick={() => setEditingImageIndex(idx)}
                   className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
                   title="编辑"
                 >
                   <Pencil className="w-3 h-3 text-white" />
                 </button>
-                <button onClick={() => removeRefImage(idx)} className="p-1.5 bg-white/20 hover:bg-rose-500/50 rounded-lg transition-colors" title="删除">
+                <button type="button" onClick={() => removeRefImage(idx)} className="p-1.5 bg-white/20 hover:bg-rose-500/50 rounded-lg transition-colors" title="删除">
                   <X className="w-3 h-3 text-white" />
                 </button>
               </div>
@@ -531,13 +422,13 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
           {/* Result Actions */}
           {(result || pendingResult) && (
             <div className="flex justify-end gap-2 mb-4">
-              <button onClick={() => { const img = result || pendingResult; if (img) { setReferenceImages([img]); showToast('info', '已设置为参考图'); } }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle">
+              <button type="button" onClick={() => { const img = result || pendingResult; if (img) { setReferenceImages([img]); showToast('info', '已设置为参考图'); } }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle">
                 <Quote className="w-3.5 h-3.5" />引用
               </button>
-              <button onClick={() => { const img = result || pendingResult; if (img) handleDownload(img); }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle">
+              <button type="button" onClick={() => { const img = result || pendingResult; if (img) handleDownload(img); }} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle">
                 <Download className="w-3.5 h-3.5" />下载
               </button>
-              <button onClick={() => { setResult(null); setPendingResult(null); }} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-border-subtle hover:border-rose-500/20 transition-all duration-200">
+              <button type="button" onClick={() => { setResult(null); setPendingResult(null); }} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-border-subtle hover:border-rose-500/20 transition-all duration-200">
                 <Trash2 className="w-4 h-4" />清除
               </button>
             </div>
@@ -561,7 +452,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                   </div>
                 )}
                 {generationHistory.length > 0 && (
-                  <button onClick={handleClearHistory} className="text-rose-400 text-xs font-medium hover:text-rose-300 transition-colors">清除记录</button>
+                  <button type="button" onClick={handleClearHistory} className="text-rose-400 text-xs font-medium hover:text-rose-300 transition-colors">清除记录</button>
                 )}
               </div>
             </div>
@@ -589,10 +480,10 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
                         {new Date(record.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
                       <div className="flex gap-1 mt-1">
-                        <button onClick={(e) => { e.stopPropagation(); setReferenceImages(prev => [...prev, record.imageUrl]); showToast('success', '已将生成结果添加到参考图'); }} className="p-1.5 thumb-btn rounded hover:!bg-indigo-500/50 transition-colors" title="引用到参考图"><Quote className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: '全能修改', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 thumb-btn rounded transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDownload(record.imageUrl); }} className="p-1.5 thumb-btn rounded transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 thumb-btn rounded hover:!bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setReferenceImages(prev => [...prev, record.imageUrl]); showToast('success', '已将生成结果添加到参考图'); }} className="p-1.5 thumb-btn rounded hover:!bg-indigo-500/50 transition-colors" title="引用到参考图"><Quote className="w-3 h-3 text-white" /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: '全能修改', prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 thumb-btn rounded transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDownload(record.imageUrl); }} className="p-1.5 thumb-btn rounded transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 thumb-btn rounded hover:!bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
                       </div>
                     </div>
                   </motion.div>
@@ -637,29 +528,31 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
       />
       {/* Image Editor Modal */}
       {editingImageIndex !== null && referenceImages[editingImageIndex] && (
-        <CachedEditImageEditor
-          cacheKey={referenceImages[editingImageIndex]}
-          onSave={async (editedImage) => {
-            try {
-              const cacheKey = await cacheImage(editedImage);
-              setReferenceImages(prev => {
-                const newImages = [...prev];
-                newImages[editingImageIndex!] = cacheKey;
-                return newImages;
-              });
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>}>
+          <CachedEditImageEditor
+            cacheKey={referenceImages[editingImageIndex]}
+            onSave={async (editedImage) => {
+              try {
+                const cacheKey = await cacheImage(editedImage);
+                setReferenceImages(prev => {
+                  const newImages = [...prev];
+                  newImages[editingImageIndex!] = cacheKey;
+                  return newImages;
+                });
+                setEditingImageIndex(null);
+                showToast('success', '图片编辑已保存');
+              } catch {
+                setEditingImageIndex(null);
+                showToast('error', '编辑图片保存失败');
+              }
+            }}
+            onCancel={() => setEditingImageIndex(null)}
+            onError={(message) => {
               setEditingImageIndex(null);
-              showToast('success', '图片编辑已保存');
-            } catch {
-              setEditingImageIndex(null);
-              showToast('error', '编辑图片保存失败');
-            }
-          }}
-          onCancel={() => setEditingImageIndex(null)}
-          onError={(message) => {
-            setEditingImageIndex(null);
-            showToast('error', message);
-          }}
-        />
+              showToast('error', message);
+            }}
+          />
+        </Suspense>
       )}
       {isMobile && (
         <GlowBlob

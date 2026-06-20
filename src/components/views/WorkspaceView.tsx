@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import { ImageOff } from 'lucide-react';
 import {
   Sparkles, RefreshCw, ChevronLeft, ChevronRight, Maximize2,
@@ -11,12 +11,11 @@ import { useApiKey } from '../../ApiKeyContext';
 import { useTokenQuery } from '../../context/TokenQueryContext';
 import {
   blobToBase64, getImageDimensions, getClosestAspectRatio,
-  getComputePointsCost, getResolution, getSizeFromRefImage,
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
-  cacheImage, getCachedImage, getCachedImageBlob, isCacheKey, deleteCachedImage,
+  cacheImage, isCacheKey, deleteCachedImage,
 } from '../../utils';
-import { API_TIMEOUT_MS } from '../../utils/constants';
+import { generateImage } from '../../services/generation';
 import { downloadImage } from '../../utils/download';
 import {
   getPromptPlaceholder, menuItemsConfig
@@ -26,7 +25,6 @@ import type { MenuItemId } from '../../menuConfig';
 import type { GenerationRecord, PreviewImageData } from '../../types';
 import { RightPanel } from '../layout/RightPanel';
 import { GlowBlob } from '../ui/GlowBlob';
-import { lazy } from 'react';
 import { useCachedImageUrl } from '../../hooks/useCachedImage';
 
 const PanoramaViewer = lazy(() => import('../PanoramaViewer'));
@@ -138,6 +136,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [refImageDimensions, setRefImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [resultDimensions, setResultDimensions] = useState<{ width: number; height: number } | null>(null);
   const [customRefImage, setCustomRefImage] = useState<string | null>(null);
+  const [isCustomDragging, setIsCustomDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const customFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -265,264 +264,33 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     const currentModel = model;
 
     try {
-      if (currentModel === 'GPT Image 2') {
-        const gptImage2SizeMap: Record<string, Record<string, string>> = {
-          '1K': { '1:1': '1024x1024', '2:3': '1024x1536', '3:2': '1536x1024', '9:16': '720x1280', '16:9': '1280x720' },
-          '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152' },
-          '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160' }
-        };
-
-        // 当 auto 比例且有参考图时，根据参考图实际比例计算尺寸
-        let imageSize: string;
-        if (currentAspectRatio === 'auto' && currentImageUrls.length > 0) {
-          const refBlob = await getCachedImageBlob(currentImageUrls[0]);
-          if (refBlob) {
-            const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
-            imageSize = refDims ? getSizeFromRefImage(refDims.width, refDims.height, currentQuality) : 'auto';
-          } else {
-            imageSize = 'auto';
-          }
-        } else {
-          imageSize = gptImage2SizeMap[currentQuality]?.[currentAspectRatio] || 'auto';
-        }
-
-        let gptApiUrl: string;
-        let gptRequestBody: any;
-
-        if (currentImageUrls.length > 0) {
-          gptApiUrl = 'https://newapi.asia/v1/images/edits';
-          const formData = new FormData();
-          formData.append('model', 'gpt-image-2');
-          formData.append('prompt', finalPrompt);
-          formData.append('size', imageSize);
-          formData.append('quality', currentQuality === '4K' ? 'high' : currentQuality === '2K' ? 'medium' : 'low');
-          formData.append('n', '1');
-          formData.append('input_fidelity', '0.5');
-
-          for (let i = 0; i < currentImageUrls.length; i++) {
-            const blob = await getCachedImageBlob(currentImageUrls[i]);
-            if (!blob) continue;
-            const fileName = i === 0 ? 'image.png' : `image_${i}.png`;
-            formData.append('image', blob, fileName);
-          }
-
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-          const response = await fetch(gptApiUrl, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${apiKey}` },
-            body: formData,
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            const status = response.status;
-            let errorMsg;
-            if (status === 401 || status === 403) errorMsg = 'API 密钥无效或余额不足';
-            else if (status === 429) errorMsg = '请求过于频繁，请稍后再试';
-            else if (status >= 500) errorMsg = `服务器繁忙 (${status})`;
-            else errorMsg = err.error?.message || `请求失败 (${status})`;
-            throw new Error(errorMsg);
-          }
-
-          const data = await response.json();
-          if (data.error) throw new Error(data.error.message || 'API 返回错误');
-          let imageUrl = '';
-          if (data.data?.b64_json) {
-            imageUrl = `data:image/png;base64,${data.data.b64_json}`;
-          } else if (Array.isArray(data.data) && data.data.length > 0) {
-            const imgData = data.data[0];
-            if (imgData.b64_json) imageUrl = `data:image/png;base64,${imgData.b64_json}`;
-            else if (imgData.url) imageUrl = imgData.url;
-          } else if (data.choices && data.choices.length > 0) {
-            const content = data.choices[0].message?.content;
-            if (content) imageUrl = content.startsWith('data:') ? content : `data:image/png;base64,${content}`;
-          }
-          if (!imageUrl) throw new Error('响应中未找到图片');
-
-          const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const resultCacheKey = await cacheImage(imageUrl, recordId);
-          const refCacheKey = currentImageUrls[0] || undefined;
-
-          setResult(resultCacheKey);
-          const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
-          const record: GenerationRecord = {
-            id: recordId,
-            type: activeMenuItem, prompt: currentPrompt, imageUrl: resultCacheKey,
-            referenceImageUrl: refCacheKey,
-            createdAt: new Date().toISOString(),
-            resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
-          };
-          const saved = await dbOperations.save(record);
-          if (saved) {
-            setHistoryRefreshKey(k => k + 1);
-            showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
-          } else {
-            showToast('error', '图片已生成，但保存历史记录失败');
-          }
-          markStale();
-        } else {
-          gptApiUrl = 'https://newapi.asia/v1/images/generations';
-          gptRequestBody = {
-            model: 'gpt-image-2',
-            prompt: finalPrompt,
-            size: imageSize,
-            quality: currentQuality === '4K' ? 'high' : currentQuality === '2K' ? 'medium' : 'low',
-            n: 1,
-            format: 'png'
-          };
-
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-          const response = await fetch(gptApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify(gptRequestBody),
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            const status = response.status;
-            let errorMsg;
-            if (status === 401 || status === 403) errorMsg = 'API 密钥无效或余额不足';
-            else if (status === 429) errorMsg = '请求过于频繁，请稍后再试';
-            else if (status >= 500) errorMsg = `服务器繁忙 (${status})`;
-            else errorMsg = err.error?.message || `请求失败 (${status})`;
-            throw new Error(errorMsg);
-          }
-
-          const data = await response.json();
-          if (data.error) throw new Error(data.error.message || 'API 返回错误');
-          let imageUrl = '';
-          if (data.data?.b64_json) {
-            imageUrl = `data:image/png;base64,${data.data.b64_json}`;
-          } else if (Array.isArray(data.data) && data.data.length > 0) {
-            const imgData = data.data[0];
-            if (imgData.b64_json) imageUrl = `data:image/png;base64,${imgData.b64_json}`;
-            else if (imgData.url) imageUrl = imgData.url;
-          } else if (data.choices && data.choices.length > 0) {
-            const content = data.choices[0].message?.content;
-            if (content) imageUrl = content.startsWith('data:') ? content : `data:image/png;base64,${content}`;
-          }
-          if (!imageUrl) throw new Error('响应中未找到图片');
-
-          const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const resultCacheKey = await cacheImage(imageUrl, recordId);
-
-          setResult(resultCacheKey);
-          const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
-          const record: GenerationRecord = {
-            id: recordId,
-            type: activeMenuItem, prompt: currentPrompt, imageUrl: resultCacheKey,
-            referenceImageUrl: undefined,
-            createdAt: new Date().toISOString(),
-            resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
-          };
-          const saved = await dbOperations.save(record);
-          if (saved) {
-            setHistoryRefreshKey(k => k + 1);
-            showToast('success', `${getMenuItemLabel(activeMenuItem)}生成成功！`);
-          } else {
-            showToast('error', '图片已生成，但保存历史记录失败');
-          }
-          markStale();
-        }
-      } else {
-      const modelMap: Record<string, string> = {
-        '🍌全能图片V2': 'gemini-3.1-flash-image-preview',
-        '🍌全能图片PRO': 'gemini-3-pro-image-preview'
-      };
-      const apiModel = modelMap[currentModel] || 'gemini-2.5-flash-image-preview';
-      const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
-
-      // 当 auto 比例且有参考图时，根据参考图实际比例计算
-      let effectiveAspectRatio = currentAspectRatio;
-      if (currentAspectRatio === 'auto' && currentImageUrls.length > 0) {
-        const refBlob = await getCachedImageBlob(currentImageUrls[0]);
-        if (refBlob) {
-          const refDims = await getImageDimensions(URL.createObjectURL(refBlob));
-          if (refDims) effectiveAspectRatio = getClosestAspectRatio(refDims.width, refDims.height);
-        }
-      }
-
-      let requestBody: any;
-      let hasValidImages = false;
-
-      if (currentImageUrls.length > 0) {
-        const parts = [];
-        for (const imgUrl of currentImageUrls) {
-          try {
-            const blob = await getCachedImageBlob(imgUrl);
-            if (!blob) continue;
-            const base64 = await blobToBase64(blob);
-            parts.push({ inline_data: { mime_type: blob.type || 'image/jpeg', data: base64 } });
-            hasValidImages = true;
-          } catch (e) { /* skip */ }
-        }
-        if (hasValidImages && parts.length > 0) {
-          parts.push({ text: finalPrompt });
-          requestBody = {
-            contents: [{ role: "user", parts }],
-            generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: currentQuality } }
-          };
-        }
-      }
-
-      if (!requestBody) {
-        requestBody = {
-          contents: [{ role: "user", parts: [{ text: finalPrompt }] }],
-          generationConfig: { responseModalities: ["TEXT", "IMAGE"], imageConfig: { ...(effectiveAspectRatio !== 'auto' && { aspectRatio: effectiveAspectRatio }), imageSize: currentQuality } }
-        };
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal
+      const genResult = await generateImage({
+        apiKey,
+        model: currentModel,
+        prompt: finalPrompt,
+        quality: currentQuality,
+        aspectRatio: currentAspectRatio,
+        referenceImageUrls: currentImageUrls,
       });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        const status = response.status;
-        let errorMsg;
-        if (status === 401 || status === 403) errorMsg = 'API 密钥无效或余额不足';
-        else if (status === 429) errorMsg = '请求过于频繁，请稍后再试';
-        else if (status >= 500) errorMsg = `服务器繁忙 (${status})`;
-        else errorMsg = err.error?.message || `请求失败 (${status})`;
-        throw new Error(errorMsg);
-      }
-
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message || 'API 返回错误');
-      if (!data.candidates || data.candidates.length === 0) throw new Error('未收到有效响应');
-
-      const parts = data.candidates?.[0]?.content?.parts || [];
-      let imageUrl = '';
-      for (const part of parts) {
-        if (part.inlineData) { imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`; break; }
-      }
-      if (!imageUrl) throw new Error('响应中未找到图片');
 
       const recordId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const resultCacheKey = await cacheImage(imageUrl, recordId);
+      const resultCacheKey = await cacheImage(genResult.imageUrl, recordId);
       const refCacheKey = currentImageUrls[0] || undefined;
 
       setResult(resultCacheKey);
-      const resolution = currentAspectRatio !== 'auto' ? getResolution(currentAspectRatio, currentQuality) : null;
       const record: GenerationRecord = {
         id: recordId,
-        type: activeMenuItem, prompt: currentPrompt, imageUrl: resultCacheKey,
+        type: activeMenuItem,
+        prompt: currentPrompt,
+        imageUrl: resultCacheKey,
         referenceImageUrl: refCacheKey,
         createdAt: new Date().toISOString(),
-        resolution: { width: resolution?.width || 0, height: resolution?.height || 0, quality: currentQuality, aspectRatio: currentAspectRatio },
+        resolution: {
+          width: genResult.width,
+          height: genResult.height,
+          quality: currentQuality,
+          aspectRatio: currentAspectRatio,
+        },
       };
       const saved = await dbOperations.save(record);
       if (saved) {
@@ -532,7 +300,6 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         showToast('error', '图片已生成，但保存历史记录失败');
       }
       markStale();
-      }
     } catch (error) {
       console.error('Generation error:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
@@ -691,6 +458,28 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     }
   };
 
+  const handleCustomDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsCustomDragging(true); };
+  const handleCustomDragLeave = () => setIsCustomDragging(false);
+  const handleCustomDrop = async (e: React.DragEvent) => {
+    e.preventDefault(); setIsCustomDragging(false);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) await uploadCustomFile(files[0]);
+  };
+  const uploadCustomFile = async (file: File) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) { showToast('error', '不支持的文件类型'); return; }
+    if (file.size > 20 * 1024 * 1024) { showToast('error', '文件大小超过 20MB'); return; }
+    try {
+      const base64 = await blobToBase64(file);
+      const base64Url = `data:${file.type};base64,${base64}`;
+      const cacheKey = await cacheImage(base64Url);
+      setCustomRefImage(cacheKey);
+      showToast('success', '自定义参考图已添加');
+    } catch (error) {
+      showToast('error', `上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
   // 自定义预设参考图上传区域
   const customPresetExtra = selectedPreset === '自定义' ? (
     <div className="mb-3">
@@ -699,7 +488,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       {customRefImage ? (
         <div className="relative rounded-xl overflow-hidden border border-indigo-500/30 group">
           <img src={displayCustomRefImage || ''} alt="自定义参考图" className="w-full aspect-video object-cover" referrerPolicy="no-referrer" />
-          <button
+          <button type="button"
             onClick={() => setCustomRefImage(null)}
             className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-rose-500/80 rounded-lg transition-colors backdrop-blur-sm"
             title="移除参考图"
@@ -709,13 +498,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-indigo-500/80 text-white text-[10px] font-bold rounded">参考图2</div>
         </div>
       ) : (
-        <button
+        <div
           onClick={() => customFileInputRef.current?.click()}
-          className="w-full aspect-video rounded-xl border-2 border-dashed border-border-subtle hover:border-indigo-500/40 hover:bg-surface-1 flex flex-col items-center justify-center transition-all"
+          onDragOver={handleCustomDragOver}
+          onDragLeave={handleCustomDragLeave}
+          onDrop={handleCustomDrop}
+          className={`w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center transition-all cursor-pointer ${isCustomDragging ? 'border-indigo-500 bg-indigo-500/10' : 'border-border-subtle hover:border-indigo-500/40 hover:bg-surface-1'}`}
         >
           <Upload className="w-5 h-5 text-text-muted mb-1.5" />
-          <span className="text-[11px] text-text-muted">点击上传参考图</span>
-        </button>
+          <span className="text-[11px] text-text-muted">点击或拖拽上传参考图</span>
+        </div>
       )}
     </div>
   ) : null;
@@ -774,7 +566,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   </div>
                 )}
                 {activeMenuItem === 'panorama' && (
-                  <button
+                  <button type="button"
                     onClick={() => { setPanoramaImageUrl(result); setShowPanoramaViewer(true); }}
                     className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2.5 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl shadow-lg transition-all backdrop-blur-sm"
                     title="全景查看"
@@ -793,7 +585,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                   <><RefreshCw className="w-12 h-12 text-indigo-500 animate-spin mb-4" /><p className="text-text-muted text-sm">上传中...</p></>
                 ) : (
                   <><img src={displayRefImage || ''} alt="参考图" className="w-full h-full object-contain" onClick={handleUpload} />
-                    <button onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/80 rounded-lg transition-colors backdrop-blur-sm"><X className="w-4 h-4 text-white" /></button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setImageUrls([]); }} className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/80 rounded-lg transition-colors backdrop-blur-sm"><X className="w-4 h-4 text-white" /></button>
                     {refImageDimensions && (
                       <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold rounded-lg z-[2]">
                         {refImageDimensions.width}×{refImageDimensions.height} · {getClosestAspectRatio(refImageDimensions.width, refImageDimensions.height)}
@@ -802,7 +594,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                 )}
               </div>
               {activeMenuItem === 'panorama' && (
-                <button
+                <button type="button"
                   onClick={() => { setPanoramaImageUrl(imageUrls[0]); setShowPanoramaViewer(true); }}
                   className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2.5 bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl shadow-lg transition-all backdrop-blur-sm"
                   title="全景查看"
@@ -826,12 +618,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           {(result || imageUrls.length > 0) && (
             <div className="flex items-center justify-end gap-2 mb-5">
               {imageUrls.length > 0 && (
-                <button onClick={() => setEditingImageIndex(0)} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-indigo-400 text-xs font-medium rounded-lg border border-border-subtle" title="图片编辑器">
+                <button type="button" onClick={() => setEditingImageIndex(0)} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-indigo-400 text-xs font-medium rounded-lg border border-border-subtle" title="图片编辑器">
                   <Pencil className="w-3.5 h-3.5" />图片编辑器
                 </button>
               )}
               {result && imageUrls.length > 0 && (
-                <button
+                <button type="button"
                   onClick={() => setShowCompareMode(!showCompareMode)}
                   className={`btn-ghost flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border ${showCompareMode ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-surface-2 text-text-primary border-border-subtle'}`}
                   title="图片对比模式"
@@ -840,10 +632,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                 </button>
               )}
               {result && imageUrls.length === 0 && (
-                <><button onClick={handleShare} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle"><Share2 className="w-3.5 h-3.5" />分享</button>
-                  <button onClick={handleCopyResult} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle"><Download className="w-3.5 h-3.5" />复制链接</button></>
+                <><button type="button" onClick={handleShare} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle"><Share2 className="w-3.5 h-3.5" />分享</button>
+                  <button type="button" onClick={handleCopyResult} className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle"><Download className="w-3.5 h-3.5" />复制链接</button></>
               )}
-              <button onClick={handleClearResult} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-border-subtle hover:border-rose-500/20 transition-all duration-200">
+              <button type="button" onClick={handleClearResult} className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-border-subtle hover:border-rose-500/20 transition-all duration-200">
                 <Trash2 className="w-3.5 h-3.5" />{result ? '清除结果' : '清除参考图'}
               </button>
             </div>
@@ -864,8 +656,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                     <span className="text-text-muted text-[10px]">{thumbnailSize}px</span>
                   </div>
                 )}
-                {generationHistory.length > 0 && <button onClick={handleClearHistory} className="text-rose-400/70 text-[10px] font-medium hover:text-rose-400 transition-colors">清除记录</button>}
-                <button onClick={handleViewAll} className="text-indigo-400/70 text-[10px] font-medium hover:text-indigo-400 transition-colors">
+                {generationHistory.length > 0 && <button type="button" onClick={handleClearHistory} className="text-rose-400/70 text-[10px] font-medium hover:text-rose-400 transition-colors">清除记录</button>}
+                <button type="button" onClick={handleViewAll} className="text-indigo-400/70 text-[10px] font-medium hover:text-indigo-400 transition-colors">
                   {generationHistory.length > 0 ? `查看全部 ${generationHistory.length}` : '暂无记录'}
                 </button>
               </div>
@@ -889,11 +681,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                         {record.resolution && <span className="ml-1 text-indigo-500">{record.resolution.width > 0 ? `${record.resolution.width}×${record.resolution.height} ` : ''}{record.resolution.quality}</span>}
                       </p>
                       <div className="flex gap-1 mt-1.5">
-                        <button onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrl) { setImageUrls([record.referenceImageUrl]); showToast('success', '已复用提示词和参考图'); } else showToast('success', '已复用提示词'); }}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setPrompt(record.prompt); if (record.referenceImageUrl) { setImageUrls([record.referenceImageUrl]); showToast('success', '已复用提示词和参考图'); } else showToast('success', '已复用提示词'); }}
                           className="p-1.5 thumb-btn rounded-md hover:!bg-indigo-500/50 transition-colors" title="复用"><RotateCcw className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: getMenuItemLabel(record.type), prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDownloadHistory(record); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 thumb-btn rounded-md hover:!bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setPreviewImage({ url: record.imageUrl, name: getMenuItemLabel(record.type), prompt: record.prompt, createdAt: record.createdAt }); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="放大"><Maximize2 className="w-3 h-3 text-white" /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDownloadHistory(record); }} className="p-1.5 thumb-btn rounded-md transition-colors" title="下载"><Download className="w-3 h-3 text-white" /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} className="p-1.5 thumb-btn rounded-md hover:!bg-rose-500/50 transition-colors" title="删除"><Trash2 className="w-3 h-3 text-white" /></button>
                       </div>
                     </div>
                   </motion.div>
@@ -971,5 +763,3 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     </div>
   );
 };
-
-import { Suspense } from 'react';

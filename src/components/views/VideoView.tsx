@@ -51,7 +51,7 @@ const ImageThumb: React.FC<{
       <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold rounded">
         [Image {index + 1}]
       </div>
-      <button
+      <button type="button"
         onClick={(e) => { e.stopPropagation(); onRemove(index); }}
         className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-red-500/80 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
       >
@@ -84,7 +84,7 @@ const VideoHistoryCard: React.FC<{
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
         <Play className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
-      <button
+      <button type="button"
         onClick={(e) => { e.stopPropagation(); onDelete(record.id, record.imageUrl); }}
         className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-red-500/80 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
       >
@@ -411,7 +411,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
               <p className="text-sm font-bold text-indigo-300">{taskStatus || '处理中...'}</p>
               <p className="text-xs text-text-muted mt-0.5">视频生成通常需要 1-5 分钟，请耐心等待</p>
             </div>
-            <button
+            <button type="button"
               onClick={handleCancel}
               className="px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-colors shrink-0"
             >
@@ -432,13 +432,13 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
               />
             </div>
             <div className="mt-3 flex items-center gap-3 justify-end">
-              <button
+              <button type="button"
                 onClick={handleDownload}
                 className="btn-ghost flex items-center gap-2 px-3.5 py-2 bg-surface-2 text-text-primary text-xs font-medium rounded-lg border border-border-subtle"
               >
                 <Download className="w-3.5 h-3.5" /> 下载视频
               </button>
-              <button
+              <button type="button"
                 onClick={handleClear}
                 className="flex items-center gap-2 px-3.5 py-2 bg-surface-2 hover:bg-rose-500/10 text-rose-400 text-xs font-medium rounded-lg border border-border-subtle hover:border-rose-500/20 transition-all duration-200"
               >
@@ -490,7 +490,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
                     <span className="ml-2 text-text-muted/70 font-normal">在 prompt 中用 [Image 1]、[Image 2]... 引用</span>
                   </p>
                   {imageUrls.length < 9 && (
-                    <button
+                    <button type="button"
                       onClick={handleUpload}
                       className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-surface-2 hover:bg-surface-3 text-text-primary rounded-lg transition-colors"
                     >
@@ -600,7 +600,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
               <label className="text-xs font-bold text-text-muted mb-2 block">分辨率</label>
               <div className="flex gap-2">
                 {(['720P', '1080P'] as const).map(r => (
-                  <button
+                  <button type="button"
                     key={r}
                     onClick={() => setResolution(r)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
@@ -617,7 +617,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
               <label className="text-xs font-bold text-text-muted mb-2 block">宽高比</label>
               <div className="flex gap-2 flex-wrap">
                 {['16:9', '9:16', '1:1', '4:3', '3:4'].map(r => (
-                  <button
+                  <button type="button"
                     key={r}
                     onClick={() => setRatio(r)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
@@ -661,7 +661,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
         </div>
 
         {/* 生成按钮 */}
-        <button
+        <button type="button"
           onClick={handleGenerate}
           disabled={generating || !prompt.trim()}
           className="mb-8 w-full flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors"

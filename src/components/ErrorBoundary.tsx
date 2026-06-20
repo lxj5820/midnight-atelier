@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="text-text-secondary mb-4">
               {this.state.error?.message || '应用程序发生了未知错误'}
             </p>
-            <button
+            <button type="button"
               onClick={this.handleReload}
               className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors"
             >

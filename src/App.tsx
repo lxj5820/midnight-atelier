@@ -141,7 +141,7 @@ const Sidebar = ({
           <div key={group} className="mb-5">
             <p className="px-4 mb-2 text-[10px] font-bold text-text-muted uppercase tracking-wider">{group}</p>
             {menuItems.filter(item => item.group === group).map(item => (
-              <button
+              <button type="button"
                 key={item.id}
                 onClick={() => handleMenuItemClick(item)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group ${
@@ -207,7 +207,7 @@ const Sidebar = ({
           >
             <div className="flex items-center justify-between p-4 border-b border-border">
               <span className="text-sm font-bold text-text-primary">导航</span>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors">
+              <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-3 transition-colors">
                 <X className="w-4 h-4 text-text-muted" />
               </button>
             </div>
@@ -222,7 +222,7 @@ const Sidebar = ({
 const ThemeToggle = () => {
   const { theme, toggleTheme } = useTheme();
   return (
-    <button
+    <button type="button"
       onClick={toggleTheme}
       className="flex items-center justify-center w-8 h-8 rounded-full bg-bg-subtle border border-border-subtle hover:bg-bg-subtle-hover transition-colors"
       title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
@@ -270,19 +270,19 @@ const TopBar = ({
       )}
       <div className="flex items-center gap-4">
         {isMobile && (
-          <button onClick={onToggleSidebar} className="p-2 -ml-1 rounded-lg hover:bg-surface-3 transition-colors">
+          <button type="button" onClick={onToggleSidebar} className="p-2 -ml-1 rounded-lg hover:bg-surface-3 transition-colors">
             <Menu className="w-5 h-5 text-text-secondary" />
           </button>
         )}
         <nav className="flex items-center gap-4">
-          <button
+          <button type="button"
             onClick={() => setView('workspace')}
             className={`text-sm font-bold transition-all relative py-1 ${currentView === 'workspace' ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
           >
             工作区
             {currentView === 'workspace' && <motion.div layoutId="nav-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500" />}
           </button>
-          <button
+          <button type="button"
             onClick={() => setView('gallery')}
             className={`text-sm font-bold transition-all relative py-1 ${currentView === 'gallery' ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
           >
@@ -447,7 +447,7 @@ const SettingsView = ({
               </div>
             </div>
             <div className="flex gap-3">
-              <button
+              <button type="button"
                 onClick={refreshToken}
                 disabled={!hasApiKey || tokenLoading}
                 className="btn-primary flex-1 text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -455,14 +455,14 @@ const SettingsView = ({
                 <RefreshCw className={`w-4 h-4 ${tokenLoading ? 'animate-spin' : ''}`} />
                 {tokenLoading ? '查询中...' : '刷新用量'}
               </button>
-              <button
+              <button type="button"
                 onClick={handleSaveApiKey}
                 className="btn-primary flex-1 text-white py-2.5 rounded-xl font-bold"
               >
                 保存 API Key
               </button>
               {hasApiKey && (
-                <button
+                <button type="button"
                   onClick={handleClearApiKey}
                   className="px-4 py-2.5 bg-surface-3 hover:bg-rose-500/15 text-rose-400 rounded-xl font-bold transition-all duration-200 border border-border-subtle hover:border-rose-500/20"
                 >

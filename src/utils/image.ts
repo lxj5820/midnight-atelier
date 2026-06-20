@@ -36,6 +36,14 @@ export function getImageDimensions(src: string): Promise<{ width: number; height
 }
 
 /**
+ * 从 Blob 获取图片尺寸，自动管理并释放 ObjectURL
+ */
+export function getImageDimensionsFromBlob(blob: Blob): Promise<{ width: number; height: number } | null> {
+  const url = URL.createObjectURL(blob);
+  return getImageDimensions(url).finally(() => URL.revokeObjectURL(url));
+}
+
+/**
  * 根据图片尺寸找到最接近的比例
  */
 export function getClosestAspectRatio(width: number, height: number): string {

@@ -962,10 +962,10 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onCancel} className="flex items-center gap-2 px-3 py-1.5 bg-surface-3 hover:bg-border-light text-text-primary text-sm rounded-lg transition-colors">
+            <button type="button" onClick={onCancel} className="flex items-center gap-2 px-3 py-1.5 bg-surface-3 hover:bg-border-light text-text-primary text-sm rounded-lg transition-colors">
               <X className="w-4 h-4" />取消
             </button>
-            <button onClick={handleSave} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
+            <button type="button" onClick={handleSave} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
               <Save className="w-4 h-4" />保存
             </button>
           </div>
@@ -975,24 +975,24 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
           {/* Left Toolbar */}
           <div className="w-16 bg-surface-1 border-r border-border flex flex-col items-center py-4 gap-1">
             {toolBtns.map(({ id, icon, title, key }) => (
-              <button key={id} onClick={() => setTool(id)} title={`${title} (${key})`}
+              <button type="button" key={id} onClick={() => setTool(id)} title={`${title} (${key})`}
                 className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative ${tool === id ? 'bg-indigo-600 text-white' : 'text-text-secondary hover:bg-surface-3 hover:text-text-primary'}`}>
                 {icon}
                 <span className="absolute bottom-0.5 right-0.5 text-[8px] opacity-50">{key}</span>
               </button>
             ))}
             <div className="w-8 border-t border-border my-1" />
-            <button onClick={handleImageImport} title="导入图片 (9)"
+            <button type="button" onClick={handleImageImport} title="导入图片 (9)"
               className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-text-secondary hover:bg-surface-3 hover:text-text-primary">
               <ImagePlus className="w-5 h-5" />
               <span className="absolute bottom-0.5 right-0.5 text-[8px] opacity-50">9</span>
             </button>
             <div className="flex-1" />
-            <button onClick={handleUndo} disabled={!canUndo} title="撤销 (Ctrl+Z)"
+            <button type="button" onClick={handleUndo} disabled={!canUndo} title="撤销 (Ctrl+Z)"
               className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-text-secondary hover:bg-surface-3 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed">
               <Undo2 className="w-5 h-5" />
             </button>
-            <button onClick={handleRedo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)"
+            <button type="button" onClick={handleRedo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)"
               className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors text-text-secondary hover:bg-surface-3 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed">
               <Redo2 className="w-5 h-5" />
             </button>
@@ -1028,7 +1028,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
               </p>
               <div className="grid grid-cols-6 gap-1.5 mb-2">
                 {PRESET_COLORS.map(c => (
-                  <button key={c}
+                  <button type="button" key={c}
                     onClick={() => {
                       if (selectedObject) { setSelStroke(c); applyToSelected({ stroke: c }); }
                       else { setStrokeColor(c); setBrushColor(c); }
@@ -1059,7 +1059,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
             {showFillPanel && (
               <div>
                 <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-2">填充颜色</p>
-                <button
+                <button type="button"
                   onClick={() => {
                     if (selectedObject) { setSelFill(''); applyToSelected({ fill: 'transparent' }); }
                     else setFillColor('');
@@ -1069,7 +1069,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
                 </button>
                 <div className="grid grid-cols-6 gap-1.5 mb-2">
                   {PRESET_COLORS.map(c => (
-                    <button key={c}
+                    <button type="button" key={c}
                       onClick={() => {
                         if (selectedObject) { setSelFill(c); applyToSelected({ fill: c }); }
                         else setFillColor(c);
@@ -1145,7 +1145,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel, o
             <div className="flex-1" />
 
             {/* 删除 */}
-            <button onClick={handleDeleteSelected}
+            <button type="button" onClick={handleDeleteSelected}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-sm rounded-lg transition-colors">
               <Trash2 className="w-4 h-4" />删除选中
             </button>

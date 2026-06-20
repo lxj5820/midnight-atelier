@@ -23,6 +23,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src"],
+  "include": ["src", "api", "netlify/functions"],
   "exclude": ["node_modules", "server"]
 }
