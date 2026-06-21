@@ -54,24 +54,17 @@ export default async function handler(req: any, res: any) {
       res.setHeader('Content-Length', contentLength);
     }
 
-    // 流式传输，无需等待完整下载
+    // 先读取完整响应，避免流式失败后 body 已被锁定无法重新消费
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
     if (response.body) {
-      const reader = response.body.getReader();
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(value);
-        }
-        res.end();
-      } catch {
-        const buffer = Buffer.from(await response.arrayBuffer());
         res.status(200).end(buffer);
-      } finally {
-        reader.releaseLock();
+      } catch {
+        res.status(200).end(buffer);
       }
     } else {
-      const buffer = Buffer.from(await response.arrayBuffer());
       res.status(200).end(buffer);
     }
   } catch {

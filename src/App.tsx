@@ -359,7 +359,7 @@ const TopBar = ({
 
         {!isMobile && (
           <span className="text-xs font-bold text-text-muted">
-            V3.5
+            V3.6
           </span>
         )}
       </div>
