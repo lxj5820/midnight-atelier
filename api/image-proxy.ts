@@ -57,16 +57,7 @@ export default async function handler(req: any, res: any) {
     // 先读取完整响应，避免流式失败后 body 已被锁定无法重新消费
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    if (response.body) {
-      try {
-        res.status(200).end(buffer);
-      } catch {
-        res.status(200).end(buffer);
-      }
-    } else {
-      res.status(200).end(buffer);
-    }
+    res.status(200).end(buffer);
   } catch {
     res.status(500).json({ error: 'Failed to fetch image' });
   }
