@@ -28,6 +28,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove('light');
     }
+    // 同步 color-scheme 到 html，让原生控件/滚动条遵循主题
+    root.style.colorScheme = theme;
     try {
       localStorage.setItem('app_theme', theme);
     } catch {}

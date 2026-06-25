@@ -3,6 +3,7 @@
 
 /* ── Dark theme (default) ── */
 :root {
+  color-scheme: dark;
   --c-surface-0: #0d0f13;
   --c-surface-1: #111317;
   --c-surface-2: #1c1f26;
@@ -35,6 +36,7 @@
 
 /* ── Light theme ── */
 .light {
+  color-scheme: light;
   --c-surface-0: #fafbfc;
   --c-surface-1: #ffffff;
   --c-surface-2: #f4f6fa;
@@ -91,6 +93,14 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* 交互元素去除双击缩放延迟 */
+  button,
+  a,
+  [role="button"],
+  summary {
+    touch-action: manipulation;
+  }
 }
 
 .glass-panel {
@@ -107,7 +117,7 @@
   background: linear-gradient(135deg, var(--c-glass-from) 0%, var(--c-glass-to) 100%);
   backdrop-filter: blur(20px);
   border: 1px solid var(--c-glass-border);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card-hover:hover {
@@ -145,7 +155,7 @@
 .btn-primary {
   @apply relative overflow-hidden;
   background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-primary:hover {
@@ -174,7 +184,7 @@
 
 .btn-ghost {
   @apply relative;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-ghost:hover {
@@ -213,6 +223,22 @@ html {
   scroll-behavior: smooth;
 }
 
+/* 尊重用户的减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
@@ -243,7 +269,7 @@ html {
 .preset-card {
   position: relative;
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .preset-card::before {
@@ -265,7 +291,7 @@ html {
 }
 
 .history-card {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .history-card:hover {
@@ -275,7 +301,7 @@ html {
 
 .sidebar-item {
   position: relative;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-item::before {
@@ -297,18 +323,20 @@ html {
 
 .input-field {
   @apply bg-surface-1 border border-border rounded-xl py-3 px-4 text-text-primary outline-none;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px var(--c-shadow-color);
 }
 
-.input-field:focus {
+.input-field:focus,
+.input-field:focus-visible {
   border-color: rgba(99, 102, 241, 0.5);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 1px 2px var(--c-shadow-color);
+  outline: none;
 }
 
 .upload-zone {
   @apply border-2 border-dashed rounded-2xl;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.04) 0%, transparent 70%);
   box-shadow: 0 4px 16px var(--c-shadow-color);
 }
