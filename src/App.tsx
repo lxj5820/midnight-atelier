@@ -432,19 +432,9 @@ const SettingsView = ({
                   {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-text-muted">
-                  {hasApiKey ? '✓ 已配置 API Key' : '尚未配置 API Key'}
-                </p>
-                <a
-                  href="https://newapi.asia/console/token"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
-                >
-                  <Key className="w-3 h-3" />获取 API Key
-                </a>
-              </div>
+              <p className="text-xs text-text-muted">
+                {hasApiKey ? '✓ 已配置 API Key' : '尚未配置 API Key'}
+              </p>
             </div>
             <div className="flex gap-3">
               <button type="button"
@@ -607,25 +597,6 @@ const SettingsView = ({
               </div>
             </div>
           )}
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-500/15 rounded-lg flex items-center justify-center">
-              <Info className="w-4 h-4 text-indigo-400" />
-            </div>
-            <h2 className="text-lg font-bold font-headline text-text-primary">使用说明</h2>
-          </div>
-          <div className="glass-card rounded-2xl p-6 space-y-4">
-            <div className="space-y-3 text-sm text-text-secondary">
-              <p>1. 点击"获取 API Key"按钮前往 API 服务商网站</p>
-              <p>2. 注册/登录后创建一个新的 API Key</p>
-              <p>3. 复制 API Key 并粘贴到上方输入框</p>
-              <p>4. 点击"保存 API Key"按钮保存配置</p>
-              <p>5. 回到工作区即可开始使用 AI 生成功能</p>
-              <p>6. 您的 API Key 仅存储在本地浏览器中，不会上传到任何服务器</p>
-            </div>
-          </div>
         </section>
 
         <section className="space-y-4">
