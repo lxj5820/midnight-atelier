@@ -113,7 +113,7 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
       // 简单的焦点陷阱：Tab/Shift+Tab 在模态内循环
       if (e.key === 'Tab' && dialogRef.current) {
         const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button[href], button:not([disabled]), a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          'button:not([disabled]), a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         );
         if (focusable.length === 0) return;
         const first = focusable[0];
