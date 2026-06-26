@@ -4,9 +4,10 @@ import { COMPUTE_POINTS } from './constants';
  * 每张生成价格（美元）
  */
 const PRICE_MAP: Record<string, Record<string, number>> = {
-  '🍌全能图片V2': { '1K': 0.25, '2K': 0.25, '4K': 0.45 },
-  '🍌全能图片PRO': { '1K': 0.5, '2K': 0.5, '4K': 0.88 },
+  '🍌全能图片V2': { '1K': 0.4, '2K': 0.4, '4K': 0.7 },
+  '🍌全能图片PRO': { '1K': 0.8, '2K': 0.8, '4K': 1.4 },
   'GPT Image 2': { '1K': 0.04, '2K': 0.06, '4K': 0.1 },
+  'wan2.7-image-pro': { '1K': 0.65, '2K': 0.65, '4K': 0.65 },
 };
 
 /**

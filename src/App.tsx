@@ -644,17 +644,17 @@ const SettingsView = ({
                     <td className="p-4">
                       <span className="text-sm font-bold text-text-primary">全能图片V2</span>
                     </td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.25</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.25</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.45</td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.40</td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.40</td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.70</td>
                   </tr>
                   <tr className="border-b border-border-subtle/50 hover:bg-bg-subtle transition-colors">
                     <td className="p-4">
                       <span className="text-sm font-bold text-text-primary">全能图片PRO</span>
                     </td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.50</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.50</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.88</td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.80</td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.80</td>
+                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$1.40</td>
                   </tr>
                   <tr className="hover:bg-bg-subtle transition-colors">
                     <td className="p-4">

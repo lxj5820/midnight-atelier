@@ -35,6 +35,8 @@ const modelMap: Record<string, string> = {
   '🍌全能图片PRO': 'gemini-3-pro-image-preview'
 };
 
+const openaiStyleModels = ['GPT Image 2', 'wan2.7-image-pro'];
+
 function parseErrorMessage(err: any, status: number): string {
   if (status === 401 || status === 403) return 'API 密钥无效或余额不足';
   if (status === 429) return '请求过于频繁，请稍后再试';
@@ -202,6 +204,51 @@ async function callGptImage2Generation(params: GenerateImageParams): Promise<Gen
   };
 }
 
+async function callWan27Generation(params: GenerateImageParams): Promise<GenerateImageResult> {
+  const { apiKey, prompt, quality, aspectRatio, referenceImageUrls } = params;
+
+  const body: Record<string, any> = {
+    model: 'wan2.7-image-pro',
+    prompt,
+    size: quality,
+    n: 1,
+  };
+
+  if (aspectRatio !== 'auto') {
+    body.aspect_ratio = aspectRatio;
+  }
+
+  const response = await fetchWithAuth(
+    'https://newapi.asia/v1/images/generations',
+    apiKey,
+    { method: 'POST', body: JSON.stringify(body) },
+    'application/json'
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(parseErrorMessage(err, response.status));
+  }
+
+  const data = await response.json();
+  if (data.error) throw new Error(data.error.message || 'API 返回错误');
+
+  const imageUrl = extractImageUrl(data);
+  if (!imageUrl) throw new Error('响应中未找到图片');
+
+  const effectiveAspectRatio = aspectRatio !== 'auto' ? aspectRatio : '1:1';
+  const resolution = effectiveAspectRatio !== 'auto'
+    ? getResolution(effectiveAspectRatio, quality)
+    : { width: 0, height: 0, tokens: 0 };
+
+  return {
+    imageUrl,
+    effectiveAspectRatio,
+    width: resolution.width,
+    height: resolution.height,
+  };
+}
+
 async function callGeminiGeneration(params: GenerateImageParams): Promise<GenerateImageResult> {
   const { apiKey, model, prompt, quality, aspectRatio, referenceImageUrls } = params;
   const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
@@ -262,9 +309,12 @@ async function callGeminiGeneration(params: GenerateImageParams): Promise<Genera
 }
 
 /**
- * 统一图片生成入口，支持 GPT Image 2 与 Gemini 系列模型
+ * 统一图片生成入口，支持 GPT Image 2、wan2.7 与 Gemini 系列模型
  */
 export async function generateImage(params: GenerateImageParams): Promise<GenerateImageResult> {
+  if (params.model === 'wan2.7-image-pro') {
+    return callWan27Generation(params);
+  }
   if (params.model === 'GPT Image 2') {
     if (params.referenceImageUrls.length > 0) {
       return callGptImage2Edit(params);

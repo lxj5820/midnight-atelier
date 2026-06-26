@@ -164,7 +164,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   useEffect(() => {
     const proRatios = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', 'auto'];
     const gptRatios = ['1:1', '2:3', '3:2', '9:16', '16:9', 'auto'];
-    if (model === 'GPT Image 2' && !gptRatios.includes(aspectRatio)) {
+    const wanRatios = ['1:1', '2:3', '3:2', '9:16', '16:9', 'auto'];
+    if ((model === 'GPT Image 2' || model === 'wan2.7-image-pro') && !gptRatios.includes(aspectRatio)) {
       setAspectRatio('1:1');
     } else if (model === '🍌全能图片PRO' && !proRatios.includes(aspectRatio)) {
       setAspectRatio('1:1');
