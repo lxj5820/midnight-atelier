@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toast as UIToast } from './components/ui/Toast';
 import { LoadingSpinner } from './components/ui/Loading';
@@ -25,6 +25,7 @@ import {
   Moon,
   Menu,
   Video,
+  ExternalLink,
 } from 'lucide-react';
 import { useApiKey } from './ApiKeyContext';
 import { useTokenQuery } from './context/TokenQueryContext';
@@ -65,6 +66,20 @@ const Sidebar = ({
 }) => {
   const menuItems = menuItemsConfig;
   const groups = Array.from(new Set(menuItems.map(item => item.group)));
+
+  const [apiMenuOpen, setApiMenuOpen] = useState(false);
+  const apiMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!apiMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (apiMenuRef.current && !apiMenuRef.current.contains(e.target as Node)) {
+        setApiMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [apiMenuOpen]);
 
   const handleMenuItemClick = (item: typeof menuItems[0]) => {
     setActiveMenuItem(item.id);
@@ -122,21 +137,59 @@ const Sidebar = ({
       </nav>
 
       <div className="mt-auto p-2 border-t border-border space-y-2">
-        <button
-          type="button"
-          onClick={() => { setView('settings'); setActiveMenuItem('workspace' as MenuItemId); if (isMobile) onClose(); }}
-          className="w-full p-3 bg-surface-1 rounded-xl flex items-center gap-3 group cursor-pointer hover:bg-surface-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
-          aria-label="前往 API 配置"
-        >
-          <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center">
-            <Key className="w-4 h-4 text-indigo-500" aria-hidden="true" />
+        <div className="relative w-full p-3 bg-surface-1 rounded-xl flex items-center gap-3 hover:bg-surface-3 transition-colors">
+          <button
+            type="button"
+            onClick={() => { setView('settings'); setActiveMenuItem('workspace' as MenuItemId); if (isMobile) onClose(); }}
+            className="flex-1 min-w-0 flex items-center gap-3 group cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded-lg"
+            aria-label="前往 API 配置"
+          >
+            <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center shrink-0">
+              <Key className="w-4 h-4 text-indigo-500" aria-hidden="true" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-text-primary truncate">API配置</p>
+              <p className="text-[10px] text-text-muted truncate">设置API与资料</p>
+            </div>
+          </button>
+          <div className="relative shrink-0" ref={apiMenuRef}>
+            <button
+              type="button"
+              onClick={() => setApiMenuOpen(prev => !prev)}
+              className="p-1 rounded-md hover:bg-surface-3 text-text-muted hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+              aria-label="更多选项"
+              aria-haspopup="menu"
+              aria-expanded={apiMenuOpen}
+            >
+              <MoreVertical className="w-3 h-3" aria-hidden="true" />
+            </button>
+            <AnimatePresence>
+              {apiMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: 0.15 }}
+                  role="menu"
+                  className="absolute bottom-full right-0 mb-2 min-w-[140px] bg-surface-2 border border-border rounded-lg shadow-lg overflow-hidden z-50"
+                  style={{ boxShadow: '0 10px 40px var(--c-shadow-heavy)' }}
+                >
+                  <a
+                    href="https://newapi.asia"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    role="menuitem"
+                    onClick={() => setApiMenuOpen(false)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors"
+                  >
+                    <ExternalLink className="w-4 h-4 text-text-muted shrink-0" aria-hidden="true" />
+                    <span className="font-medium">获取API</span>
+                  </a>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          <div className="flex-1 min-w-0 text-left">
-            <p className="text-xs font-bold text-text-primary truncate">API配置</p>
-            <p className="text-[10px] text-text-muted truncate">设置API与资料</p>
-          </div>
-          <MoreVertical className="w-3 h-3 text-text-muted" aria-hidden="true" />
-        </button>
+        </div>
       </div>
     </>
   );
@@ -361,7 +414,7 @@ const TopBar = ({
 
         {!isMobile && (
           <span className="text-xs font-bold text-text-muted" aria-hidden="true">
-            V3.6
+            V3.7
           </span>
         )}
       </div>
