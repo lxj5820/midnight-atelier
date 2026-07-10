@@ -123,7 +123,7 @@ async function callGptImage2Edit(params: GenerateImageParams): Promise<GenerateI
   formData.append('size', imageSize);
   formData.append('quality', quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low');
   formData.append('n', '1');
-  formData.append('input_fidelity', '0.5');
+  formData.append('input_fidelity', 'high');
 
   for (let i = 0; i < referenceImageUrls.length; i++) {
     const blob = await getCachedImageBlob(referenceImageUrls[i]);
