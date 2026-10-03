@@ -5,7 +5,7 @@ import { useApiKey } from '../ApiKeyContext';
 import { useGeneration } from '../GenerationContext';
 import { useTokenQuery } from '../context/TokenQueryContext';
 import { downloadImage } from '../utils/download';
-import { getGenerationHistoryAsync, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getClosestAspectRatio, dbOperations } from '../utils';
+import { getGenerationHistoryAsync, deleteGenerationRecordFromDB, blobToBase64, cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, getImageDimensions, getClosestAspectRatio, dbOperations, modelApiUrl } from '../utils';
 import { generateImage } from '../services/generation';
 import type { GenerationRecord, PreviewImageData } from '../types';
 import { RightPanel } from './layout/RightPanel';
@@ -108,7 +108,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
   const [aspectRatio, setAspectRatio] = useState('auto');
   const [quality, setQuality] = useState('2K');
   const [model, setModel] = useState('🍌全能图片V2');
-  const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
+  const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2', 'GPT Image 2.5 Flare'];
   const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,7 +125,7 @@ const EditWorkspace: React.FC<EditWorkspaceProps> = ({ apiKey, showToast, setPre
 
     setIsPolishing(true);
     try {
-      const apiUrl = 'https://newapi.asia/v1beta/models/gemini-3.5-flash:generateContent';
+      const apiUrl = modelApiUrl('/v1beta/models/gemini-3.5-flash:generateContent');
       const requestBody = {
         contents: [{ parts: [{ text: `请润色并优化以下提示词：${prompt}` }] }],
         systemInstruction: { parts: [{ text: POLISH_SYSTEM_PROMPT }] },

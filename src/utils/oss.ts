@@ -23,6 +23,42 @@ export async function uploadImageToOSS(
   }
 }
 
+/**
+ * 上传视频到 OSS。
+ * 走 multipart 直传二进制，避免 base64 体积膨胀（+33%），也不会对视频跑图片压缩逻辑。
+ */
+export async function uploadVideoToOSS(
+  file: Blob,
+  type: string,
+  id: string
+): Promise<string | null> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file, `${id}.${guessVideoExtension(file.type)}`);
+    formData.append('type', type);
+    formData.append('id', id);
+
+    const response = await fetch('/api/oss-upload', { method: 'POST', body: formData });
+    if (!response.ok) {
+      console.warn(`OSS video upload failed with status ${response.status}: ${await readResponseMessage(response)}`);
+      return null;
+    }
+    const data = await response.json();
+    return data.url || null;
+  } catch (err) {
+    console.warn('OSS video upload failed', err);
+    return null;
+  }
+}
+
+function guessVideoExtension(mimeType: string): string {
+  switch ((mimeType || '').toLowerCase()) {
+    case 'video/webm': return 'webm';
+    case 'video/quicktime': return 'mov';
+    default: return 'mp4';
+  }
+}
+
 export async function uploadUrlToOSS(
   url: string,
   type: string,

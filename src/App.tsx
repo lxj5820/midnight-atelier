@@ -24,7 +24,6 @@ import {
   Sun,
   Moon,
   Menu,
-  Video,
   ExternalLink,
 } from 'lucide-react';
 import { useApiKey } from './ApiKeyContext';
@@ -36,14 +35,14 @@ import { getPresetsForMenu } from './visualPresetConfig';
 import { useGeneration } from './GenerationContext';
 import type { PreviewImageData, ToastMessage } from './types';
 import { useMobile } from './hooks/useMobile';
+import { MODEL_API_BASE } from './utils/apiConfig';
 
 import EditWorkspace from './components/EditWorkspace';
 import VideoView from './components/views/VideoView';
-import GalleryView from './components/GalleryView';
 import ImagePreviewModal from './components/ImagePreviewModal';
 import { WorkspaceView } from './components/views/WorkspaceView';
 
-type View = 'workspace' | 'gallery' | 'settings' | 'edit' | 'video';
+type View = 'workspace' | 'settings' | 'edit' | 'video';
 
 const Sidebar = ({
   currentView,
@@ -175,7 +174,7 @@ const Sidebar = ({
                   style={{ boxShadow: '0 10px 40px var(--c-shadow-heavy)' }}
                 >
                   <a
-                    href="https://newapi.asia"
+                    href={MODEL_API_BASE}
                     target="_blank"
                     rel="noopener noreferrer"
                     role="menuitem"
@@ -323,14 +322,6 @@ const TopBar = ({
           >
             工作区
             {currentView === 'workspace' && <motion.div layoutId="nav-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500" />}
-          </button>
-          <button type="button"
-            onClick={() => setView('gallery')}
-            aria-current={currentView === 'gallery' ? 'page' : undefined}
-            className={`text-sm font-bold transition-colors relative py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 rounded ${currentView === 'gallery' ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
-          >
-            公共画廊
-            {currentView === 'gallery' && <motion.div layoutId="nav-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500" />}
           </button>
         </nav>
       </div>
@@ -672,89 +663,6 @@ const SettingsView = ({
           )}
         </section>
 
-        <section className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-500/15 rounded-lg flex items-center justify-center">
-              <svg className="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-            </div>
-            <h2 className="text-lg font-bold font-headline text-text-primary">图片生成价格</h2>
-          </div>
-          <div className="glass-card rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px]">
-                <thead>
-                  <tr className="border-b border-border-subtle bg-bg-subtle">
-                    <th className="text-left p-4 text-xs font-bold text-text-secondary tracking-wider w-32">模型</th>
-                    <th className="text-center p-4 text-xs font-bold text-text-secondary tracking-wider border-l border-border-subtle">1K</th>
-                    <th className="text-center p-4 text-xs font-bold text-text-secondary tracking-wider border-l border-border-subtle">2K</th>
-                    <th className="text-center p-4 text-xs font-bold text-text-secondary tracking-wider border-l border-border-subtle">4K</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-border-subtle/50 hover:bg-bg-subtle transition-colors">
-                    <td className="p-4">
-                      <span className="text-sm font-bold text-text-primary">全能图片V2</span>
-                    </td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.40</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.40</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.70</td>
-                  </tr>
-                  <tr className="border-b border-border-subtle/50 hover:bg-bg-subtle transition-colors">
-                    <td className="p-4">
-                      <span className="text-sm font-bold text-text-primary">全能图片PRO</span>
-                    </td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.80</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.80</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$1.40</td>
-                  </tr>
-                  <tr className="hover:bg-bg-subtle transition-colors">
-                    <td className="p-4">
-                      <span className="text-sm font-bold text-text-primary">Image 2</span>
-                    </td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.04</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.06</td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">$0.10</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        {/* 视频生成价格 */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-500/15 rounded-lg flex items-center justify-center">
-              <Video className="w-4 h-4 text-indigo-400" />
-            </div>
-            <h2 className="text-lg font-bold font-headline text-text-primary">视频生成价格</h2>
-          </div>
-          <div className="glass-card rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[500px]">
-                <thead>
-                  <tr className="border-b border-border-subtle bg-bg-subtle">
-                    <th className="text-left p-4 text-xs font-bold text-text-secondary tracking-wider w-40">模型</th>
-                    <th className="text-center p-4 text-xs font-bold text-text-secondary tracking-wider border-l border-border-subtle">720P</th>
-                    <th className="text-center p-4 text-xs font-bold text-text-secondary tracking-wider border-l border-border-subtle">1080P</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="hover:bg-bg-subtle transition-colors">
-                    <td className="p-4">
-                      <span className="text-sm font-bold text-text-primary">视频生成</span>
-                    </td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">¥1.26&nbsp;<span className="text-xs text-text-muted font-normal">/秒</span></td>
-                    <td className="text-center p-4 text-sm font-bold text-text-primary/80 tabular-nums border-l border-border-subtle">¥2.24&nbsp;<span className="text-xs text-text-muted font-normal">/秒</span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <p className="text-xs text-text-muted px-1">视频价格按生成时长计费，例如 720P 生成 5&nbsp;秒 = ¥6.30，1080P 生成 10&nbsp;秒 = ¥22.40。</p>
-        </section>
       </div>
     </div>
   );
@@ -833,10 +741,6 @@ export default function App() {
           e.preventDefault();
           setView('workspace');
         }
-        if ((e.metaKey || e.ctrlKey) && e.key === '2') {
-          e.preventDefault();
-          setView('gallery');
-        }
         if ((e.metaKey || e.ctrlKey) && e.key === '3') {
           e.preventDefault();
           setView('settings');
@@ -908,12 +812,6 @@ export default function App() {
                     onToggleRightPanel={() => setIsRightPanelOpen(!isRightPanelOpen)}
                   />
                 </Suspense>
-              )}
-              {view === 'gallery' && (
-                <GalleryView
-                  showToast={showToast}
-                  setPreviewImage={setPreviewImage}
-                />
               )}
               {view === 'settings' && (
                 <SettingsView showToast={showToast} />

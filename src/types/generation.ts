@@ -29,20 +29,7 @@ export interface ToastMessage {
   message: string;
 }
 
-export interface GalleryItem {
-  id: string;
-  author: string;
-  authorAvatar: string;
-  imageUrl: string;
-  description: string;
-  type: 'published' | 'pending';
-  createdAt: string;
-  prompt?: string;
-}
-
-export type View = 'workspace' | 'gallery' | 'settings' | 'admin' | 'edit' | 'video';
-
-export type GalleryCategory = 'hot' | 'latest' | 'style';
+export type View = 'workspace' | 'settings' | 'admin' | 'edit' | 'video';
 
 export interface PreviewImageData {
   url: string;

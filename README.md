@@ -4,7 +4,6 @@
 ## 功能特点
 
 - **AI 图片生成** - 支持多种视觉预设风格，可调节创意度、结构强度、画质等参数
-- **画廊社区** - 展示和浏览社区创作，支持发布自己的作品
 - **账户管理** - 个人资料管理、令牌管理、额度查询
 - **账单管理** - 订阅计划和用量查询
 
@@ -79,8 +78,6 @@ server/
 |------|------|------|
 | POST | /api/login | 登录 |
 | POST | /api/logout | 退出登录 |
-| GET | /api/gallery | 获取画廊列表 |
-| POST | /api/gallery/upload | 上传作品 |
 | GET | /api/user/info | 获取用户信息 |
 | PUT | /api/user/profile | 更新用户资料 |
 | GET | /api/tokens | 获取令牌列表 |

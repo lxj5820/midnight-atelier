@@ -5,7 +5,20 @@ import type { VisualPreset } from '../../visualPresetConfig';
 import type { MenuItemId } from '../../menuConfig';
 import { Dropdown } from '../ui/Dropdown';
 import { PromptGenerator } from '../PromptGenerator';
-import { getPrice } from '../../utils/cost';
+
+/** 模型下拉框显示文案：GPT Image 系列带图标，wan2.7 用简称 */
+function formatModelLabel(value: string, iconClass: string): React.ReactNode {
+  if (value === 'GPT Image 2' || value === 'GPT Image 2.5 Flare') {
+    return (
+      <>
+        <img src="/gpt-icon.png" alt="GPT" className={`${iconClass} inline-block`} />
+        {value.replace('GPT ', '')}
+      </>
+    );
+  }
+  if (value === 'wan2.7-image-pro') return 'wan2.7';
+  return value;
+}
 
 const ASPECT_RATIO_ICONS: Record<string, React.ReactNode> = {
   "1:1": (
@@ -176,7 +189,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   <div className="flex gap-2 mb-3">
                     <div className="flex-[2] min-w-0">
                       <Dropdown
-                        options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <><img src="/gpt-icon.png" alt="GPT" className="w-3 h-3 inline-block" /> Image 2</> : m === 'wan2.7-image-pro' ? 'wan2.7' : m }))}
+                        options={models.map(m => ({ value: m, label: formatModelLabel(m, 'w-3 h-3') }))}
                         value={model}
                         onChange={setModel}
                         className="w-full"
@@ -189,7 +202,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                           { value: 'auto', label: '自动' },
                           ...(model === '🍌全能图片V2'
                             ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
-                            : model === 'GPT Image 2' || model === 'wan2.7-image-pro'
+                            : model === 'GPT Image 2' || model === 'GPT Image 2.5 Flare' || model === 'wan2.7-image-pro'
                               ? ['1:1', '2:3', '3:2', '9:16', '16:9'].map(ratio => ({ value: ratio, label: ratio }))
                               : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
                           )
@@ -308,7 +321,6 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                     ) : (
                       <>
                         <Zap className="w-4 h-4 fill-current" />
-                        {getPrice(model, quality) !== null ? <span className="opacity-70">{getPrice(model, quality) < 0.1 ? getPrice(model, quality).toFixed(2) : getPrice(model, quality)}</span> : null}
                         立即生成
                       </>
                     )}
@@ -332,7 +344,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       <div className="p-4 pb-3">
         <p className="text-[10px] font-bold text-text-muted/70 uppercase tracking-wider mb-2.5">引擎与模型</p>
         <Dropdown
-          options={models.map(m => ({ value: m, label: m === 'GPT Image 2' ? <><img src="/gpt-icon.png" alt="GPT" className="w-4 h-4 inline-block" /> Image 2</> : m === 'wan2.7-image-pro' ? 'wan2.7' : m }))}
+          options={models.map(m => ({ value: m, label: formatModelLabel(m, 'w-4 h-4') }))}
           value={model}
           onChange={setModel}
           className="w-full"
@@ -399,7 +411,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   { value: 'auto', label: '自动' },
                   ...(model === '🍌全能图片V2'
                     ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
-                    : model === 'GPT Image 2' || model === 'wan2.7-image-pro'
+                    : model === 'GPT Image 2' || model === 'GPT Image 2.5 Flare' || model === 'wan2.7-image-pro'
                       ? ['1:1', '2:3', '3:2', '9:16', '16:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
                       : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
                   )
@@ -476,7 +488,6 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           ) : (
             <>
               <Zap className="w-4 h-4 fill-current" />
-              {getPrice(model, quality) !== null ? <span className="opacity-70">{getPrice(model, quality) < 0.1 ? getPrice(model, quality).toFixed(2) : getPrice(model, quality)}</span> : null}
               立即生成
             </>
           )}

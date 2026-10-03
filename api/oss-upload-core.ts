@@ -100,7 +100,7 @@ export function createSignedUpload(payload: UploadPayload, env: OssUploadEnv): {
   }
 
   const contentType = payload.contentType || 'image/png';
-  validateImageContentType(contentType);
+  validateMediaContentType(contentType);
 
   const type = sanitizePathPart(payload.type || 'default');
   const id = sanitizePathPart(payload.id || String(Date.now()));
@@ -147,7 +147,7 @@ async function prepareUpload(payload: UploadPayload): Promise<PreparedUpload> {
   const id = sanitizePathPart(payload.id || String(Date.now()));
 
   if (payload.file) {
-    validateImageContentType(payload.file.contentType);
+    validateMediaContentType(payload.file.contentType);
     return {
       buffer: payload.file.buffer,
       contentType: payload.file.contentType,
@@ -171,11 +171,11 @@ async function prepareUpload(payload: UploadPayload): Promise<PreparedUpload> {
     });
 
     if (!response.ok) {
-      throw new UploadError(400, `Failed to fetch image from URL (${response.status})`);
+      throw new UploadError(400, `Failed to fetch media from URL (${response.status})`);
     }
 
     const contentType = response.headers.get('content-type') || 'image/png';
-    validateImageContentType(contentType, 'URL did not return an image');
+    validateMediaContentType(contentType, 'URL did not return an image or video');
 
     return {
       buffer: Buffer.from(await response.arrayBuffer()),
@@ -185,7 +185,7 @@ async function prepareUpload(payload: UploadPayload): Promise<PreparedUpload> {
     };
   }
 
-  throw new UploadError(400, 'No image data provided');
+  throw new UploadError(400, 'No media data provided');
 }
 
 function parseDataUrl(image: string): { buffer: Buffer; contentType: string } {
@@ -195,7 +195,7 @@ function parseDataUrl(image: string): { buffer: Buffer; contentType: string } {
   }
 
   const contentType = matches[1] || 'image/png';
-  validateImageContentType(contentType);
+  validateMediaContentType(contentType);
 
   return {
     buffer: Buffer.from(matches[2], 'base64'),
@@ -203,11 +203,24 @@ function parseDataUrl(image: string): { buffer: Buffer; contentType: string } {
   };
 }
 
-function validateImageContentType(contentType: string, message = 'Only image data can be uploaded'): void {
-  if (!contentType.toLowerCase().startsWith('image/')) {
+/** 允许上传的媒体类型前缀（图片与视频，其余一律拒绝） */
+const ALLOWED_MEDIA_PREFIXES = ['image/', 'video/'];
+
+function validateMediaContentType(contentType: string, message = 'Only image or video data can be uploaded'): void {
+  const mime = contentType.toLowerCase().split(';', 1)[0].trim();
+  if (!ALLOWED_MEDIA_PREFIXES.some(prefix => mime.startsWith(prefix))) {
     throw new UploadError(400, message);
   }
 }
+
+/** 允许的视频容器格式 */
+const VIDEO_EXTENSIONS: Record<string, string> = {
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
+  'video/x-matroska': '.mkv',
+  'video/x-msvideo': '.avi',
+};
 
 function parseRemoteImageUrl(url: string): URL {
   let parsedUrl: URL;
@@ -226,6 +239,7 @@ function parseRemoteImageUrl(url: string): URL {
 
 function extensionFromContentType(contentType: string): string {
   const mime = contentType.toLowerCase().split(';', 1)[0].trim();
+  if (VIDEO_EXTENSIONS[mime]) return VIDEO_EXTENSIONS[mime];
   switch (mime) {
     case 'image/jpeg':
     case 'image/jpg':

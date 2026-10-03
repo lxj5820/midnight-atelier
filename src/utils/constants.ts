@@ -26,8 +26,8 @@ export const API_TIMEOUT_MS = 600000;
 // 最大文件大小 (bytes)
 export const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
-// 画廊最大条目数
-export const MAX_GALLERY_ITEMS = 10;
+// 参考视频最大文件大小 (bytes)
+export const MAX_VIDEO_FILE_SIZE = 50 * 1024 * 1024;
 
 // Toast 自动消失时间 (ms)
 export const TOAST_AUTO_DISMISS_MS = 3000;

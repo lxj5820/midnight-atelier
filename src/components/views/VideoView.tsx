@@ -3,7 +3,8 @@ import { Upload, X, Loader2, Download, Trash2, Video, Play, Film, Sparkles, Refr
 import { useGeneration } from '../../GenerationContext';
 import { submitVideoTask, pollVideoTask, type VideoTaskStatus } from '../../utils/videoApi';
 import { cacheImage, getCachedImageBlob, isCacheKey, deleteCachedImage, blobToBase64, dbOperations, getGenerationHistoryByTypeAsync, deleteGenerationRecordFromDB } from '../../utils';
-import { saveImageToOSS } from '../../utils/oss';
+import { saveImageToOSS, uploadVideoToOSS } from '../../utils/oss';
+import { MAX_VIDEO_FILE_SIZE } from '../../utils/constants';
 import { useCachedImageUrl } from '../../hooks/useCachedImage';
 import type { GenerationRecord, PreviewImageData } from '../../types';
 
@@ -110,8 +111,10 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
 
   const [prompt, setPrompt] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [videoKeys, setVideoKeys] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isVideoUploading, setIsVideoUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [taskStatus, setTaskStatus] = useState('');
   const [result, setResult] = useState<string | null>(null);
@@ -119,16 +122,18 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   // 视频参数
-  const [resolution, setResolution] = useState<'720P' | '1080P'>('720P');
+  const [resolution, setResolution] = useState<'480P' | '720P' | '1080P'>('720P');
   const [duration, setDuration] = useState(5);
   const [watermark, setWatermark] = useState(false);
   const [ratio, setRatio] = useState('16:9');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [displayResult] = useCachedImageUrl(result);
+  const [videoPreviewUrl] = useCachedImageUrl(videoKeys[0]);
 
   // 加载历史记录
   useEffect(() => {
@@ -175,6 +180,8 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
   }, [imageUrls.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasImage = imageUrls.length > 0;
+  const hasVideo = videoKeys.length > 0;
+  const hasRef = hasImage || hasVideo;
 
   // 上传处理
   const handleUpload = () => fileInputRef.current?.click();
@@ -201,6 +208,27 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
     } finally { setIsUploading(false); }
   };
 
+  // 参考视频上传（最多 1 个）
+  const uploadVideoFile = async (file: File) => {
+    if (!apiKey) { showToast('error', '请先在设置中配置 API 密钥'); return; }
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+    if (!allowedTypes.includes(file.type)) { showToast('error', '不支持的文件类型，仅支持 MP4/WEBM/MOV'); return; }
+    if (file.size > MAX_VIDEO_FILE_SIZE) { showToast('error', '视频超过 50MB'); return; }
+    setIsVideoUploading(true);
+    try {
+      const cacheKey = await cacheImage(file);
+      setVideoKeys([cacheKey]);
+    } catch (error) {
+      showToast('error', `视频上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally { setIsVideoUploading(false); }
+  };
+
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) await uploadVideoFile(file);
+    e.target.value = '';
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       for (const file of Array.from(e.target.files)) {
@@ -213,10 +241,9 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault(); setIsDragging(false);
     const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      for (const file of Array.from(files)) {
-        await uploadFile(file);
-      }
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('video/')) await uploadVideoFile(file);
+      else await uploadFile(file);
     }
   };
 
@@ -257,15 +284,27 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
         }
       }
 
+      // 参考视频上传到 OSS 获取公网 URL
+      const publicVideoUrls: string[] = [];
+      for (let i = 0; i < videoKeys.length; i++) {
+        setTaskStatus('上传参考视频...');
+        const blob = await getCachedImageBlob(videoKeys[i]);
+        if (!blob) throw new Error('参考视频已失效，请重新上传');
+        const publicUrl = await uploadVideoToOSS(blob, 'video-ref', `video-ref-${Date.now()}-${i}`);
+        if (!publicUrl) throw new Error('参考视频上传失败，请重试');
+        publicVideoUrls.push(publicUrl);
+      }
+
       // 提交任务
       setTaskStatus('提交生成任务...');
       const taskId = await submitVideoTask(apiKey, {
         prompt: prompt.trim(),
         imageUrls: publicImageUrls.length > 0 ? publicImageUrls : undefined,
+        videoUrls: publicVideoUrls.length > 0 ? publicVideoUrls : undefined,
         resolution,
         duration,
-        watermark: false,
-        ratio: hasImage ? undefined : ratio,
+        watermark,
+        ratio: hasRef ? undefined : ratio,
       });
 
       // 轮询
@@ -293,7 +332,7 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
         imageUrl: videoCacheKey,
         referenceImageUrl: imageUrls[0] || undefined,
         createdAt: new Date().toISOString(),
-        resolution: { width: 0, height: 0, quality: resolution, aspectRatio: hasImage ? '首帧' : ratio },
+        resolution: { width: 0, height: 0, quality: resolution, aspectRatio: hasRef ? (hasVideo ? '参考视频' : '首帧') : ratio },
       };
       await dbOperations.save(record);
       setHistoryRefreshKey(k => k + 1);
@@ -573,15 +612,48 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
           </div>
         )}
 
+        {/* 参考视频（可选） */}
+        {!generating && (
+          <div className="mb-4">
+            <input
+              type="file"
+              ref={videoInputRef}
+              onChange={handleVideoSelect}
+              accept="video/mp4,video/webm,video/quicktime"
+              className="hidden"
+            />
+            {isVideoUploading ? (
+              <div className="flex items-center gap-2 px-4 py-3 bg-surface-2/50 border border-dashed border-border-subtle rounded-xl">
+                <RefreshCw className="w-4 h-4 text-indigo-500 animate-spin" />
+                <span className="text-xs text-text-muted">参考视频上传中...</span>
+              </div>
+            ) : hasVideo ? (
+              <div className="relative rounded-xl overflow-hidden bg-black border border-border-subtle">
+                <video src={videoPreviewUrl || ''} controls muted className="w-full max-h-64 object-contain" />
+                <button type="button"
+                  onClick={() => setVideoKeys([])}
+                  className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-red-500/80 text-white rounded-lg transition-colors"
+                  title="移除参考视频"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button type="button"
+                onClick={() => videoInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-surface-2 hover:bg-surface-3 border border-dashed border-border-subtle hover:border-indigo-500/40 text-text-muted hover:text-text-primary rounded-xl transition-colors"
+              >
+                <Film className="w-4 h-4" />
+                <span className="text-xs font-bold">添加参考视频（可选，MP4/WEBM/MOV · ≤50MB）</span>
+              </button>
+            )}
+          </div>
+        )}
+
         {/* 参数选择 */}
         <div className="mb-4 space-y-4">
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold text-text-muted">时长：{duration} 秒</label>
-              <span className="text-xs font-bold text-indigo-300">
-                预计 {(duration * (resolution === '1080P' ? 2.24 : 1.26)).toFixed(2)} 元
-              </span>
-            </div>
+            <label className="text-xs font-bold text-text-muted mb-2 block">时长：{duration} 秒</label>
             <input
               type="range"
               min="3"
@@ -590,16 +662,13 @@ const VideoView: React.FC<VideoViewProps> = ({ apiKey, showToast, onNavigateSett
               onChange={(e) => setDuration(Number(e.target.value))}
               className="w-full accent-indigo-500"
             />
-            <p className="text-[10px] text-text-muted/70 mt-1">
-              按 {resolution === '1080P' ? '2.240' : '1.260'} 元/秒 计费
-            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-text-muted mb-2 block">分辨率</label>
               <div className="flex gap-2">
-                {(['720P', '1080P'] as const).map(r => (
+                {(['480P', '720P', '1080P'] as const).map(r => (
                   <button type="button"
                     key={r}
                     onClick={() => setResolution(r)}

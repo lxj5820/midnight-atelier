@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv, Plugin} from 'vite';
 import { createSignedUpload, formDataToPayload, getJSONHeaders, getOptionsHeaders, isOSSConfigured, UploadError, uploadPayloadToOSS } from './api/oss-upload-core';
-import { listGalleryImages, isOSSConfigured as isGalleryOSSConfigured } from './api/oss-gallery-core';
 
 function imageProxyPlugin(): Plugin {
   return {
@@ -60,7 +59,9 @@ function imageProxyPlugin(): Plugin {
   };
 }
 
-function newApiProxyPlugin(): Plugin {
+function newApiProxyPlugin(env: Record<string, string>): Plugin {
+  // 与 src/utils/apiConfig.ts 共用同一个变量，换中转站只需改 .env 一处
+  const MODEL_API_BASE = (env.VITE_MODEL_API_BASE || 'https://lixuejianapi.xyz').replace(/\/+$/, '');
   return {
     name: 'newapi-proxy',
     configureServer(server) {
@@ -77,7 +78,7 @@ function newApiProxyPlugin(): Plugin {
         try {
           // req.url 在 Connect 中间件中是去掉挂载前缀后的路径，如 /api/usage/token
           const targetPath = req.url || '/';
-          const targetUrl = `https://newapi.asia${targetPath}`;
+          const targetUrl = `${MODEL_API_BASE}${targetPath}`;
 
           const headers: Record<string, string> = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -189,62 +190,10 @@ function ossUploadPlugin(env: Record<string, string>): Plugin {
   };
 }
 
-function ossGalleryPlugin(env: Record<string, string>): Plugin {
-  return {
-    name: 'oss-gallery',
-    configureServer(server) {
-      server.middlewares.use('/api/oss-gallery', async (req, res) => {
-        if (req.method === 'OPTIONS') {
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-          res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-          res.setHeader('Access-Control-Max-Age', '86400');
-          res.statusCode = 204;
-          res.end();
-          return;
-        }
-
-        if (req.method !== 'GET') {
-          res.statusCode = 405;
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.end(JSON.stringify({ error: 'Method not allowed' }));
-          return;
-        }
-
-        if (!isGalleryOSSConfigured(env)) {
-          res.statusCode = 503;
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.end(JSON.stringify({ error: 'OSS not configured' }));
-          return;
-        }
-
-        try {
-          const url = new URL(req.url || '/', `http://${req.headers.host}`);
-          const prefix = url.searchParams.get('prefix') || env.OSS_GALLERY_PREFIX || 'image/';
-          const images = await listGalleryImages(prefix, env);
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Cache-Control', 'public, max-age=60');
-          res.statusCode = 200;
-          res.end(JSON.stringify(images));
-        } catch (error) {
-          console.error('OSS gallery list error:', error);
-          res.statusCode = 500;
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Failed to list gallery' }));
-        }
-      });
-    },
-  };
-}
-
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
-    plugins: [react(), tailwindcss(), imageProxyPlugin(), newApiProxyPlugin(), ossUploadPlugin(env), ossGalleryPlugin(env)],
+    plugins: [react(), tailwindcss(), imageProxyPlugin(), newApiProxyPlugin(env), ossUploadPlugin(env)],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'http://localhost:3001/api'),

@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 
-const NEWAPI_BASE = 'https://newapi.asia';
+// 与前端 src/utils/apiConfig.ts 保持一致：在 Netlify 环境变量中设置 MODEL_API_BASE 即可换站
+const NEWAPI_BASE = (process.env.MODEL_API_BASE || 'https://lixuejianapi.xyz').replace(/\/+$/, '');
 
 // 只允许 New API 的查询接口（防止 SSRF / 路径遍历）
 const ALLOWED_PATHS = new Set([

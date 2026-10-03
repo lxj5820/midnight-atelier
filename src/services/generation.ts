@@ -7,6 +7,7 @@ import {
   getResolution,
 } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
+import { modelApiUrl } from '../utils/apiConfig';
 
 export interface GenerateImageParams {
   apiKey: string;
@@ -35,7 +36,16 @@ const modelMap: Record<string, string> = {
   '🍌全能图片PRO': 'gemini-3-pro-image-preview'
 };
 
-const openaiStyleModels = ['GPT Image 2', 'wan2.7-image-pro'];
+// OpenAI 风格 GPT Image 系列：界面显示名 → 接口 model 参数
+const gptImageModelMap: Record<string, string> = {
+  'GPT Image 2': 'gpt-image-2',
+  'GPT Image 2.5 Flare': 'gpt-image-2.5-flare',
+};
+
+/** 是否为 GPT Image 系列（走 OpenAI 兼容的 /v1/images 接口） */
+function isGptImageModel(model: string): boolean {
+  return model in gptImageModelMap;
+}
 
 function parseErrorMessage(err: any, status: number): string {
   if (status === 401 || status === 403) return 'API 密钥无效或余额不足';
@@ -114,11 +124,11 @@ async function resolveGptImageSize(
 }
 
 async function callGptImage2Edit(params: GenerateImageParams): Promise<GenerateImageResult> {
-  const { apiKey, prompt, quality, aspectRatio, referenceImageUrls } = params;
+  const { apiKey, model, prompt, quality, aspectRatio, referenceImageUrls } = params;
   const imageSize = await resolveGptImageSize(aspectRatio, quality, referenceImageUrls);
 
   const formData = new FormData();
-  formData.append('model', 'gpt-image-2');
+  formData.append('model', gptImageModelMap[model] || 'gpt-image-2');
   formData.append('prompt', prompt);
   formData.append('size', imageSize);
   formData.append('quality', quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low');
@@ -133,7 +143,7 @@ async function callGptImage2Edit(params: GenerateImageParams): Promise<GenerateI
   }
 
   const response = await fetchWithAuth(
-    'https://newapi.asia/v1/images/edits',
+    modelApiUrl('/v1/images/edits'),
     apiKey,
     { method: 'POST', body: formData }
   );
@@ -163,10 +173,10 @@ async function callGptImage2Edit(params: GenerateImageParams): Promise<GenerateI
 }
 
 async function callGptImage2Generation(params: GenerateImageParams): Promise<GenerateImageResult> {
-  const { apiKey, prompt, quality, aspectRatio } = params;
+  const { apiKey, model, prompt, quality, aspectRatio } = params;
   const imageSize = gptImage2SizeMap[quality]?.[aspectRatio] || 'auto';
   const body = {
-    model: 'gpt-image-2',
+    model: gptImageModelMap[model] || 'gpt-image-2',
     prompt,
     size: imageSize,
     quality: quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low',
@@ -175,7 +185,7 @@ async function callGptImage2Generation(params: GenerateImageParams): Promise<Gen
   };
 
   const response = await fetchWithAuth(
-    'https://newapi.asia/v1/images/generations',
+    modelApiUrl('/v1/images/generations'),
     apiKey,
     { method: 'POST', body: JSON.stringify(body) },
     'application/json'
@@ -219,7 +229,7 @@ async function callWan27Generation(params: GenerateImageParams): Promise<Generat
   }
 
   const response = await fetchWithAuth(
-    'https://newapi.asia/v1/images/generations',
+    modelApiUrl('/v1/images/generations'),
     apiKey,
     { method: 'POST', body: JSON.stringify(body) },
     'application/json'
@@ -252,7 +262,7 @@ async function callWan27Generation(params: GenerateImageParams): Promise<Generat
 async function callGeminiGeneration(params: GenerateImageParams): Promise<GenerateImageResult> {
   const { apiKey, model, prompt, quality, aspectRatio, referenceImageUrls } = params;
   const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
-  const apiUrl = `https://newapi.asia/v1beta/models/${apiModel}:generateContent`;
+  const apiUrl = modelApiUrl(`/v1beta/models/${apiModel}:generateContent`);
 
   const effectiveAspectRatio = await resolveEffectiveAspectRatio(aspectRatio, referenceImageUrls);
 
@@ -309,13 +319,13 @@ async function callGeminiGeneration(params: GenerateImageParams): Promise<Genera
 }
 
 /**
- * 统一图片生成入口，支持 GPT Image 2、wan2.7 与 Gemini 系列模型
+ * 统一图片生成入口，支持 GPT Image 系列、wan2.7 与 Gemini 系列模型
  */
 export async function generateImage(params: GenerateImageParams): Promise<GenerateImageResult> {
   if (params.model === 'wan2.7-image-pro') {
     return callWan27Generation(params);
   }
-  if (params.model === 'GPT Image 2') {
+  if (isGptImageModel(params.model)) {
     if (params.referenceImageUrls.length > 0) {
       return callGptImage2Edit(params);
     }

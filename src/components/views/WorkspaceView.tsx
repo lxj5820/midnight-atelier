@@ -13,7 +13,7 @@ import {
   blobToBase64, getImageDimensions, getClosestAspectRatio,
   dbOperations,
   getGenerationHistoryAsync, getGenerationHistoryByTypeAsync,
-  cacheImage, isCacheKey, deleteCachedImage,
+  cacheImage, isCacheKey, deleteCachedImage, modelApiUrl,
 } from '../../utils';
 import { generateImage } from '../../services/generation';
 import { downloadImage } from '../../utils/download';
@@ -157,14 +157,14 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     getImageDimensions(displayResult).then(dims => setResultDimensions(dims));
   }, [displayResult]);
 
-  const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2'];
+  const models = ['🍌全能图片V2', '🍌全能图片PRO', 'GPT Image 2', 'GPT Image 2.5 Flare'];
   const filteredPresets = getPresetsForMenu(activeMenuItem);
   const promptPlaceholder = getPromptPlaceholder(activeMenuItem);
 
   useEffect(() => {
     const proRatios = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', 'auto'];
     const gptRatios = ['1:1', '2:3', '3:2', '9:16', '16:9', 'auto'];
-    if ((model === 'GPT Image 2' || model === 'wan2.7-image-pro') && !gptRatios.includes(aspectRatio)) {
+    if ((model === 'GPT Image 2' || model === 'GPT Image 2.5 Flare' || model === 'wan2.7-image-pro') && !gptRatios.includes(aspectRatio)) {
       setAspectRatio('1:1');
     } else if (model === '🍌全能图片PRO' && !proRatios.includes(aspectRatio)) {
       setAspectRatio('1:1');
@@ -365,7 +365,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
     setIsPolishing(true);
     try {
-      const apiUrl = 'https://newapi.asia/v1beta/models/gemini-3.5-flash:generateContent';
+      const apiUrl = modelApiUrl('/v1beta/models/gemini-3.5-flash:generateContent');
       const requestBody = {
         contents: [{ parts: [{ text: `请润色并优化以下提示词：${prompt}` }] }],
         systemInstruction: { parts: [{ text: POLISH_SYSTEM_PROMPT }] },

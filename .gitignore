@@ -9,3 +9,4 @@ coverage/
 server/data/
 uploads/
 .claude/
+.dsh-acl-recovery/

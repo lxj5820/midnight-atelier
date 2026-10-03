@@ -1,4 +1,6 @@
-const NEWAPI_BASE = 'https://newapi.asia';
+import { MODEL_API_BASE } from './apiConfig';
+
+const NEWAPI_BASE = MODEL_API_BASE;
 const QUOTA_PER_DOLLAR = 500000;
 
 function buildUrl(apiPath: string): string {
