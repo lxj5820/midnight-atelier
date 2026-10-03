@@ -5,14 +5,15 @@ import type { VisualPreset } from '../../visualPresetConfig';
 import type { MenuItemId } from '../../menuConfig';
 import { Dropdown } from '../ui/Dropdown';
 import { PromptGenerator } from '../PromptGenerator';
+import { GPT_IMAGE_RATIOS, isGptImageModel } from '../../utils';
 
 /** 模型下拉框显示文案：GPT Image 系列带图标，wan2.7 用简称 */
 function formatModelLabel(value: string, iconClass: string): React.ReactNode {
-  if (value === 'GPT Image 2' || value === 'GPT Image 2.5 Flare') {
+  if (value.startsWith('GPT Image')) {
     return (
       <>
         <img src="/gpt-icon.png" alt="GPT" className={`${iconClass} inline-block`} />
-        {value.replace('GPT ', '')}
+        {value.replace(/^GPT /, '')}
       </>
     );
   }
@@ -202,8 +203,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                           { value: 'auto', label: '自动' },
                           ...(model === '🍌全能图片V2'
                             ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
-                            : model === 'GPT Image 2' || model === 'GPT Image 2.5 Flare' || model === 'wan2.7-image-pro'
-                              ? ['1:1', '2:3', '3:2', '9:16', '16:9'].map(ratio => ({ value: ratio, label: ratio }))
+                            : isGptImageModel(model) || model === 'wan2.7-image-pro'
+                              ? GPT_IMAGE_RATIOS.map(ratio => ({ value: ratio, label: ratio }))
                               : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio }))
                           )
                         ]}
@@ -411,8 +412,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   { value: 'auto', label: '自动' },
                   ...(model === '🍌全能图片V2'
                     ? ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
-                    : model === 'GPT Image 2' || model === 'GPT Image 2.5 Flare' || model === 'wan2.7-image-pro'
-                      ? ['1:1', '2:3', '3:2', '9:16', '16:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
+                    : isGptImageModel(model) || model === 'wan2.7-image-pro'
+                      ? GPT_IMAGE_RATIOS.map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
                       : ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(ratio => ({ value: ratio, label: ratio, icon: ASPECT_RATIO_ICONS[ratio] }))
                   )
                 ]}

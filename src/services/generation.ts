@@ -5,6 +5,9 @@ import {
   getSizeFromRefImage,
   getClosestAspectRatio,
   getResolution,
+  GEMINI_MODELS,
+  GPT_IMAGE_MODELS,
+  isGptImageModel,
 } from '../utils';
 import { API_TIMEOUT_MS } from '../utils/constants';
 import { modelApiUrl } from '../utils/apiConfig';
@@ -30,22 +33,6 @@ const gptImage2SizeMap: Record<string, Record<string, string>> = {
   '2K': { '1:1': '2048x2048', '2:3': '1360x2048', '3:2': '2048x1360', '9:16': '1152x2048', '16:9': '2048x1152' },
   '4K': { '1:1': '2880x2880', '2:3': '2304x3456', '3:2': '3456x2304', '9:16': '2160x3840', '16:9': '3840x2160' }
 };
-
-const modelMap: Record<string, string> = {
-  '🍌全能图片V2': 'gemini-3.1-flash-image-preview',
-  '🍌全能图片PRO': 'gemini-3-pro-image-preview'
-};
-
-// OpenAI 风格 GPT Image 系列：界面显示名 → 接口 model 参数
-const gptImageModelMap: Record<string, string> = {
-  'GPT Image 2': 'gpt-image-2',
-  'GPT Image 2.5 Flare': 'gpt-image-2.5-flare',
-};
-
-/** 是否为 GPT Image 系列（走 OpenAI 兼容的 /v1/images 接口） */
-function isGptImageModel(model: string): boolean {
-  return model in gptImageModelMap;
-}
 
 function parseErrorMessage(err: any, status: number): string {
   if (status === 401 || status === 403) return 'API 密钥无效或余额不足';
@@ -128,7 +115,7 @@ async function callGptImage2Edit(params: GenerateImageParams): Promise<GenerateI
   const imageSize = await resolveGptImageSize(aspectRatio, quality, referenceImageUrls);
 
   const formData = new FormData();
-  formData.append('model', gptImageModelMap[model] || 'gpt-image-2');
+  formData.append('model', GPT_IMAGE_MODELS[model] || 'gpt-image-2');
   formData.append('prompt', prompt);
   formData.append('size', imageSize);
   formData.append('quality', quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low');
@@ -176,7 +163,7 @@ async function callGptImage2Generation(params: GenerateImageParams): Promise<Gen
   const { apiKey, model, prompt, quality, aspectRatio } = params;
   const imageSize = gptImage2SizeMap[quality]?.[aspectRatio] || 'auto';
   const body = {
-    model: gptImageModelMap[model] || 'gpt-image-2',
+    model: GPT_IMAGE_MODELS[model] || 'gpt-image-2',
     prompt,
     size: imageSize,
     quality: quality === '4K' ? 'high' : quality === '2K' ? 'medium' : 'low',
@@ -261,7 +248,7 @@ async function callWan27Generation(params: GenerateImageParams): Promise<Generat
 
 async function callGeminiGeneration(params: GenerateImageParams): Promise<GenerateImageResult> {
   const { apiKey, model, prompt, quality, aspectRatio, referenceImageUrls } = params;
-  const apiModel = modelMap[model] || 'gemini-2.5-flash-image-preview';
+  const apiModel = GEMINI_MODELS[model] || 'gemini-2.5-flash-image-preview';
   const apiUrl = modelApiUrl(`/v1beta/models/${apiModel}:generateContent`);
 
   const effectiveAspectRatio = await resolveEffectiveAspectRatio(aspectRatio, referenceImageUrls);

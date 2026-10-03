@@ -1,5 +1,6 @@
 export * from './constants';
 export * from './apiConfig';
+export * from './modelCatalog';
 export * from './image';
 export * from './cost';
 export * from './indexedDB';
